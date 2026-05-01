@@ -1,0 +1,36 @@
+name: Deploy to GCP VM
+on:
+  push:
+    branches: [ main ]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GCE_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.GCE_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Sync Files to VM
+        run: |
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.GCE_USERNAME }}@${{ secrets.GCE_HOST }} "mkdir -p /home/${{ secrets.GCE_USERNAME }}/app"
+          rsync -avz --delete ./ ${{ secrets.GCE_USERNAME }}@${{ secrets.GCE_HOST }}:/home/${{ secrets.GCE_USERNAME }}/app/
+
+      - name: Restart Application
+        run: |
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.GCE_USERNAME }}@${{ secrets.GCE_HOST }} << 'EOF'
+            cd /home/${{ secrets.GCE_USERNAME }}/app
+            if [ -f docker-compose.yml ] || [ -f docker-compose.yaml ] || [ -f compose.yml ] || [ -f compose.yaml ]; then
+              docker compose up -d --build
+            elif [ -f package.json ] && command -v pm2 >/dev/null 2>&1; then
+              pm2 restart all || pm2 start npm --name app -- start
+              pm2 save
+            else
+              echo "No runtime restart needed (static files or no process manager configured)."
+            fi
+          EOF
