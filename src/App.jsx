@@ -1,18 +1,33 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import { AuthProvider } from "./auth/AuthContext";
-import Home from "./pages/Home";
+import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Login from "./pages/Login";
+import Welcome from "./pages/Welcome";
+
+function AppGate() {
+  const { user, loading, configured } = useAuth();
+
+  if (!configured) {
+    return <Login />;
+  }
+
+  if (loading) {
+    return (
+      <div className="app-loading">
+        <p>Loading…</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
+
+  return <Welcome />;
+}
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AuthProvider>
-    </BrowserRouter>
+    <AuthProvider>
+      <AppGate />
+    </AuthProvider>
   );
 }

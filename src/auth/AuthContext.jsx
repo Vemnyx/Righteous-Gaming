@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { onAuthStateChanged, signOut as firebaseSignOut } from "firebase/auth";
 import { getFirebaseAuth, isFirebaseConfigured } from "../firebaseClient";
 
 const AuthContext = createContext({
@@ -19,7 +20,7 @@ export function AuthProvider({ children }) {
       return undefined;
     }
     const auth = getFirebaseAuth();
-    const unsub = auth.onAuthStateChanged((u) => {
+    const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
     });
@@ -28,7 +29,7 @@ export function AuthProvider({ children }) {
 
   const signOut = useCallback(async () => {
     if (!configured) return;
-    await getFirebaseAuth().signOut();
+    await firebaseSignOut(getFirebaseAuth());
   }, [configured]);
 
   const value = useMemo(

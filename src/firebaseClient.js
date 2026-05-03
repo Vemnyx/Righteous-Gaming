@@ -1,5 +1,5 @@
-import firebase from "firebase/compat/app";
-import "firebase/compat/auth";
+import { getApps, initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
 
 function readFirebaseConfig() {
   const raw = {
@@ -27,12 +27,12 @@ export function getFirebaseApp() {
       "Firebase is not configured. Set VITE_FIREBASE_* variables (see .env.example)."
     );
   }
-  if (!firebase.apps.length) {
-    firebase.initializeApp(readFirebaseConfig());
+  if (!getApps().length) {
+    return initializeApp(readFirebaseConfig());
   }
-  return firebase.app();
+  return getApps()[0];
 }
 
 export function getFirebaseAuth() {
-  return getFirebaseApp().auth();
+  return getAuth(getFirebaseApp());
 }
