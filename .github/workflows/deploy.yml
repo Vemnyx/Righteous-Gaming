@@ -42,7 +42,7 @@ jobs:
             --tunnel-through-iap \
             --quiet \
             --ssh-flag=-oStrictHostKeyChecking=accept-new \
-            --command="rm -rf /home/${GCE_USERNAME}/app && mkdir -p /home/${GCE_USERNAME}/app"
+            --command="sudo rm -rf /home/${GCE_USERNAME}/app && sudo mkdir -p /home/${GCE_USERNAME}/app && sudo chown -R ${GCE_USERNAME}:${GCE_USERNAME} /home/${GCE_USERNAME}/app"
 
           gcloud compute scp /tmp/deploy.tgz \
             "${GCE_USERNAME}@${GCE_INSTANCE}:/tmp/deploy.tgz" \
@@ -57,7 +57,7 @@ jobs:
             --tunnel-through-iap \
             --quiet \
             --ssh-flag=-oStrictHostKeyChecking=accept-new \
-            --command="tar xzf /tmp/deploy.tgz -C /home/${GCE_USERNAME}/app && rm -f /tmp/deploy.tgz && sudo systemctl restart nginx"
+            --command="tar xzf /tmp/deploy.tgz -C /home/${GCE_USERNAME}/app && rm -f /tmp/deploy.tgz"
 
       - name: Restart Application
         env:
