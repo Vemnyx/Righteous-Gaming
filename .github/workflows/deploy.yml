@@ -57,7 +57,7 @@ jobs:
             --tunnel-through-iap \
             --quiet \
             --ssh-flag=-oStrictHostKeyChecking=accept-new \
-            --command="tar xzf /tmp/deploy.tgz -C /home/${GCE_USERNAME}/app && rm -f /tmp/deploy.tgz"
+            --command="tar xzf /tmp/deploy.tgz -C /home/${GCE_USERNAME}/app && rm -f /tmp/deploy.tgz && sudo systemctl restart nginx"
 
       - name: Restart Application
         env:
