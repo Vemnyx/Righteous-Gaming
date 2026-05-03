@@ -24,6 +24,51 @@
   overflow-x: hidden;
 }
 
+.rg-home__topbar {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 0.75rem clamp(1rem, 3vw, 1.5rem);
+}
+
+.rg-home__user {
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.rg-home__btn {
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(10, 4, 20, 0.45);
+  color: var(--rg-white);
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 0.45rem 0.85rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.rg-home__btn:hover {
+  border-color: rgba(232, 197, 71, 0.55);
+  color: #fffef5;
+}
+
+.rg-home__btn--link {
+  text-decoration: none;
+  display: inline-block;
+}
+
 /* Full-bleed poster: taller art on portrait-ish viewports, square on wide */
 .rg-home__bg {
   position: fixed;

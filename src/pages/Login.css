@@ -1,0 +1,55 @@
+.login-page {
+  min-height: 100vh;
+  padding: clamp(1rem, 4vw, 2rem);
+  max-width: 28rem;
+  margin: 0 auto;
+  color: #f4f0fa;
+  font-family: "Montserrat", system-ui, sans-serif;
+}
+
+.login-page--missing {
+  max-width: 36rem;
+}
+
+.login-page__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.login-page__title {
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.login-page__text {
+  line-height: 1.6;
+  margin-bottom: 1rem;
+  color: rgba(244, 240, 250, 0.85);
+}
+
+.login-page__text code {
+  font-size: 0.9em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.login-page__link {
+  color: #e8c547;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.login-page__link:hover {
+  text-decoration: underline;
+}
+
+#firebaseui-auth-container .firebaseui-container {
+  max-width: 100%;
+}
