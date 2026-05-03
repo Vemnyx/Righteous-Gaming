@@ -45,8 +45,17 @@ jobs:
           cat > /tmp/gce-rsync-rsh.sh <<'EOF'
           #!/usr/bin/env bash
           set -euo pipefail
+          # rsync invokes ssh as: ssh [-l USER] HOST rsync --server ...
+          login=""
+          if [[ "${1:-}" == "-l" ]]; then
+            login="$2"
+            shift 2
+          fi
           host="$1"
           shift
+          if [[ -n "$login" && "$host" != *"@"* ]]; then
+            host="${login}@${host}"
+          fi
           exec gcloud compute ssh "$host" \
             --zone="$GCE_ZONE" \
             --project="$GCP_PROJECT" \
