@@ -40,8 +40,24 @@ jobs:
             --ssh-flag=-oStrictHostKeyChecking=accept-new \
             --command="mkdir -p /home/${GCE_USERNAME}/app"
 
-          rsync -avz --delete \
-            -e "gcloud compute ssh --zone=${GCE_ZONE} --project=${GCP_PROJECT} --tunnel-through-iap --quiet --ssh-flag=-oStrictHostKeyChecking=accept-new --" \
+          # rsync runs: RSH HOST rsync --server ... . A trailing "--" on `gcloud compute ssh ... --`
+          # sends HOST only to ssh, so gcloud never gets [USER@]INSTANCE. Wrapper puts HOST first, then -- for remote rsync.
+          cat > /tmp/gce-rsync-rsh.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          host="$1"
+          shift
+          exec gcloud compute ssh "$host" \
+            --zone="$GCE_ZONE" \
+            --project="$GCP_PROJECT" \
+            --tunnel-through-iap \
+            --quiet \
+            --ssh-flag=-oStrictHostKeyChecking=accept-new \
+            -- "$@"
+          EOF
+          chmod +x /tmp/gce-rsync-rsh.sh
+
+          rsync -avz --delete -e /tmp/gce-rsync-rsh.sh \
             ./ "${GCE_USERNAME}@${GCE_INSTANCE}:/home/${GCE_USERNAME}/app/"
 
       - name: Restart Application
