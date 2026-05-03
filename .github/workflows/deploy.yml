@@ -17,8 +17,8 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Requires secrets.GCP_SA_KEY (service account JSON) with permission to SSH to the VM
-      # (e.g. Compute Instance Admin or OS Login roles—match how you access the VM locally).
+      # Requires secrets.GCP_SA_KEY with Compute + IAP tunnel access if using --tunnel-through-iap
+      # (e.g. compute.instances.* + roles/iap.tunnelResourceAccessor as appropriate).
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -35,12 +35,13 @@ jobs:
           gcloud compute ssh "${GCE_USERNAME}@${GCE_INSTANCE}" \
             --zone="${GCE_ZONE}" \
             --project="${GCP_PROJECT}" \
+            --tunnel-through-iap \
             --quiet \
             --ssh-flag=-oStrictHostKeyChecking=accept-new \
             --command="mkdir -p /home/${GCE_USERNAME}/app"
 
           rsync -avz --delete \
-            -e "gcloud compute ssh --zone=${GCE_ZONE} --project=${GCP_PROJECT} --quiet --ssh-flag=-oStrictHostKeyChecking=accept-new --" \
+            -e "gcloud compute ssh --zone=${GCE_ZONE} --project=${GCP_PROJECT} --tunnel-through-iap --quiet --ssh-flag=-oStrictHostKeyChecking=accept-new --" \
             ./ "${GCE_USERNAME}@${GCE_INSTANCE}:/home/${GCE_USERNAME}/app/"
 
       - name: Restart Application
@@ -51,6 +52,7 @@ jobs:
           gcloud compute ssh "${GCE_USERNAME}@${GCE_INSTANCE}" \
             --zone="${GCE_ZONE}" \
             --project="${GCP_PROJECT}" \
+            --tunnel-through-iap \
             --quiet \
             --ssh-flag=-oStrictHostKeyChecking=accept-new \
             --command="cd /home/${GCE_USERNAME}/app && if [ -f docker-compose.yml ] || [ -f docker-compose.yaml ] || [ -f compose.yml ] || [ -f compose.yaml ]; then docker compose up -d --build; elif [ -f package.json ] && command -v pm2 >/dev/null 2>&1; then pm2 restart all || pm2 start npm --name app -- start; pm2 save; else echo 'No runtime restart needed (static files or no process manager configured).'; fi"
