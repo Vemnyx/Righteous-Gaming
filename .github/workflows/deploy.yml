@@ -17,8 +17,19 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # Requires secrets.GCP_SA_KEY with Compute + IAP tunnel access if using --tunnel-through-iap
-      # (e.g. compute.instances.* + roles/iap.tunnelResourceAccessor as appropriate).
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build React SPA
+        run: npm run build
+
+      # Requires secrets.GCP_SA_KEY with Compute + IAP tunnel access.
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -27,14 +38,12 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Sync Files to VM
+      - name: Deploy dist to VM
         env:
           GCE_USERNAME: ${{ secrets.GCE_USERNAME }}
         run: |
           set -euo pipefail
-          # rsync requires `rsync` on the VM for the remote server; many images don't have it.
-          # Tar + scp + remote tar only needs gzip/tar (normally present).
-          tar czf /tmp/deploy.tgz --exclude='.git' .
+          tar czf /tmp/deploy.tgz -C dist .
 
           gcloud compute ssh "${GCE_USERNAME}@${GCE_INSTANCE}" \
             --zone="${GCE_ZONE}" \
@@ -58,16 +67,3 @@ jobs:
             --quiet \
             --ssh-flag=-oStrictHostKeyChecking=accept-new \
             --command="tar xzf /tmp/deploy.tgz -C /home/${GCE_USERNAME}/app && rm -f /tmp/deploy.tgz"
-
-      - name: Restart Application
-        env:
-          GCE_USERNAME: ${{ secrets.GCE_USERNAME }}
-        run: |
-          set -euo pipefail
-          gcloud compute ssh "${GCE_USERNAME}@${GCE_INSTANCE}" \
-            --zone="${GCE_ZONE}" \
-            --project="${GCP_PROJECT}" \
-            --tunnel-through-iap \
-            --quiet \
-            --ssh-flag=-oStrictHostKeyChecking=accept-new \
-            --command="cd /home/${GCE_USERNAME}/app && if [ -f docker-compose.yml ] || [ -f docker-compose.yaml ] || [ -f compose.yml ] || [ -f compose.yaml ]; then docker compose up -d --build; elif [ -f package.json ] && command -v pm2 >/dev/null 2>&1; then pm2 restart all || pm2 start npm --name app -- start; pm2 save; else echo 'No runtime restart needed (static files or no process manager configured).'; fi"
