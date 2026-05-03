@@ -3,29 +3,197 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Righteous Gaming</title>
+    <title>Righteous Gaming — Henlo World!</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Cormorant+Garamond:ital,wght@0,600;1,600&family=Great+Vibes&display=swap"
+      rel="stylesheet"
+    />
     <style>
+      :root {
+        --velvet-deep: #120406;
+        --velvet-mid: #2a0810;
+        --crimson: #9b1538;
+        --crimson-bright: #e01e4f;
+        --gold: #e8c547;
+        --gold-deep: #b8860b;
+        --cream: #fff8f0;
+        --spotlight: rgba(255, 230, 200, 0.12);
+      }
+
       * {
         margin: 0;
         padding: 0;
         box-sizing: border-box;
       }
+
       html,
       body {
         height: 100%;
       }
+
       body {
+        min-height: 100vh;
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 100vh;
-        font-family: system-ui, -apple-system, sans-serif;
+        padding: 1.5rem;
+        font-family: "Cormorant Garamond", Georgia, serif;
+        background: radial-gradient(
+            ellipse 80% 60% at 50% 40%,
+            var(--spotlight),
+            transparent 55%
+          ),
+          radial-gradient(circle at 20% 80%, #3d0a18 0%, transparent 45%),
+          radial-gradient(circle at 80% 20%, #1f060c 0%, transparent 40%),
+          linear-gradient(165deg, var(--velvet-deep) 0%, var(--velvet-mid) 45%, #0f0308 100%);
+        color: var(--cream);
+        overflow-x: hidden;
+      }
+
+      /* subtle cabaret “dots” */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image: radial-gradient(
+          circle,
+          rgba(232, 197, 71, 0.07) 1px,
+          transparent 1px
+        );
+        background-size: 24px 24px;
+        pointer-events: none;
+        opacity: 0.6;
+      }
+
+      .stage {
+        position: relative;
+        text-align: center;
+        max-width: 56rem;
+        padding: clamp(2rem, 6vw, 4rem) clamp(1.5rem, 5vw, 3.5rem);
+      }
+
+      /* ornate gold frame */
+      .stage::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border: 3px solid var(--gold);
+        border-radius: 4px;
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6),
+          inset 0 0 40px rgba(155, 21, 56, 0.35),
+          0 0 0 6px var(--velvet-mid), 0 0 0 8px var(--gold-deep),
+          0 24px 80px rgba(0, 0, 0, 0.65);
+        pointer-events: none;
+      }
+
+      .stage::after {
+        content: "";
+        position: absolute;
+        inset: 14px;
+        border: 1px solid rgba(232, 197, 71, 0.35);
+        border-radius: 2px;
+        pointer-events: none;
+      }
+
+      .cabaret-badge {
+        font-family: "Cormorant Garamond", serif;
+        font-size: clamp(0.85rem, 2.5vw, 1rem);
+        letter-spacing: 0.55em;
+        text-transform: uppercase;
+        color: var(--gold);
+        margin-bottom: 1.25rem;
+        opacity: 0.95;
+        text-shadow: 0 0 20px rgba(232, 197, 71, 0.45);
+      }
+
+      .windmill {
+        font-size: clamp(1.75rem, 5vw, 2.5rem);
+        line-height: 1;
+        margin-bottom: 0.75rem;
+        filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+      }
+
+      h1 {
+        font-family: "Cinzel Decorative", "Times New Roman", serif;
+        font-size: clamp(2.75rem, 12vw, 6.25rem);
         font-weight: 700;
-        font-size: clamp(2.5rem, 10vw, 5rem);
+        line-height: 1.05;
+        letter-spacing: 0.02em;
+        background: linear-gradient(
+          180deg,
+          #fffef5 0%,
+          var(--gold) 38%,
+          var(--gold-deep) 72%,
+          #ffeaa7 100%
+        );
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        -webkit-text-fill-color: transparent;
+        filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.85))
+          drop-shadow(0 6px 24px rgba(224, 30, 79, 0.55));
+        animation: spotlight 5s ease-in-out infinite;
+      }
+
+      @keyframes spotlight {
+        0%,
+        100% {
+          filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.85))
+            drop-shadow(0 6px 24px rgba(224, 30, 79, 0.45));
+        }
+        50% {
+          filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.85))
+            drop-shadow(0 10px 36px rgba(232, 197, 71, 0.35))
+            drop-shadow(0 6px 28px rgba(224, 30, 79, 0.55));
+        }
+      }
+
+      .flourish {
+        font-family: "Great Vibes", cursive;
+        font-size: clamp(1.5rem, 5vw, 2.25rem);
+        color: rgba(255, 248, 240, 0.85);
+        margin-top: 1rem;
+        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+      }
+
+      .curtain {
+        margin-top: 1.75rem;
+        height: 4px;
+        width: min(320px, 70%);
+        margin-left: auto;
+        margin-right: auto;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          var(--crimson),
+          var(--crimson-bright),
+          var(--crimson),
+          transparent
+        );
+        border-radius: 999px;
+        opacity: 0.9;
+        box-shadow: 0 0 24px rgba(224, 30, 79, 0.5);
+      }
+
+      .subtitle {
+        margin-top: 1.25rem;
+        font-size: clamp(0.95rem, 2.2vw, 1.15rem);
+        font-style: italic;
+        color: rgba(255, 248, 240, 0.72);
+        letter-spacing: 0.12em;
       }
     </style>
   </head>
   <body>
-    <p>Henlo World!</p>
+    <div class="stage">
+      <p class="cabaret-badge">Montmartre · Paris</p>
+      <div class="windmill" aria-hidden="true">✦</div>
+      <h1>Henlo World!</h1>
+      <p class="flourish">Spectacular · Bold · Unforgettable</p>
+      <div class="curtain" aria-hidden="true"></div>
+      <p class="subtitle">The show is about to begin…</p>
+    </div>
   </body>
 </html>
