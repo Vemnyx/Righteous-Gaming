@@ -1,5 +1,5 @@
 [Unit]
-Description=Righteous Gaming backend API
+Description=Righteous Gaming app server
 After=network-online.target
 Wants=network-online.target
 
@@ -7,8 +7,8 @@ Wants=network-online.target
 Type=simple
 User=__GCE_USERNAME__
 Group=__GCE_USERNAME__
-WorkingDirectory=/home/__GCE_USERNAME__/backend
-ExecStart=/home/__GCE_USERNAME__/backend/server
+WorkingDirectory=/home/__GCE_USERNAME__/app
+ExecStart=/home/__GCE_USERNAME__/app/server
 Restart=on-failure
 RestartSec=5
 Environment=PORT=8080
