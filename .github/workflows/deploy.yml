@@ -17,6 +17,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -36,6 +42,17 @@ jobs:
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
           VITE_FIREBASE_MEASUREMENT_ID: ${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
         run: npm run build
+
+      # Linux amd64 binary for typical GCE VMs; set secrets.GOARCH to arm64 for T2A, etc.
+      - name: Build Go backend
+        env:
+          GOARCH: ${{ secrets.GOARCH }}
+        run: |
+          set -euo pipefail
+          arch="${GOARCH:-amd64}"
+          cd backend
+          go mod download
+          CGO_ENABLED=0 GOOS=linux GOARCH="${arch}" go build -ldflags="-s -w" -o server ./cmd/server
 
       # Requires secrets.GCP_SA_KEY with Compute + IAP tunnel access.
       - name: Authenticate to Google Cloud
@@ -75,3 +92,42 @@ jobs:
             --quiet \
             --ssh-flag=-oStrictHostKeyChecking=accept-new \
             --command="tar xzf /tmp/deploy.tgz -C /home/${GCE_USERNAME}/app && rm -f /tmp/deploy.tgz"
+
+      - name: Deploy Go backend to VM
+        env:
+          GCE_USERNAME: ${{ secrets.GCE_USERNAME }}
+        run: |
+          set -euo pipefail
+          : "${GCE_USERNAME:?Set GCE_USERNAME secret}"
+
+          sed "s/__GCE_USERNAME__/${GCE_USERNAME}/g" deploy/righteous-backend.service > /tmp/righteous-backend.service
+
+          gcloud compute ssh "${GCE_USERNAME}@${GCE_INSTANCE}" \
+            --zone="${GCE_ZONE}" \
+            --project="${GCP_PROJECT}" \
+            --tunnel-through-iap \
+            --quiet \
+            --ssh-flag=-oStrictHostKeyChecking=accept-new \
+            --command="mkdir -p /home/${GCE_USERNAME}/backend && chmod 755 /home/${GCE_USERNAME}/backend"
+
+          gcloud compute scp backend/server \
+            "${GCE_USERNAME}@${GCE_INSTANCE}:/home/${GCE_USERNAME}/backend/server" \
+            --zone="${GCE_ZONE}" \
+            --project="${GCP_PROJECT}" \
+            --tunnel-through-iap \
+            --quiet
+
+          gcloud compute scp /tmp/righteous-backend.service \
+            "${GCE_USERNAME}@${GCE_INSTANCE}:/tmp/righteous-backend.service" \
+            --zone="${GCE_ZONE}" \
+            --project="${GCP_PROJECT}" \
+            --tunnel-through-iap \
+            --quiet
+
+          gcloud compute ssh "${GCE_USERNAME}@${GCE_INSTANCE}" \
+            --zone="${GCE_ZONE}" \
+            --project="${GCP_PROJECT}" \
+            --tunnel-through-iap \
+            --quiet \
+            --ssh-flag=-oStrictHostKeyChecking=accept-new \
+            --command="chmod +x /home/${GCE_USERNAME}/backend/server && sudo mv /tmp/righteous-backend.service /etc/systemd/system/righteous-backend.service && sudo systemctl daemon-reload && sudo systemctl enable righteous-backend.service && sudo systemctl restart righteous-backend.service"
