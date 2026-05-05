@@ -26,7 +26,7 @@
 
 .auth-logo {
   display: block;
-  width: min(180px, 72%);
+  width: min(220px, 80%);
   height: auto;
   margin: 0 auto 0.85rem;
 }

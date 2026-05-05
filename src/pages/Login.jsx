@@ -64,7 +64,6 @@ export default function Login() {
       <div className="auth-card">
         <img className="auth-logo" src={LOGIN_LOGO_URL} alt="Righteous Gaming" />
         <h1 className="auth-title">Sign in</h1>
-        <p className="auth-muted">Use the email and password for your account. New accounts cannot be created here.</p>
         <form className="auth-form" onSubmit={handleSubmit}>
           <label className="auth-label" htmlFor="email">
             Email
