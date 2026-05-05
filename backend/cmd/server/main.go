@@ -38,7 +38,7 @@ func main() {
 
 	addr := listenAddr()
 
-	userSvc := service.NewUserService(application.Repo)
+	userSvc := service.NewUserService(application.Repo, application.Firebase)
 	mux := handler.NewRouter(userSvc)
 
 	srv := &http.Server{

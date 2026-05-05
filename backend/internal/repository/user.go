@@ -67,3 +67,18 @@ RETURNING id, email, username, uid, role, created_at`
 	}
 	return &u, nil
 }
+
+// DeleteUserByID removes a user row by primary key (used when compensating a failed downstream step).
+func (r *Repository) DeleteUserByID(ctx context.Context, id int) error {
+	if r.pool == nil {
+		return fmt.Errorf("repository: pool is closed")
+	}
+	tag, err := r.pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("repository: delete user: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("repository: delete user: no rows for id=%d", id)
+	}
+	return nil
+}
