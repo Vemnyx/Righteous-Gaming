@@ -9,53 +9,57 @@ import (
 	"strings"
 
 	"righteous-gaming/backend/internal/repository"
+	"righteous-gaming/backend/log"
 )
 
 // App holds shared runtime services for the HTTP server and workers.
 type App struct {
-	Log  *slog.Logger
 	Repo *repository.Repository
 
 	closeLog func()
 }
 
-func newInfoFileLogger(stderr *slog.Logger) (info *slog.Logger, closeFn func()) {
+// openInfoFileHandler returns a handler writing to BACKEND_LOG_FILE (default
+// logs/app.log) and a close func for the file. On failure, returns Discard + no-op close.
+func openInfoFileHandler() (slog.Handler, func()) {
 	path := strings.TrimSpace(os.Getenv("BACKEND_LOG_FILE"))
 	if path == "" {
-		path = "logs/backend.log"
+		path = "logs/app.log"
 	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0750); err != nil {
-		stderr.Warn("info log: mkdir failed; file info logs disabled", "dir", dir, "error", err)
-		return slog.New(slog.DiscardHandler), func() {}
+		fmt.Fprintf(os.Stderr, "info log: mkdir %q: %v (file logging disabled)\n", dir, err)
+		return slog.DiscardHandler, func() {}
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
 	if err != nil {
-		stderr.Warn("info log: open failed; file info logs disabled", "path", path, "error", err)
-		return slog.New(slog.DiscardHandler), func() {}
+		fmt.Fprintf(os.Stderr, "info log: open %q: %v (file logging disabled)\n", path, err)
+		return slog.DiscardHandler, func() {}
 	}
 	h := slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.LevelInfo})
-	return slog.New(h), func() { _ = f.Close() }
+	return h, func() { _ = f.Close() }
 }
 
-// New constructs an App: stderr + file sloggers, database pool (via repository), and repository.
+// New constructs an App: installs slog.Default() (stderr + optional file tee),
+// opens the database pool, and constructs the repository.
 func New(ctx context.Context) (*App, error) {
-	stderrLog := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	infoLog, closeInfoLog := newInfoFileLogger(stderrLog)
+	stderrHandler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
+	fileHandler, closeInfo := openInfoFileHandler()
+
+	root := slog.New(&teeHandler{a: stderrHandler, b: fileHandler})
+	slog.SetDefault(root)
 
 	repo, err := repository.New(ctx)
 	if err != nil {
-		closeInfoLog()
+		closeInfo()
 		return nil, fmt.Errorf("app: %w", err)
 	}
 
 	a := &App{
-		Log:  infoLog,
-		Repo: repo,
+		Repo:     repo,
+		closeLog: closeInfo,
 	}
-
-	stderrLog.Info("database connection established")
-	infoLog.Info("database connection established")
+	log.Info("database connection established")
 	return a, nil
 }
 

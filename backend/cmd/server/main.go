@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"righteous-gaming/backend/internal/app"
+	"righteous-gaming/backend/log"
 )
 
 func listenAddr() string {
@@ -24,25 +24,20 @@ func listenAddr() string {
 	return ":" + p
 }
 
-func logFatal(l *slog.Logger, msg string, args ...any) {
-	l.Error(msg, args...)
-	os.Exit(1)
-}
-
 func main() {
 	ctx := context.Background()
 	application, err := app.New(ctx)
 	if err != nil {
-		slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})).
-			Error("failed to initialize app", "error", err)
-		os.Exit(1)
+		log.Fatal("failed to initialize app", "error", err)
 	}
 	defer application.Close()
+
+	log.Info("application initialized")
 
 	addr := listenAddr()
 
 	mux := http.NewServeMux()
-	// Register API routes on mux when you add them; pass application for Log / Repo.
+	// Register API routes on mux when you add them; pass application for Repo (use log.Info etc. for logging).
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -54,9 +49,9 @@ func main() {
 	}
 
 	go func() {
-		application.Log.Info("server listening", "addr", addr)
+		log.Info("server listening", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logFatal(application.Log, "listen", "error", err)
+			log.Fatal("listen", "error", err)
 		}
 	}()
 
@@ -67,7 +62,7 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		logFatal(application.Log, "shutdown", "error", err)
+		log.Fatal("shutdown", "error", err)
 	}
-	application.Log.Info("server stopped")
+	log.Info("server stopped")
 }
