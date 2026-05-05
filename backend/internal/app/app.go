@@ -18,6 +18,7 @@ import (
 type App struct {
 	Repo     *repository.Repository
 	Firebase *client.Firebase
+	Gmail    *client.Gmail
 
 	closeLog func()
 }
@@ -74,10 +75,17 @@ func New(ctx context.Context) (*App, error) {
 		closeInfo()
 		return nil, fmt.Errorf("app: firebase: %w", err)
 	}
+	gm, err := client.NewGmail(ctx)
+	if err != nil {
+		repo.Close()
+		closeInfo()
+		return nil, fmt.Errorf("app: gmail: %w", err)
+	}
 
 	a := &App{
 		Repo:     repo,
 		Firebase: fb,
+		Gmail:    gm,
 		closeLog: closeInfo,
 	}
 	log.Info("database connection established")
