@@ -15,12 +15,8 @@ type Repository struct {
 	pool *pgxpool.Pool
 }
 
-// New loads database configuration, opens the connection pool, and constructs a Repository.
-func New(ctx context.Context) (*Repository, error) {
-	cfg, err := db.LoadConfig(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("repository: db config: %w", err)
-	}
+// New opens the connection pool from config and constructs a Repository.
+func New(ctx context.Context, cfg db.Config) (*Repository, error) {
 	pool, err := db.NewPool(ctx, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("repository: db pool: %w", err)

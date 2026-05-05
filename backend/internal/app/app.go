@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"righteous-gaming/backend/internal/db"
 	"righteous-gaming/backend/internal/repository"
 	"righteous-gaming/backend/log"
 )
@@ -49,7 +50,17 @@ func New(ctx context.Context) (*App, error) {
 	root := slog.New(&teeHandler{a: stderrHandler, b: fileHandler})
 	slog.SetDefault(root)
 
-	repo, err := repository.New(ctx)
+	cfg, err := db.LoadConfig(ctx)
+	if err != nil {
+		closeInfo()
+		return nil, fmt.Errorf("app: %w", err)
+	}
+	if err := db.RunMigrations(ctx, cfg.ConnString); err != nil {
+		closeInfo()
+		return nil, fmt.Errorf("app: %w", err)
+	}
+
+	repo, err := repository.New(ctx, cfg)
 	if err != nil {
 		closeInfo()
 		return nil, fmt.Errorf("app: %w", err)
