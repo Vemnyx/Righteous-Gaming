@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"righteous-gaming/backend/internal/app"
+	"righteous-gaming/backend/internal/handler"
+	"righteous-gaming/backend/internal/service"
 	"righteous-gaming/backend/log"
 )
 
@@ -36,8 +38,8 @@ func main() {
 
 	addr := listenAddr()
 
-	mux := http.NewServeMux()
-	// Register API routes on mux when you add them; pass application for Repo (use log.Info etc. for logging).
+	userSvc := service.NewUserService(application.Repo)
+	mux := handler.NewRouter(userSvc)
 
 	srv := &http.Server{
 		Addr:              addr,

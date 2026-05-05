@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"righteous-gaming/backend/internal/client"
 	"righteous-gaming/backend/internal/db"
 	"righteous-gaming/backend/internal/repository"
 	"righteous-gaming/backend/log"
@@ -15,7 +16,8 @@ import (
 
 // App holds shared runtime services for the HTTP server and workers.
 type App struct {
-	Repo *repository.Repository
+	Repo     *repository.Repository
+	Firebase *client.Firebase
 
 	closeLog func()
 }
@@ -66,8 +68,16 @@ func New(ctx context.Context) (*App, error) {
 		return nil, fmt.Errorf("app: %w", err)
 	}
 
+	fb, err := client.New(ctx)
+	if err != nil {
+		repo.Close()
+		closeInfo()
+		return nil, fmt.Errorf("app: firebase: %w", err)
+	}
+
 	a := &App{
 		Repo:     repo,
+		Firebase: fb,
 		closeLog: closeInfo,
 	}
 	log.Info("database connection established")
