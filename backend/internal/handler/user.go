@@ -7,6 +7,7 @@ import (
 
 	"righteous-gaming/backend/internal/domain"
 	"righteous-gaming/backend/internal/service"
+	"righteous-gaming/backend/log"
 )
 
 type userHTTP struct {
@@ -34,6 +35,7 @@ func (h *userHTTP) createUser(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		log.Error("failed to create user", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
