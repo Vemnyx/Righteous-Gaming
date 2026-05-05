@@ -3,6 +3,8 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { getFirebaseAuth, isFirebaseConfigured } from "../firebaseClient";
 import "./Login.css";
 
+const LOGIN_LOGO_URL = "https://storage.googleapis.com/righteous-assets/450x450xTransparent.png";
+
 function mapAuthError(code) {
   switch (code) {
     case "auth/invalid-email":
@@ -60,6 +62,7 @@ export default function Login() {
   return (
     <div className="auth-shell">
       <div className="auth-card">
+        <img className="auth-logo" src={LOGIN_LOGO_URL} alt="Righteous Gaming" />
         <h1 className="auth-title">Sign in</h1>
         <p className="auth-muted">Use the email and password for your account. New accounts cannot be created here.</p>
         <form className="auth-form" onSubmit={handleSubmit}>

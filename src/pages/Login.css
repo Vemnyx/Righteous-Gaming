@@ -24,6 +24,13 @@
   max-width: 26rem;
 }
 
+.auth-logo {
+  display: block;
+  width: min(180px, 72%);
+  height: auto;
+  margin: 0 auto 0.85rem;
+}
+
 .auth-title {
   font-size: 1.35rem;
   font-weight: 650;
