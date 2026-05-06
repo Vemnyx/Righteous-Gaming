@@ -146,6 +146,47 @@ RETURNING id, email, username, COALESCE(uid, ''), role, created_at`
 	return &u, nil
 }
 
+// CompleteRegistrationByIDAndDeleteInvite updates the invited user and removes the invite row in one transaction.
+func (r *Repository) CompleteRegistrationByIDAndDeleteInvite(ctx context.Context, userID int, uid string, username *string, inviteCode string) (*User, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("repository: begin complete registration: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	const updateQ = `
+UPDATE users
+SET uid = $2,
+    username = $3,
+    registered_at = now()
+WHERE id = $1
+RETURNING id, email, username, COALESCE(uid, ''), role, created_at`
+	row := tx.QueryRow(ctx, updateQ, userID, uid, username)
+	var u User
+	if err := row.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("repository: complete registration update: %w", err)
+	}
+
+	tag, err := tx.Exec(ctx, `DELETE FROM user_registration WHERE user_id = $1 AND code = $2`, userID, inviteCode)
+	if err != nil {
+		return nil, fmt.Errorf("repository: delete user registration: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return nil, fmt.Errorf("repository: delete user registration: expected 1 row affected, got %d", tag.RowsAffected())
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("repository: commit complete registration: %w", err)
+	}
+	return &u, nil
+}
+
 // CreateUser inserts a new user and returns the persisted row.
 func (r *Repository) CreateUser(ctx context.Context, in CreateUserInput) (*User, error) {
 	if r.pool == nil {

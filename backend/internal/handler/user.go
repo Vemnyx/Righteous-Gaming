@@ -1,16 +1,15 @@
 package handler
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"net/http"
-	"os"
+	"net/url"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	"righteous-gaming/backend/internal/app"
 	"righteous-gaming/backend/internal/domain"
@@ -29,8 +28,13 @@ type userHTTP struct {
 
 type completeRegistrationRequest struct {
 	Email    string  `json:"email"`
+	Code     string  `json:"code"`
 	Username *string `json:"username"`
 	Password string  `json:"password"`
+}
+
+type messageErrorResponse struct {
+	Message string `json:"message"`
 }
 
 type adminRegisterUserRequest struct {
@@ -41,6 +45,12 @@ type adminRegisterUserRequest struct {
 type fieldErrorResponse struct {
 	Field   string `json:"field"`
 	Message string `json:"message"`
+}
+
+type registrationLookupResponse struct {
+	Email    string    `json:"email"`
+	Code     string    `json:"code"`
+	ExpireAt time.Time `json:"expire_at"`
 }
 
 func (h *userHTTP) createUser(w http.ResponseWriter, r *http.Request) {
@@ -89,13 +99,21 @@ func (h *userHTTP) completeRegistration(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if _, err := h.svc.CompleteRegistration(r.Context(), body.Email, body.Username, body.Password); err != nil {
+	if _, err := h.svc.CompleteRegistration(r.Context(), body.Email, body.Code, body.Username, body.Password); err != nil {
 		if errors.Is(err, service.ErrValidation) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		if errors.Is(err, service.ErrUserNotFound) {
 			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, service.ErrRegistrationNotFound) {
+			writeMessageError(w, http.StatusNotFound, "Registration could not be found. Please use the link from your invitation email.")
+			return
+		}
+		if errors.Is(err, service.ErrRegistrationExpired) {
+			writeMessageError(w, http.StatusGone, "This registration link has expired. Please contact your admin to send a new invitation.")
 			return
 		}
 		if errors.Is(err, service.ErrEmailAlreadyRegistered) {
@@ -112,6 +130,36 @@ func (h *userHTTP) completeRegistration(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *userHTTP) registrationByCode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	code := strings.TrimSpace(r.URL.Query().Get("code"))
+	row, err := h.svc.RegistrationByCode(r.Context(), code)
+	if err != nil {
+		if errors.Is(err, service.ErrValidation) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, service.ErrUserNotFound) {
+			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
+		log.Error("failed to lookup registration by code", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(registrationLookupResponse{
+		Email:    row.Email,
+		Code:     row.Code,
+		ExpireAt: row.ExpireAt,
+	})
 }
 
 func (h *userHTTP) adminRegisterUser(w http.ResponseWriter, r *http.Request) {
@@ -149,12 +197,7 @@ func (h *userHTTP) adminRegisterUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	code, err := registrationCodeFromEmail(email)
-	if err != nil {
-		log.Error("failed to generate registration code", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
+	code := newRegistrationCode()
 	if _, err := h.app.Repo.UpsertUserRegistration(r.Context(), repository.CreateUserRegistrationInput{
 		UserID:   user.ID,
 		Email:    email,
@@ -199,14 +242,14 @@ func writeFieldError(w http.ResponseWriter, status int, field, message string) {
 	})
 }
 
-func registrationCodeFromEmail(email string) (string, error) {
-	key := strings.TrimSpace(os.Getenv("REGISTRATION_KEY"))
-	if key == "" {
-		return "", fmt.Errorf("missing REGISTRATION_KEY")
-	}
-	payload := key + ":" + strings.ToLower(strings.TrimSpace(email))
-	sum := sha256.Sum256([]byte(payload))
-	return hex.EncodeToString(sum[:]), nil
+func writeMessageError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(messageErrorResponse{Message: message})
+}
+
+func newRegistrationCode() string {
+	return uuid.NewString()
 }
 
 func registerURLWithCode(baseURL, code string) (string, error) {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	firebaseauth "firebase.google.com/go/v4/auth"
 
@@ -18,6 +19,8 @@ var ErrAlreadyRegistered = errors.New("service: user already registered")
 var ErrEmailAlreadyRegistered = errors.New("service: email already registered")
 var ErrUsernameNotAvailable = errors.New("service: username not available")
 var ErrUserNotFound = errors.New("service: user not found")
+var ErrRegistrationNotFound = errors.New("service: registration not found")
+var ErrRegistrationExpired = errors.New("service: registration expired")
 
 // UserService coordinates user-related use cases.
 type UserService struct {
@@ -25,8 +28,35 @@ type UserService struct {
 	fb   *client.Firebase
 }
 
+type RegistrationLookup struct {
+	UserID   int
+	Email    string
+	Code     string
+	ExpireAt time.Time
+}
+
 func NewUserService(repo *repository.Repository, fb *client.Firebase) *UserService {
 	return &UserService{repo: repo, fb: fb}
+}
+
+func (s *UserService) RegistrationByCode(ctx context.Context, code string) (*RegistrationLookup, error) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return nil, fmt.Errorf("%w: code is required", ErrValidation)
+	}
+	row, err := s.repo.UserRegistrationByCode(ctx, code)
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			return nil, fmt.Errorf("%w: registration not found", ErrUserNotFound)
+		}
+		return nil, fmt.Errorf("service: registration by code: %w", err)
+	}
+	return &RegistrationLookup{
+		UserID:   row.UserID,
+		Email:    row.Email,
+		Code:     row.Code,
+		ExpireAt: row.ExpireAt,
+	}, nil
 }
 
 // CreateUser validates input, persists to Postgres, creates the Firebase Auth user with the same
@@ -77,12 +107,16 @@ func (s *UserService) CreateUser(ctx context.Context, in domain.User) (*domain.U
 }
 
 // CompleteRegistration completes an invited registration by creating Firebase credentials,
-// then updating the existing invited DB row with uid/username/registered_at.
-func (s *UserService) CompleteRegistration(ctx context.Context, email string, username *string, password string) (*domain.User, error) {
+// then updating the existing invited DB row with uid/username/registered_at and removing the invite row.
+func (s *UserService) CompleteRegistration(ctx context.Context, email, registrationCode string, username *string, password string) (*domain.User, error) {
 	email = strings.TrimSpace(email)
+	registrationCode = strings.TrimSpace(registrationCode)
 	password = strings.TrimSpace(password)
 	if email == "" {
 		return nil, fmt.Errorf("%w: email is required", ErrValidation)
+	}
+	if registrationCode == "" {
+		return nil, fmt.Errorf("%w: registration code is required", ErrValidation)
 	}
 	if password == "" {
 		return nil, fmt.Errorf("%w: password is required", ErrValidation)
@@ -105,6 +139,20 @@ func (s *UserService) CompleteRegistration(ctx context.Context, email string, us
 			return nil, fmt.Errorf("%w: User not found", ErrUserNotFound)
 		}
 		return nil, fmt.Errorf("service: find invited user: %w", err)
+	}
+
+	regRow, err := s.repo.UserRegistrationByCode(ctx, registrationCode)
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			return nil, fmt.Errorf("%w", ErrRegistrationNotFound)
+		}
+		return nil, fmt.Errorf("service: lookup registration: %w", err)
+	}
+	if time.Now().After(regRow.ExpireAt) {
+		return nil, fmt.Errorf("%w", ErrRegistrationExpired)
+	}
+	if regRow.UserID != invitedUser.ID || !strings.EqualFold(strings.TrimSpace(regRow.Email), email) {
+		return nil, fmt.Errorf("%w", ErrRegistrationNotFound)
 	}
 
 	candidates, err := s.repo.UsersByEmailOrUsername(ctx, email, cleanUsername)
@@ -133,7 +181,7 @@ func (s *UserService) CompleteRegistration(ctx context.Context, email string, us
 		return nil, fmt.Errorf("service: firebase create user: %w", err)
 	}
 
-	row, err := s.repo.CompleteRegistrationByID(ctx, invitedUser.ID, fbUser.UID, cleanUsername)
+	row, err := s.repo.CompleteRegistrationByIDAndDeleteInvite(ctx, invitedUser.ID, fbUser.UID, cleanUsername, registrationCode)
 	if err != nil {
 		if deleteErr := s.fb.DeleteUser(ctx, fbUser.UID); deleteErr != nil {
 			return nil, fmt.Errorf(

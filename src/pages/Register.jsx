@@ -15,12 +15,45 @@ export default function Register({ onSuccess, onBackToLogin }) {
   const [emailError, setEmailError] = useState(null);
   const [usernameError, setUsernameError] = useState(null);
   const [error, setError] = useState(null);
+  const [loadingRegistration, setLoadingRegistration] = useState(true);
+  const [registrationExpired, setRegistrationExpired] = useState(false);
+  const [inviteCode, setInviteCode] = useState("");
 
   useEffect(() => {
     const code = new URLSearchParams(window.location.search).get("code");
     if (!code || !code.trim()) {
       onBackToLogin();
+      return;
     }
+    setInviteCode(code.trim());
+    const controller = new AbortController();
+    const fetchRegistration = async () => {
+      try {
+        const res = await fetch(`/api/registration?code=${encodeURIComponent(code)}`, {
+          method: "GET",
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          onBackToLogin();
+          return;
+        }
+        const data = await res.json();
+        const inviteEmail = typeof data?.email === "string" ? data.email.trim() : "";
+        const expireAt = new Date(data?.expire_at);
+        if (!inviteEmail || Number.isNaN(expireAt.getTime())) {
+          onBackToLogin();
+          return;
+        }
+        setEmail(inviteEmail);
+        setRegistrationExpired(new Date() > expireAt);
+      } catch {
+        onBackToLogin();
+      } finally {
+        setLoadingRegistration(false);
+      }
+    };
+    fetchRegistration();
+    return () => controller.abort();
   }, [onBackToLogin]);
 
   async function handleSubmit(e) {
@@ -40,6 +73,10 @@ export default function Register({ onSuccess, onBackToLogin }) {
       setError("Passwords do not match.");
       return;
     }
+    if (!inviteCode.trim()) {
+      setError("Registration code is missing. Please open the link from your invitation email.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -48,6 +85,7 @@ export default function Register({ onSuccess, onBackToLogin }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim(),
+          code: inviteCode.trim(),
           username: username.trim() || null,
           password,
         }),
@@ -64,6 +102,10 @@ export default function Register({ onSuccess, onBackToLogin }) {
             setUsernameError(body?.message || "Username is not available.");
             return;
           }
+          if (typeof body?.message === "string" && body.message.trim()) {
+            setError(body.message.trim());
+            return;
+          }
           setError("Error registering user");
           return;
         }
@@ -77,6 +119,32 @@ export default function Register({ onSuccess, onBackToLogin }) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (loadingRegistration) {
+    return (
+      <div className="auth-shell">
+        <div className="auth-card auth-card--narrow">
+          <h1 className="auth-title">Checking invitation...</h1>
+        </div>
+      </div>
+    );
+  }
+
+  if (registrationExpired) {
+    return (
+      <div className="auth-shell">
+        <div className="auth-card auth-card--narrow">
+          <h1 className="auth-title">Registration expired</h1>
+          <p className="auth-muted">
+            This registration link has expired. Please contact your admin to send a new invitation.
+          </p>
+          <button className="auth-secondary" type="button" onClick={onBackToLogin}>
+            Back to sign in
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -99,7 +167,7 @@ export default function Register({ onSuccess, onBackToLogin }) {
               setEmailError(null);
             }}
             required
-            disabled={submitting}
+            disabled
           />
           {emailError ? <p className="auth-error auth-error--field">{emailError}</p> : null}
 
