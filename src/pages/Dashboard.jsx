@@ -37,12 +37,16 @@ const tabsRootDark = tabsRootSharedWidth;
 /** Wide layout only; no extra surface (matches pre–purple-card light look). */
 const tabsRootLight = tabsRootSharedWidth;
 
-const desktopTabListDark =
-  "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-stretch md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-white/[0.12] md:bg-black/30 md:p-1";
+/** Tab row only (border/background live on `navRail*` wrapper with logo). */
+const desktopTabListShared =
+  "hidden min-w-0 md:flex md:flex-1 md:flex-nowrap md:items-stretch md:gap-1 md:overflow-x-auto";
 
-/* Same layout/size as desktopTabListDark; opaque purple-grey rail on lavender shell */
-const desktopTabListLight =
-  "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-stretch md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-white/[0.12] md:bg-[rgba(42,37,54,0.9)] md:p-1 md:backdrop-blur-sm";
+/** One bar: logo + tabs (desktop); logo only surface on mobile while list is hidden. */
+const navRailDark =
+  "box-border flex min-h-[2.875rem] min-w-0 flex-1 items-center gap-1 rounded-lg border border-white/[0.12] bg-black/30 p-1 sm:min-h-12 md:min-h-0 md:items-stretch";
+
+const navRailLight =
+  "box-border flex min-h-[2.875rem] min-w-0 flex-1 items-center gap-1 rounded-lg border border-white/[0.12] bg-[rgba(42,37,54,0.9)] p-1 backdrop-blur-sm sm:min-h-12 md:min-h-0 md:items-stretch";
 
 /* ~30% taller bar vs min-h-9; ~50% wider hit area vs px-3. Equal-width tabs on desktop: flex-1 + basis-0 */
 const desktopTriggerDark =
@@ -52,9 +56,9 @@ const desktopTriggerDark =
 const desktopTriggerLight =
   "inline-flex min-h-12 min-w-0 basis-0 cursor-pointer select-none items-center justify-center rounded-md border border-transparent px-[1.125rem] py-2.5 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-[#b998e8]/55 hover:text-white focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(42,37,54,0.92)] data-[state=active]:border-[rgba(152,117,207,0.9)] data-[state=active]:bg-gradient-to-b data-[state=active]:from-[#7b4cb8] data-[state=active]:to-[#5a2f8f] data-[state=active]:text-white data-[state=active]:shadow-[0_4px_18px_rgb(103_61_154/0.42)] md:flex-1 md:whitespace-normal md:text-center md:leading-snug md:break-words";
 
-/** Same surface as desktop tab rails in light mode (logo header chip). */
-const logoChipLight =
-  "rounded-lg border border-white/[0.12] bg-[rgba(42,37,54,0.9)] px-3 py-2 backdrop-blur-sm md:px-3.5";
+/** Logo sits inside `navRail*`; padding + divider are stable across light/dark. */
+const logoInRail =
+  "box-border flex shrink-0 items-center border-r border-white/[0.1] py-0.5 pl-1 pr-2 md:py-0 md:pl-2 md:pr-3";
 
 const comingSoonTitle =
   "relative z-[1] m-0 mb-2.5 bg-[length:200%_auto] bg-gradient-to-r from-white from-0% via-violet-300 via-40% via-purple-500 via-70% to-fuchsia-100 to-100% bg-clip-text text-[clamp(1.75rem,6vw,2.75rem)] font-bold uppercase tracking-[0.06em] text-transparent [animation:dashboard-shimmer_8s_ease-in-out_infinite]";
@@ -124,7 +128,10 @@ function ThemeToggle({ theme, onChange, className = "" }) {
   );
 }
 
-export default function Dashboard() {
+/**
+ * @param {{ onNavigate?: (path: string) => void }} props
+ */
+export default function Dashboard({ onNavigate }) {
   const { signOut, sessionProfile } = useAuth();
   const [activeTab, setActiveTab] = useState(ALL_TABS[0].id);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -196,34 +203,26 @@ export default function Dashboard() {
             <HamburgerIcon className="text-[#f4f0fa]" />
           </button>
 
-          <div
-            className={
-              isLight
-                ? `shrink-0 ${logoChipLight}`
-                : "shrink-0"
-            }
-          >
-            <img
-              src={DASHBOARD_LOGO_URL}
-              alt="Righteous Gaming"
-              className="h-9 w-auto max-w-[min(200px,46vw)] object-contain object-left md:h-10 md:max-w-[240px]"
-            />
+          <div className={isLight ? navRailLight : navRailDark}>
+            <div className={logoInRail}>
+              <img
+                src={DASHBOARD_LOGO_URL}
+                alt="Righteous Gaming"
+                className="h-9 w-auto max-w-[min(200px,46vw)] object-contain object-left md:h-10 md:max-w-[240px]"
+              />
+            </div>
+            <Tabs.List className={desktopTabListShared} aria-label="Dashboard sections">
+              {tabs.map((tab) => (
+                <Tabs.Trigger
+                  key={tab.id}
+                  className={isLight ? desktopTriggerLight : desktopTriggerDark}
+                  value={tab.id}
+                >
+                  {tab.label}
+                </Tabs.Trigger>
+              ))}
+            </Tabs.List>
           </div>
-
-          <Tabs.List
-            className={isLight ? desktopTabListLight : desktopTabListDark}
-            aria-label="Dashboard sections"
-          >
-            {tabs.map((tab) => (
-              <Tabs.Trigger
-                key={tab.id}
-                className={isLight ? desktopTriggerLight : desktopTriggerDark}
-                value={tab.id}
-              >
-                {tab.label}
-              </Tabs.Trigger>
-            ))}
-          </Tabs.List>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
             <div className="hidden shrink-0 md:block">
@@ -309,7 +308,11 @@ export default function Dashboard() {
             }`}
           >
             {tab.id === "users" ? (
-              <UsersAdminTable isLight={isLight} active={activeTab === tab.id} />
+              <UsersAdminTable
+                isLight={isLight}
+                active={activeTab === tab.id}
+                onInviteUser={onNavigate ? () => onNavigate("/admin/invite-user") : undefined}
+              />
             ) : (
               <div className="relative flex flex-1 flex-col items-center justify-center px-4 py-8 text-center">
                 <span className={comingSoonGlow} aria-hidden />

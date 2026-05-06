@@ -40,7 +40,7 @@ type messageErrorResponse struct {
 
 type adminRegisterUserRequest struct {
 	Email string `json:"email"`
-	Role  int    `json:"role"`
+	Role  *int   `json:"role,omitempty"` // Omit or null → member (1).
 }
 
 type fieldErrorResponse struct {
@@ -299,6 +299,11 @@ func (h *userHTTP) adminRegisterUser(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	idToken := bearerIDToken(r.Header.Get("Authorization"))
+	if idToken == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 	if h.app == nil {
 		http.Error(w, "email service unavailable", http.StatusServiceUnavailable)
 		return
@@ -314,10 +319,27 @@ func (h *userHTTP) adminRegisterUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	email := strings.TrimSpace(body.Email)
-	user, err := h.svc.CreateInvitedUser(r.Context(), email, body.Role)
+	role := int(domain.RoleMember)
+	if body.Role != nil {
+		role = *body.Role
+	}
+
+	user, err := h.svc.CreateInvitedUserForAdmin(r.Context(), idToken, email, role)
 	if err != nil {
 		if errors.Is(err, service.ErrValidation) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, service.ErrUnauthenticated) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if errors.Is(err, service.ErrForbidden) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		if errors.Is(err, service.ErrUserNotFound) {
+			http.Error(w, "User not found", http.StatusNotFound)
 			return
 		}
 		if errors.Is(err, service.ErrAlreadyRegistered) {

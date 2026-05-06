@@ -2,6 +2,7 @@ import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
+import InviteUser from "./pages/InviteUser";
 import { useCallback, useEffect, useState } from "react";
 
 function AppGate() {
@@ -39,7 +40,11 @@ function AppGate() {
     return <Login />;
   }
 
-  return <Dashboard />;
+  if (path === "/admin/invite-user") {
+    return <InviteUser onNavigate={navigate} />;
+  }
+
+  return <Dashboard onNavigate={navigate} />;
 }
 
 export default function App() {

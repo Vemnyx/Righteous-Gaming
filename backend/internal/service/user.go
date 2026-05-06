@@ -74,6 +74,18 @@ func (s *UserService) ListUsersPagedForAdmin(ctx context.Context, idToken string
 	return s.repo.ListUsersPaged(ctx, limit, offset)
 }
 
+// CreateInvitedUserForAdmin verifies the caller is an admin, then creates or reuses an invited user row.
+func (s *UserService) CreateInvitedUserForAdmin(ctx context.Context, idToken string, email string, role int) (*domain.User, error) {
+	caller, err := s.UserForIDToken(ctx, idToken)
+	if err != nil {
+		return nil, err
+	}
+	if caller.Role == nil || *caller.Role != domain.RoleAdmin {
+		return nil, fmt.Errorf("%w", ErrForbidden)
+	}
+	return s.CreateInvitedUser(ctx, email, role)
+}
+
 func (s *UserService) RegistrationByCode(ctx context.Context, code string) (*RegistrationLookup, error) {
 	code = strings.TrimSpace(code)
 	if code == "" {
