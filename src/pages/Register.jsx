@@ -1,9 +1,17 @@
 import { useEffect, useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { getFirebaseAuth, isFirebaseConfigured } from "../firebaseClient";
-import "./Login.css";
+import { AuthShell } from "../components/AuthShell";
 
 const SIGN_UP_LOGO_URL = "https://storage.googleapis.com/righteous-assets/NameTransparent.png";
+
+const labelClass = "mt-1.5 text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/75";
+
+const baseInput =
+  "mb-1 rounded-lg border border-white/[0.18] bg-black/35 px-3 py-2.5 text-base text-white outline-none focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.75)] disabled:opacity-65";
+
+const inputErrorRing =
+  "border-red-300/70 shadow-[0_0_0_1px_rgba(255,120,120,0.18)] focus-visible:ring-red-300/45";
 
 export default function Register({ onSuccess, onBackToLogin }) {
   const [email, setEmail] = useState("");
@@ -123,129 +131,143 @@ export default function Register({ onSuccess, onBackToLogin }) {
 
   if (loadingRegistration) {
     return (
-      <div className="auth-shell">
-        <div className="auth-card auth-card--narrow">
-          <h1 className="auth-title">Checking invitation...</h1>
-        </div>
-      </div>
+      <AuthShell narrow>
+        <h1 className="mb-2 text-[1.35rem] font-[650] tracking-wide">Checking invitation...</h1>
+      </AuthShell>
     );
   }
 
   if (registrationExpired) {
     return (
-      <div className="auth-shell">
-        <div className="auth-card auth-card--narrow">
-          <h1 className="auth-title">Registration expired</h1>
-          <p className="auth-muted">
-            This registration link has expired. Please contact your admin to send a new invitation.
-          </p>
-          <button className="auth-secondary" type="button" onClick={onBackToLogin}>
-            Back to sign in
-          </button>
-        </div>
-      </div>
+      <AuthShell narrow>
+        <h1 className="mb-2 text-[1.35rem] font-[650] tracking-wide">Registration expired</h1>
+        <p className="mb-5 text-[0.88rem] leading-relaxed text-[#f4f0fa]/[0.72]">
+          This registration link has expired. Please contact your admin to send a new invitation.
+        </p>
+        <button
+          type="button"
+          className="w-full rounded-lg border border-white/[0.22] bg-transparent px-4 py-2.5 text-[0.92rem] text-[#f4f0fa] hover:bg-white/[0.08]"
+          onClick={onBackToLogin}
+        >
+          Back to sign in
+        </button>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="auth-shell">
-      <div className="auth-card">
-        <img className="auth-logo" src={SIGN_UP_LOGO_URL} alt="Righteous Gaming" />
-        <h1 className="auth-title">Sign Up</h1>
-        <form className="auth-form" onSubmit={handleSubmit}>
-          <label className="auth-label" htmlFor="register-email">
-            Email
-          </label>
-          <input
-            id="register-email"
-            className={`auth-input ${emailError ? "auth-input--error" : ""}`}
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              setEmailError(null);
-            }}
-            required
-            disabled
-          />
-          {emailError ? <p className="auth-error auth-error--field">{emailError}</p> : null}
+    <AuthShell>
+      <img
+        className="mx-auto mb-3.5 block h-auto w-[min(220px,80%)]"
+        src={SIGN_UP_LOGO_URL}
+        alt="Righteous Gaming"
+      />
+      <h1 className="mb-2 text-[1.35rem] font-[650] tracking-wide">Sign Up</h1>
+      <form className="flex flex-col gap-1" onSubmit={handleSubmit}>
+        <label className={labelClass} htmlFor="register-email">
+          Email
+        </label>
+        <input
+          id="register-email"
+          className={`${baseInput} ${emailError ? inputErrorRing : ""}`}
+          type="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            setEmailError(null);
+          }}
+          required
+          disabled
+        />
+        {emailError ? (
+          <p className="-mt-0.5 mb-0.5 text-[0.85rem] text-[#ffb4b4]">{emailError}</p>
+        ) : null}
 
-          <label className="auth-label" htmlFor="register-username">
-            Username
-          </label>
+        <label className={labelClass} htmlFor="register-username">
+          Username
+        </label>
+        <input
+          id="register-username"
+          className={`${baseInput} ${usernameError ? inputErrorRing : ""}`}
+          type="text"
+          autoComplete="nickname"
+          value={username}
+          onChange={(e) => {
+            setUsername(e.target.value);
+            setUsernameError(null);
+          }}
+          disabled={submitting}
+        />
+        {usernameError ? (
+          <p className="-mt-0.5 mb-0.5 text-[0.85rem] text-[#ffb4b4]">{usernameError}</p>
+        ) : null}
+
+        <label className={labelClass} htmlFor="register-password">
+          Password
+        </label>
+        <input
+          id="register-password"
+          className={baseInput}
+          type={showPasswords ? "text" : "password"}
+          autoComplete="new-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          minLength={8}
+          maxLength={64}
+          disabled={submitting}
+        />
+
+        <label className={labelClass} htmlFor="register-confirm-password">
+          Confirm password
+        </label>
+        <input
+          id="register-confirm-password"
+          className={baseInput}
+          type={showPasswords ? "text" : "password"}
+          autoComplete="new-password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          required
+          minLength={8}
+          maxLength={64}
+          disabled={submitting}
+        />
+
+        <label
+          className="mt-1 inline-flex cursor-pointer items-center gap-2 text-[0.88rem] text-[#f4f0fa]/85"
+          htmlFor="register-show-passwords"
+        >
           <input
-            id="register-username"
-            className={`auth-input ${usernameError ? "auth-input--error" : ""}`}
-            type="text"
-            autoComplete="nickname"
-            value={username}
-            onChange={(e) => {
-              setUsername(e.target.value);
-              setUsernameError(null);
-            }}
+            id="register-show-passwords"
+            type="checkbox"
+            className="size-4 shrink-0 rounded border border-white/25 bg-black/35"
+            checked={showPasswords}
+            onChange={(e) => setShowPasswords(e.target.checked)}
             disabled={submitting}
           />
-          {usernameError ? <p className="auth-error auth-error--field">{usernameError}</p> : null}
+          Show passwords
+        </label>
 
-          <label className="auth-label" htmlFor="register-password">
-            Password
-          </label>
-          <input
-            id="register-password"
-            className="auth-input"
-            type={showPasswords ? "text" : "password"}
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-            maxLength={64}
-            disabled={submitting}
-          />
+        {error ? <p className="mt-1.5 text-[0.85rem] text-[#ffb4b4]">{error}</p> : null}
 
-          <label className="auth-label" htmlFor="register-confirm-password">
-            Confirm password
-          </label>
-          <input
-            id="register-confirm-password"
-            className="auth-input"
-            type={showPasswords ? "text" : "password"}
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-            minLength={8}
-            maxLength={64}
-            disabled={submitting}
-          />
-
-          <label className="auth-checkbox-row" htmlFor="register-show-passwords">
-            <input
-              id="register-show-passwords"
-              type="checkbox"
-              checked={showPasswords}
-              onChange={(e) => setShowPasswords(e.target.checked)}
-              disabled={submitting}
-            />
-            Show passwords
-          </label>
-
-          {error ? <p className="auth-error">{error}</p> : null}
-
-          <button className="auth-submit" type="submit" disabled={submitting}>
-            {submitting ? "Signing up..." : "Sign Up"}
-          </button>
-          <button
-            className="auth-secondary"
-            type="button"
-            onClick={onBackToLogin}
-            disabled={submitting}
-          >
-            Back to sign in
-          </button>
-        </form>
-      </div>
-    </div>
+        <button
+          type="submit"
+          disabled={submitting}
+          className="mt-4 cursor-pointer rounded-lg border-none bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] px-4 py-2.5 text-[0.95rem] font-semibold text-white hover:brightness-[1.06] disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {submitting ? "Signing up..." : "Sign Up"}
+        </button>
+        <button
+          type="button"
+          className="mt-2.5 cursor-pointer rounded-lg border border-white/[0.22] bg-transparent px-4 py-2.5 text-[0.92rem] text-[#f4f0fa] hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-65"
+          disabled={submitting}
+          onClick={onBackToLogin}
+        >
+          Back to sign in
+        </button>
+      </form>
+    </AuthShell>
   );
 }

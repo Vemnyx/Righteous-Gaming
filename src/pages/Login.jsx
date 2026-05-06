@@ -1,9 +1,14 @@
 import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { getFirebaseAuth, isFirebaseConfigured } from "../firebaseClient";
-import "./Login.css";
+import { AuthShell } from "../components/AuthShell";
 
 const LOGIN_LOGO_URL = "https://storage.googleapis.com/righteous-assets/450x450xTransparent.png";
+
+const inputClass =
+  "mb-1 rounded-lg border border-white/[0.18] bg-black/35 px-3 py-2.5 text-base text-white outline-none focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.75)] disabled:opacity-65";
+
+const labelClass = "mt-1.5 text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/75";
 
 function mapAuthError(code) {
   switch (code) {
@@ -22,7 +27,7 @@ function mapAuthError(code) {
   }
 }
 
-export default function Login() {
+export default function Login({ onRegister }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -47,56 +52,81 @@ export default function Login() {
 
   if (!isFirebaseConfigured()) {
     return (
-      <div className="auth-shell">
-        <div className="auth-card auth-card--narrow">
-          <h1 className="auth-title">Configuration needed</h1>
-          <p className="auth-muted">
-            Add <code>VITE_FIREBASE_*</code> in <code>.env.local</code> (see <code>.env.example</code>), then
-            restart the dev server.
-          </p>
-        </div>
-      </div>
+      <AuthShell narrow>
+        <h1 className="mb-2 text-[1.35rem] font-[650] tracking-wide">Configuration needed</h1>
+        <p className="mb-5 text-[0.88rem] leading-relaxed text-[#f4f0fa]/[0.72]">
+          Add <code className="rounded bg-black/35 px-1 py-0.5 text-[0.82em]">VITE_FIREBASE_*</code> in{" "}
+          <code className="rounded bg-black/35 px-1 py-0.5 text-[0.82em]">.env.local</code> (see{" "}
+          <code className="rounded bg-black/35 px-1 py-0.5 text-[0.82em]">.env.example</code>), then
+          restart the dev server.
+        </p>
+        {typeof onRegister === "function" ? (
+          <button
+            type="button"
+            className="w-full rounded-lg border border-white/[0.22] bg-transparent px-4 py-2.5 text-[0.92rem] text-[#f4f0fa] hover:bg-white/[0.08]"
+            onClick={onRegister}
+          >
+            Register with invite link
+          </button>
+        ) : null}
+      </AuthShell>
     );
   }
 
   return (
-    <div className="auth-shell">
-      <div className="auth-card">
-        <img className="auth-logo" src={LOGIN_LOGO_URL} alt="Righteous Gaming" />
-        <h1 className="auth-title">Sign in</h1>
-        <form className="auth-form" onSubmit={handleSubmit}>
-          <label className="auth-label" htmlFor="email">
-            Email
-          </label>
-          <input
-            id="email"
-            className="auth-input"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
+    <AuthShell>
+      <img
+        className="mx-auto mb-3.5 block h-auto w-[min(220px,80%)]"
+        src={LOGIN_LOGO_URL}
+        alt="Righteous Gaming"
+      />
+      <h1 className="mb-2 text-[1.35rem] font-[650] tracking-wide">Sign in</h1>
+      <form className="flex flex-col gap-1" onSubmit={handleSubmit}>
+        <label className={labelClass} htmlFor="email">
+          Email
+        </label>
+        <input
+          id="email"
+          className={inputClass}
+          type="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          disabled={submitting}
+        />
+        <label className={labelClass} htmlFor="password">
+          Password
+        </label>
+        <input
+          id="password"
+          className={inputClass}
+          type="password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          disabled={submitting}
+        />
+        {error ? <p className="mt-1.5 text-[0.85rem] text-[#ffb4b4]">{error}</p> : null}
+        <button
+          type="submit"
+          disabled={submitting}
+          className="mt-4 cursor-pointer rounded-lg border-none bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] px-4 py-2.5 text-[0.95rem] font-semibold text-white hover:brightness-[1.06] disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {submitting ? "Signing in…" : "Sign in"}
+        </button>
+        {typeof onRegister === "function" ? (
+          <button
+            type="button"
+            className="mt-2.5 cursor-pointer rounded-lg border border-white/[0.22] bg-transparent px-4 py-2.5 text-[0.92rem] text-[#f4f0fa] hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-65"
             disabled={submitting}
-          />
-          <label className="auth-label" htmlFor="password">
-            Password
-          </label>
-          <input
-            id="password"
-            className="auth-input"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            disabled={submitting}
-          />
-          {error ? <p className="auth-error">{error}</p> : null}
-          <button className="auth-submit" type="submit" disabled={submitting}>
-            {submitting ? "Signing in…" : "Sign in"}
+            onClick={onRegister}
+          >
+            Register with invite link
           </button>
-        </form>
-      </div>
-    </div>
+        ) : null}
+      </form>
+    </AuthShell>
   );
 }
