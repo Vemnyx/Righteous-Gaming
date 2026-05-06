@@ -12,6 +12,8 @@ export default function Register({ onSuccess, onBackToLogin }) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPasswords, setShowPasswords] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [emailError, setEmailError] = useState(null);
+  const [usernameError, setUsernameError] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -23,6 +25,8 @@ export default function Register({ onSuccess, onBackToLogin }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    setEmailError(null);
+    setUsernameError(null);
     setError(null);
     if (!isFirebaseConfigured()) {
       setError("Firebase is not configured.");
@@ -49,8 +53,22 @@ export default function Register({ onSuccess, onBackToLogin }) {
         }),
       });
       if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(msg || "Registration failed.");
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const body = await res.json();
+          if (body?.field === "email") {
+            setEmailError(body?.message || "Email is already registered.");
+            return;
+          }
+          if (body?.field === "username") {
+            setUsernameError(body?.message || "Username is not available.");
+            return;
+          }
+          setError("Error registering user");
+          return;
+        }
+        setError("Error registering user");
+        return;
       }
       await signInWithEmailAndPassword(getFirebaseAuth(), email.trim(), password);
       onSuccess();
@@ -72,27 +90,35 @@ export default function Register({ onSuccess, onBackToLogin }) {
           </label>
           <input
             id="register-email"
-            className="auth-input"
+            className={`auth-input ${emailError ? "auth-input--error" : ""}`}
             type="email"
             autoComplete="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setEmailError(null);
+            }}
             required
             disabled={submitting}
           />
+          {emailError ? <p className="auth-error auth-error--field">{emailError}</p> : null}
 
           <label className="auth-label" htmlFor="register-username">
             Username
           </label>
           <input
             id="register-username"
-            className="auth-input"
+            className={`auth-input ${usernameError ? "auth-input--error" : ""}`}
             type="text"
             autoComplete="nickname"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) => {
+              setUsername(e.target.value);
+              setUsernameError(null);
+            }}
             disabled={submitting}
           />
+          {usernameError ? <p className="auth-error auth-error--field">{usernameError}</p> : null}
 
           <label className="auth-label" htmlFor="register-password">
             Password

@@ -1,19 +1,26 @@
 package handler
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/url"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 
 	"righteous-gaming/backend/internal/app"
 	"righteous-gaming/backend/internal/domain"
 	"righteous-gaming/backend/internal/emailtemplates"
+	"righteous-gaming/backend/internal/repository"
 	"righteous-gaming/backend/internal/service"
 	"righteous-gaming/backend/log"
 )
 
-const adminInviteRegisterURL = "https://righteousgaming.team/register?code=123"
+const adminInviteRegisterURL = "https://righteousgaming.team/register"
 
 type userHTTP struct {
 	svc *service.UserService
@@ -87,6 +94,10 @@ func (h *userHTTP) completeRegistration(w http.ResponseWriter, r *http.Request) 
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if errors.Is(err, service.ErrUserNotFound) {
+			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
 		if errors.Is(err, service.ErrEmailAlreadyRegistered) {
 			writeFieldError(w, http.StatusConflict, "email", "Email is already registered.")
 			return
@@ -123,7 +134,8 @@ func (h *userHTTP) adminRegisterUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	email := strings.TrimSpace(body.Email)
-	if err := h.svc.CreateInvitedUser(r.Context(), email, body.Role); err != nil {
+	user, err := h.svc.CreateInvitedUser(r.Context(), email, body.Role)
+	if err != nil {
 		if errors.Is(err, service.ErrValidation) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -137,8 +149,32 @@ func (h *userHTTP) adminRegisterUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	code, err := registrationCodeFromEmail(email)
+	if err != nil {
+		log.Error("failed to generate registration code", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if _, err := h.app.Repo.UpsertUserRegistration(r.Context(), repository.CreateUserRegistrationInput{
+		UserID:   user.ID,
+		Email:    email,
+		Code:     code,
+		ExpireAt: time.Now().Add(2 * time.Hour),
+	}); err != nil {
+		log.Error("failed to upsert user registration", "error", err, "email", email, "user_id", user.ID)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	registerURL, err := registerURLWithCode(adminInviteRegisterURL, code)
+	if err != nil {
+		log.Error("failed to build register url", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
 	subject := "You're invited to Righteous Gaming"
-	content, err := emailtemplates.RenderAdminRegisterInvite(adminInviteRegisterURL)
+	content, err := emailtemplates.RenderAdminRegisterInvite(registerURL)
 	if err != nil {
 		log.Error("failed to render registration invite email", "error", err)
 		http.Error(w, "failed to render invite email", http.StatusInternalServerError)
@@ -161,4 +197,25 @@ func writeFieldError(w http.ResponseWriter, status int, field, message string) {
 		Field:   field,
 		Message: message,
 	})
+}
+
+func registrationCodeFromEmail(email string) (string, error) {
+	key := strings.TrimSpace(os.Getenv("REGISTRATION_KEY"))
+	if key == "" {
+		return "", fmt.Errorf("missing REGISTRATION_KEY")
+	}
+	payload := key + ":" + strings.ToLower(strings.TrimSpace(email))
+	sum := sha256.Sum256([]byte(payload))
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func registerURLWithCode(baseURL, code string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return "", fmt.Errorf("parse base url: %w", err)
+	}
+	q := u.Query()
+	q.Set("code", code)
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }

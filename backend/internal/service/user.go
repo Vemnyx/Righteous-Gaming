@@ -17,6 +17,7 @@ var ErrValidation = errors.New("service: validation failed")
 var ErrAlreadyRegistered = errors.New("service: user already registered")
 var ErrEmailAlreadyRegistered = errors.New("service: email already registered")
 var ErrUsernameNotAvailable = errors.New("service: username not available")
+var ErrUserNotFound = errors.New("service: user not found")
 
 // UserService coordinates user-related use cases.
 type UserService struct {
@@ -75,9 +76,8 @@ func (s *UserService) CreateUser(ctx context.Context, in domain.User) (*domain.U
 	return domainUserFromRepo(row), nil
 }
 
-// CompleteRegistration creates a Firebase Auth user from registration input,
-// then persists the app user row using the Firebase-generated UID.
-// If DB insert fails after Firebase create, the Firebase user is rolled back.
+// CompleteRegistration completes an invited registration by creating Firebase credentials,
+// then updating the existing invited DB row with uid/username/registered_at.
 func (s *UserService) CompleteRegistration(ctx context.Context, email string, username *string, password string) (*domain.User, error) {
 	email = strings.TrimSpace(email)
 	password = strings.TrimSpace(password)
@@ -99,16 +99,21 @@ func (s *UserService) CompleteRegistration(ctx context.Context, email string, us
 		}
 	}
 
+	invitedUser, err := s.repo.UserByEmailWithoutUID(ctx, email)
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			return nil, fmt.Errorf("%w: User not found", ErrUserNotFound)
+		}
+		return nil, fmt.Errorf("service: find invited user: %w", err)
+	}
+
 	candidates, err := s.repo.UsersByEmailOrUsername(ctx, email, cleanUsername)
 	if err != nil {
 		return nil, fmt.Errorf("service: lookup registration conflicts: %w", err)
 	}
 	for _, candidate := range candidates {
-		if strings.EqualFold(strings.TrimSpace(candidate.Email), email) && strings.TrimSpace(candidate.UID) != "" {
-			return nil, fmt.Errorf("%w: email is already registered", ErrEmailAlreadyRegistered)
-		}
 		if cleanUsername != nil && candidate.Username != nil {
-			if strings.EqualFold(strings.TrimSpace(*candidate.Username), *cleanUsername) {
+			if candidate.ID != invitedUser.ID && strings.EqualFold(strings.TrimSpace(*candidate.Username), *cleanUsername) {
 				return nil, fmt.Errorf("%w: username is not available", ErrUsernameNotAvailable)
 			}
 		}
@@ -128,52 +133,50 @@ func (s *UserService) CompleteRegistration(ctx context.Context, email string, us
 		return nil, fmt.Errorf("service: firebase create user: %w", err)
 	}
 
-	row, err := s.repo.CreateUser(ctx, repository.CreateUserInput{
-		Email:    email,
-		Username: cleanUsername,
-		UID:      fbUser.UID,
-		Role:     int(domain.RoleMember),
-	})
+	row, err := s.repo.CompleteRegistrationByID(ctx, invitedUser.ID, fbUser.UID, cleanUsername)
 	if err != nil {
 		if deleteErr := s.fb.DeleteUser(ctx, fbUser.UID); deleteErr != nil {
 			return nil, fmt.Errorf(
-				"service: create user: %w (also failed to rollback firebase uid=%s: %v)",
+				"service: complete registration: %w (also failed to rollback firebase uid=%s: %v)",
 				err,
 				fbUser.UID,
 				deleteErr,
 			)
 		}
-		return nil, fmt.Errorf("service: create user: %w", err)
+		return nil, fmt.Errorf("service: complete registration: %w", err)
 	}
 
 	return domainUserFromRepo(row), nil
 }
 
-// CreateInvitedUser inserts an invited user using email/role without creating Firebase credentials.
-// Duplicate-email inserts are intentionally ignored.
-func (s *UserService) CreateInvitedUser(ctx context.Context, email string, role int) error {
+// CreateInvitedUser inserts (or reuses) an invited user using email/role without creating Firebase credentials.
+func (s *UserService) CreateInvitedUser(ctx context.Context, email string, role int) (*domain.User, error) {
 	email = strings.TrimSpace(email)
 	if email == "" {
-		return fmt.Errorf("%w: email is required", ErrValidation)
+		return nil, fmt.Errorf("%w: email is required", ErrValidation)
 	}
 	r := domain.Role(role)
 	if !r.Valid() {
-		return fmt.Errorf("%w: invalid role", ErrValidation)
+		return nil, fmt.Errorf("%w: invalid role", ErrValidation)
 	}
 
 	existing, err := s.repo.UserByEmail(ctx, email)
 	if err != nil && !errors.Is(err, repository.ErrUserNotFound) {
-		return fmt.Errorf("service: find invited user: %w", err)
+		return nil, fmt.Errorf("service: find invited user: %w", err)
 	}
 	if err == nil && strings.TrimSpace(existing.UID) != "" {
-		return fmt.Errorf("%w: user is already registered", ErrAlreadyRegistered)
+		return nil, fmt.Errorf("%w: user is already registered", ErrAlreadyRegistered)
 	}
 	if errors.Is(err, repository.ErrUserNotFound) {
 		if err := s.repo.CreateUserIfAbsent(ctx, email, role); err != nil {
-			return fmt.Errorf("service: create invited user: %w", err)
+			return nil, fmt.Errorf("service: create invited user: %w", err)
+		}
+		existing, err = s.repo.UserByEmail(ctx, email)
+		if err != nil {
+			return nil, fmt.Errorf("service: fetch invited user after create: %w", err)
 		}
 	}
-	return nil
+	return domainUserFromRepo(existing), nil
 }
 
 // firebaseDefaultPassword is a provisional password for new Firebase Email/Password users.

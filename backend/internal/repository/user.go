@@ -71,6 +71,27 @@ WHERE email = $1`
 	return &u, nil
 }
 
+// UserByEmailWithoutUID returns the invited user row for email where uid is null/empty.
+func (r *Repository) UserByEmailWithoutUID(ctx context.Context, email string) (*User, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	const q = `
+SELECT id, email, username, COALESCE(uid, ''), role, created_at
+FROM users
+WHERE email = $1 AND (uid IS NULL OR btrim(uid) = '')`
+	row := r.pool.QueryRow(ctx, q, email)
+	var u User
+	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("repository: user by email without uid: %w", err)
+	}
+	return &u, nil
+}
+
 // UsersByEmailOrUsername returns all users whose email matches, or whose username
 // matches when username is non-nil.
 func (r *Repository) UsersByEmailOrUsername(ctx context.Context, email string, username *string) ([]User, error) {
@@ -99,6 +120,30 @@ WHERE email = $1 OR ($2::varchar IS NOT NULL AND username = $2)`
 		return nil, fmt.Errorf("repository: users by email or username rows: %w", err)
 	}
 	return out, nil
+}
+
+// CompleteRegistrationByID updates the invited row with uid, username, and registration timestamp.
+func (r *Repository) CompleteRegistrationByID(ctx context.Context, id int, uid string, username *string) (*User, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	const q = `
+UPDATE users
+SET uid = $2,
+    username = $3,
+    registered_at = now()
+WHERE id = $1
+RETURNING id, email, username, COALESCE(uid, ''), role, created_at`
+	row := r.pool.QueryRow(ctx, q, id, uid, username)
+	var u User
+	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("repository: complete registration by id: %w", err)
+	}
+	return &u, nil
 }
 
 // CreateUser inserts a new user and returns the persisted row.

@@ -86,10 +86,25 @@
   opacity: 0.65;
 }
 
+.auth-input--error {
+  border-color: rgba(255, 120, 120, 0.7);
+  box-shadow: 0 0 0 1px rgba(255, 120, 120, 0.18);
+}
+
+.auth-input--error:focus {
+  outline: 2px solid rgba(255, 120, 120, 0.45);
+  outline-offset: 1px;
+}
+
 .auth-error {
   margin-top: 0.35rem;
   font-size: 0.85rem;
   color: #ffb4b4;
+}
+
+.auth-error--field {
+  margin-top: -0.05rem;
+  margin-bottom: 0.15rem;
 }
 
 .auth-checkbox-row {
