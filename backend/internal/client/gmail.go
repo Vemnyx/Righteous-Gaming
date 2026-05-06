@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/mail"
 	"os"
 	"strings"
 
@@ -17,14 +18,16 @@ import (
 
 // Gmail wraps Gmail API operations for a specific sender account.
 type Gmail struct {
-	svc    *gmail.Service
-	sender string
+	svc        *gmail.Service
+	sender     string
+	senderName string
 }
 
 // NewGmail creates a Gmail API client using OAuth refresh-token credentials.
 //
 // Reads from GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, and sender
 // GMAIL_SENDER_EMAIL (preferred) or legacy typo GMAIL_SENDERER_EMAIL.
+// Optional: GMAIL_SENDER_NAME (defaults to "Righteous Gaming").
 //
 // Each value may be plaintext or a full Secret Manager version resource name
 // (projects/PROJECT_ID/secrets/SECRET_ID/versions/VERSION), fetched with ADC on GCE.
@@ -63,6 +66,13 @@ func NewGmail(ctx context.Context) (*Gmail, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gmail: sender: %w", err)
 	}
+	senderName, err := resolve(os.Getenv("GMAIL_SENDER_NAME"))
+	if err != nil {
+		return nil, fmt.Errorf("gmail: GMAIL_SENDER_NAME: %w", err)
+	}
+	if senderName == "" {
+		senderName = "Righteous Gaming"
+	}
 
 	if clientID == "" || clientSecret == "" || refreshToken == "" || sender == "" {
 		return nil, fmt.Errorf(`gmail: set GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN, and GMAIL_SENDER_EMAIL (or GMAIL_SENDERER_EMAIL)`)
@@ -84,7 +94,7 @@ func NewGmail(ctx context.Context) (*Gmail, error) {
 		return nil, fmt.Errorf("gmail: new service: %w", err)
 	}
 
-	return &Gmail{svc: svc, sender: sender}, nil
+	return &Gmail{svc: svc, sender: sender, senderName: senderName}, nil
 }
 
 // SendEmail sends a plain-text email from the configured Gmail sender
@@ -95,9 +105,10 @@ func (g *Gmail) SendEmail(ctx context.Context, to, subject, body string) error {
 		return fmt.Errorf("gmail: recipient is required")
 	}
 	subject = strings.TrimSpace(subject)
+	from := (&mail.Address{Name: g.senderName, Address: g.sender}).String()
 
 	raw := strings.Join([]string{
-		fmt.Sprintf("From: %s", g.sender),
+		fmt.Sprintf("From: %s", from),
 		fmt.Sprintf("To: %s", to),
 		fmt.Sprintf("Subject: %s", subject),
 		"MIME-Version: 1.0",

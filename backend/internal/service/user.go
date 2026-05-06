@@ -72,6 +72,65 @@ func (s *UserService) CreateUser(ctx context.Context, in domain.User) (*domain.U
 	return domainUserFromRepo(row), nil
 }
 
+// CompleteRegistration creates a Firebase Auth user from registration input,
+// then persists the app user row using the Firebase-generated UID.
+// If DB insert fails after Firebase create, the Firebase user is rolled back.
+func (s *UserService) CompleteRegistration(ctx context.Context, email string, username *string, password string) (*domain.User, error) {
+	email = strings.TrimSpace(email)
+	password = strings.TrimSpace(password)
+	if email == "" {
+		return nil, fmt.Errorf("%w: email is required", ErrValidation)
+	}
+	if password == "" {
+		return nil, fmt.Errorf("%w: password is required", ErrValidation)
+	}
+	if len(password) < 6 {
+		return nil, fmt.Errorf("%w: password must be at least 6 characters", ErrValidation)
+	}
+
+	var cleanUsername *string
+	if username != nil {
+		n := strings.TrimSpace(*username)
+		if n != "" {
+			cleanUsername = &n
+		}
+	}
+
+	params := (&firebaseauth.UserToCreate{}).
+		Email(email).
+		EmailVerified(false).
+		Disabled(false).
+		Password(password)
+	if cleanUsername != nil {
+		params = params.DisplayName(*cleanUsername)
+	}
+
+	fbUser, err := s.fb.CreateUser(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("service: firebase create user: %w", err)
+	}
+
+	row, err := s.repo.CreateUser(ctx, repository.CreateUserInput{
+		Email:    email,
+		Username: cleanUsername,
+		UID:      fbUser.UID,
+		Role:     int(domain.RoleMember),
+	})
+	if err != nil {
+		if deleteErr := s.fb.DeleteUser(ctx, fbUser.UID); deleteErr != nil {
+			return nil, fmt.Errorf(
+				"service: create user: %w (also failed to rollback firebase uid=%s: %v)",
+				err,
+				fbUser.UID,
+				deleteErr,
+			)
+		}
+		return nil, fmt.Errorf("service: create user: %w", err)
+	}
+
+	return domainUserFromRepo(row), nil
+}
+
 // firebaseDefaultPassword is a provisional password for new Firebase Email/Password users.
 // Replace with a secure random value or delegated auth before production.
 const firebaseDefaultPassword = "temp-password"
