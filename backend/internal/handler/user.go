@@ -13,7 +13,7 @@ import (
 	"righteous-gaming/backend/log"
 )
 
-const adminInviteRegisterURL = "https://righteousgaming.team/register"
+const adminInviteRegisterURL = "https://righteousgaming.team/register?code=123"
 
 type userHTTP struct {
 	svc *service.UserService
