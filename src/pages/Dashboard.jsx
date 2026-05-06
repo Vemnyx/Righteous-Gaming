@@ -56,9 +56,9 @@ const desktopTriggerDark =
 const desktopTriggerLight =
   "inline-flex min-h-12 min-w-0 basis-0 cursor-pointer select-none items-center justify-center rounded-md border border-transparent px-[1.125rem] py-2.5 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-[#b998e8]/55 hover:text-white focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(42,37,54,0.92)] data-[state=active]:border-[rgba(152,117,207,0.9)] data-[state=active]:bg-gradient-to-b data-[state=active]:from-[#7b4cb8] data-[state=active]:to-[#5a2f8f] data-[state=active]:text-white data-[state=active]:shadow-[0_4px_18px_rgb(103_61_154/0.42)] md:flex-1 md:whitespace-normal md:text-center md:leading-snug md:break-words";
 
-/** Logo sits inside `navRail*`; padding + divider are stable across light/dark. */
+/** Logo sits inside `navRail*`. Mobile: no right divider (tabs hidden); logo centered in rail. */
 const logoInRail =
-  "box-border flex shrink-0 items-center border-r border-white/[0.1] py-0.5 pl-1 pr-2 md:py-0 md:pl-2 md:pr-3";
+  "box-border flex min-w-0 flex-1 items-center justify-center px-2 py-0.5 md:flex-none md:shrink-0 md:justify-start md:border-r md:border-white/[0.1] md:px-2 md:py-0 md:pl-2 md:pr-3";
 
 const comingSoonTitle =
   "relative z-[1] m-0 mb-2.5 bg-[length:200%_auto] bg-gradient-to-r from-white from-0% via-violet-300 via-40% via-purple-500 via-70% to-fuchsia-100 to-100% bg-clip-text text-[clamp(1.75rem,6vw,2.75rem)] font-bold uppercase tracking-[0.06em] text-transparent [animation:dashboard-shimmer_8s_ease-in-out_infinite]";
@@ -183,8 +183,8 @@ export default function Dashboard({ onNavigate }) {
         className={isLight ? tabsRootLight : tabsRootDark}
       >
         <header
-          className={`flex min-h-[4.25rem] items-center gap-2 border-b py-2 sm:gap-3 md:min-h-[4.5rem] ${
-            isLight ? "border-[rgba(80,65,110,0.22)]" : "border-white/10"
+          className={`flex min-h-[4.25rem] items-center gap-2 border-b-0 py-2 sm:gap-3 md:min-h-[4.5rem] md:border-b ${
+            isLight ? "md:border-[rgba(80,65,110,0.22)]" : "md:border-white/10"
           }`}
         >
           <button
@@ -208,7 +208,7 @@ export default function Dashboard({ onNavigate }) {
               <img
                 src={DASHBOARD_LOGO_URL}
                 alt="Righteous Gaming"
-                className="h-9 w-auto max-w-[min(200px,46vw)] object-contain object-left md:h-10 md:max-w-[240px]"
+                className="h-9 w-auto max-w-[min(200px,46vw)] object-contain object-center md:h-10 md:max-w-[240px] md:object-left"
               />
             </div>
             <Tabs.List className={desktopTabListShared} aria-label="Dashboard sections">
