@@ -5,6 +5,14 @@ import Dashboard from "./pages/Dashboard";
 import InviteUser from "./pages/InviteUser";
 import { useCallback, useEffect, useState } from "react";
 
+function splitPath(searchPath) {
+  const qIdx = searchPath.indexOf("?");
+  if (qIdx < 0) return { pathname: searchPath.startsWith("/") ? searchPath : `/${searchPath}`, search: "" };
+  let pathname = searchPath.slice(0, qIdx);
+  if (!pathname.startsWith("/")) pathname = `/${pathname}`;
+  return { pathname, search: searchPath.slice(qIdx) };
+}
+
 function AppGate() {
   const { user, loading, configured } = useAuth();
   const [path, setPath] = useState(() => window.location.pathname);
@@ -16,9 +24,12 @@ function AppGate() {
   }, []);
 
   const navigate = useCallback((nextPath) => {
-    if (window.location.pathname === nextPath) return;
-    window.history.pushState({}, "", nextPath);
-    setPath(nextPath);
+    const trimmed = typeof nextPath === "string" ? nextPath.trim() : "";
+    const { pathname, search } = splitPath(trimmed);
+    const full = pathname + search;
+    if (`${window.location.pathname}${window.location.search}` === full) return;
+    window.history.pushState({}, "", full);
+    setPath(pathname);
   }, []);
 
   if (!configured) {
@@ -35,7 +46,12 @@ function AppGate() {
 
   if (!user) {
     if (path === "/register") {
-      return <Register onSuccess={() => navigate("/welcome")} onBackToLogin={() => navigate("/")} />;
+      return (
+        <Register
+          onSuccess={() => navigate("/welcome?tab=announcements")}
+          onBackToLogin={() => navigate("/")}
+        />
+      );
     }
     return <Login />;
   }

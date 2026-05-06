@@ -1,7 +1,35 @@
 import * as Tabs from "@radix-ui/react-tabs";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { UsersAdminTable } from "../components/UsersAdminTable";
+
+const TAB_QUERY_KEY = "tab";
+
+/** Persisted before opening Invite User so Back restores the dashboard URL (`?tab=` included). */
+const SESSION_INVITE_RETURN_KEY = "rg-dashboard-return-url";
+
+function replaceTabInUrl(tabId) {
+  try {
+    const u = new URL(window.location.href);
+    u.searchParams.set(TAB_QUERY_KEY, tabId);
+    const next = `${u.pathname}${u.search}${u.hash}`;
+    const cur = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (next !== cur) window.history.replaceState({}, "", next);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** @param {{ id: string }[]} tabsAllowed */
+function readTabQuery(tabsAllowed) {
+  try {
+    const raw = new URLSearchParams(window.location.search).get(TAB_QUERY_KEY);
+    if (raw && tabsAllowed.some((t) => t.id === raw)) return raw;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
 
 /** Matches backend/domain: RoleAdmin = 0, RoleMember = 1 */
 const ROLE_ADMIN = 0;
@@ -141,12 +169,27 @@ export default function Dashboard({ onNavigate }) {
     return ALL_TABS.filter((t) => !t.requiresAdmin || isAdmin);
   }, [sessionProfile]);
 
+  const handleTabNavigate = useCallback((tabId) => {
+    setActiveTab(tabId);
+    replaceTabInUrl(tabId);
+  }, []);
+
   useEffect(() => {
-    setActiveTab((prev) => {
-      const stillValid = tabs.some((t) => t.id === prev);
-      return stillValid ? prev : tabs[0].id;
-    });
+    function syncFromBrowser() {
+      const fallback = tabs[0]?.id ?? ALL_TABS[0].id;
+      let nextTab = readTabQuery(tabs) ?? fallback;
+      if (!tabs.some((t) => t.id === nextTab)) {
+        nextTab = fallback;
+      }
+      setActiveTab(nextTab);
+      replaceTabInUrl(nextTab);
+    }
+
+    syncFromBrowser();
+    window.addEventListener("popstate", syncFromBrowser);
+    return () => window.removeEventListener("popstate", syncFromBrowser);
   }, [tabs]);
+
   const [theme, setTheme] = useState(() => {
     try {
       const v = localStorage.getItem(THEME_STORAGE_KEY);
@@ -179,7 +222,7 @@ export default function Dashboard({ onNavigate }) {
     <div className={isLight ? shellLight : shellDark}>
       <Tabs.Root
         value={activeTab}
-        onValueChange={setActiveTab}
+        onValueChange={handleTabNavigate}
         className={isLight ? tabsRootLight : tabsRootDark}
       >
         <header
@@ -274,7 +317,7 @@ export default function Dashboard({ onNavigate }) {
                     className={itemClass}
                     aria-current={selected ? "page" : undefined}
                     onClick={() => {
-                      setActiveTab(tab.id);
+                      handleTabNavigate(tab.id);
                       setMobileNavOpen(false);
                     }}
                   >
@@ -311,7 +354,21 @@ export default function Dashboard({ onNavigate }) {
               <UsersAdminTable
                 isLight={isLight}
                 active={activeTab === tab.id}
-                onInviteUser={onNavigate ? () => onNavigate("/admin/invite-user") : undefined}
+                onInviteUser={
+                  onNavigate
+                    ? () => {
+                        try {
+                          sessionStorage.setItem(
+                            SESSION_INVITE_RETURN_KEY,
+                            window.location.pathname + window.location.search + window.location.hash,
+                          );
+                        } catch {
+                          /* ignore */
+                        }
+                        onNavigate("/admin/invite-user");
+                      }
+                    : undefined
+                }
               />
             ) : (
               <div className="relative flex flex-1 flex-col items-center justify-center px-4 py-8 text-center">

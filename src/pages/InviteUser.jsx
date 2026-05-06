@@ -5,7 +5,25 @@ import { useAuth } from "../auth/AuthContext";
 /** Matches backend/domain: RoleAdmin = 0, RoleMember = 1 */
 const ROLE_ADMIN = 0;
 
+/** Must match Dashboard `SESSION_INVITE_RETURN_KEY` */
+const SESSION_INVITE_RETURN_KEY = "rg-dashboard-return-url";
+
 const THEME_STORAGE_KEY = "rg-dashboard-theme";
+
+/** @param {{ onNavigate: (path: string) => void }} p */
+function navigateBackToDashboard(onNavigate, fallbackPath = "/welcome") {
+  try {
+    const saved = sessionStorage.getItem(SESSION_INVITE_RETURN_KEY);
+    sessionStorage.removeItem(SESSION_INVITE_RETURN_KEY);
+    if (typeof saved === "string" && saved.startsWith("/")) {
+      onNavigate(saved);
+      return;
+    }
+  } catch {
+    /* ignore */
+  }
+  onNavigate(fallbackPath);
+}
 
 const labelClass =
   "mb-1 block text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-[#c4b8d6]";
@@ -104,7 +122,7 @@ export default function InviteUser({ onNavigate }) {
         <button
           type="button"
           className="mt-8 w-full rounded-lg border border-white/20 bg-black/25 py-3 text-[0.9rem] font-semibold text-[#f4f0fa] hover:bg-black/35"
-          onClick={() => onNavigate("/welcome")}
+          onClick={() => navigateBackToDashboard(onNavigate)}
         >
           Back to dashboard
         </button>
@@ -117,7 +135,7 @@ export default function InviteUser({ onNavigate }) {
       <button
         type="button"
         className="mb-6 -ml-0.5 text-left text-[0.8125rem] font-semibold text-[#c4b8d6] underline-offset-2 hover:text-white hover:underline"
-        onClick={() => onNavigate("/welcome")}
+        onClick={() => navigateBackToDashboard(onNavigate)}
       >
         ← Back to dashboard
       </button>
