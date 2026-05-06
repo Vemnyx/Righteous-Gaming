@@ -27,7 +27,7 @@ function mapAuthError(code) {
   }
 }
 
-export default function Login({ onRegister }) {
+export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -60,15 +60,6 @@ export default function Login({ onRegister }) {
           <code className="rounded bg-black/35 px-1 py-0.5 text-[0.82em]">.env.example</code>), then
           restart the dev server.
         </p>
-        {typeof onRegister === "function" ? (
-          <button
-            type="button"
-            className="w-full rounded-lg border border-white/[0.22] bg-transparent px-4 py-2.5 text-[0.92rem] text-[#f4f0fa] hover:bg-white/[0.08]"
-            onClick={onRegister}
-          >
-            Register with invite link
-          </button>
-        ) : null}
       </AuthShell>
     );
   }
@@ -116,16 +107,6 @@ export default function Login({ onRegister }) {
         >
           {submitting ? "Signing in…" : "Sign in"}
         </button>
-        {typeof onRegister === "function" ? (
-          <button
-            type="button"
-            className="mt-2.5 cursor-pointer rounded-lg border border-white/[0.22] bg-transparent px-4 py-2.5 text-[0.92rem] text-[#f4f0fa] hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-65"
-            disabled={submitting}
-            onClick={onRegister}
-          >
-            Register with invite link
-          </button>
-        ) : null}
       </form>
     </AuthShell>
   );

@@ -21,7 +21,7 @@ function AppGate() {
   }, []);
 
   if (!configured) {
-    return <Login onRegister={() => navigate("/register")} />;
+    return <Login />;
   }
 
   if (loading) {
@@ -36,7 +36,7 @@ function AppGate() {
     if (path === "/register") {
       return <Register onSuccess={() => navigate("/welcome")} onBackToLogin={() => navigate("/")} />;
     }
-    return <Login onRegister={() => navigate("/register")} />;
+    return <Login />;
   }
 
   return <Dashboard />;

@@ -142,7 +142,7 @@ export default function Register({ onSuccess, onBackToLogin }) {
       <AuthShell narrow>
         <h1 className="mb-2 text-[1.35rem] font-[650] tracking-wide">Registration expired</h1>
         <p className="mb-5 text-[0.88rem] leading-relaxed text-[#f4f0fa]/[0.72]">
-          This registration link has expired. Please contact your admin to send a new invitation.
+          This registration link has expired. Please contact your admin to send a new invite.
         </p>
         <button
           type="button"
