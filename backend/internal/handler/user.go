@@ -132,6 +132,41 @@ func (h *userHTTP) completeRegistration(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusOK)
 }
 
+func (h *userHTTP) sessionMe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	idToken := bearerIDToken(r.Header.Get("Authorization"))
+	if idToken == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	u, err := h.svc.UserForIDToken(r.Context(), idToken)
+	if err != nil {
+		if errors.Is(err, service.ErrValidation) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, service.ErrUnauthenticated) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if errors.Is(err, service.ErrUserNotFound) {
+			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
+		log.Error("failed to load session user", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(u)
+}
+
 func (h *userHTTP) registrationByCode(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -246,6 +281,14 @@ func writeMessageError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(messageErrorResponse{Message: message})
+}
+
+func bearerIDToken(authorization string) string {
+	fields := strings.Fields(strings.TrimSpace(authorization))
+	if len(fields) != 2 || !strings.EqualFold(fields[0], "Bearer") {
+		return ""
+	}
+	return strings.TrimSpace(fields[1])
 }
 
 func newRegistrationCode() string {

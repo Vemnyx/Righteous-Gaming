@@ -21,6 +21,7 @@ var ErrUsernameNotAvailable = errors.New("service: username not available")
 var ErrUserNotFound = errors.New("service: user not found")
 var ErrRegistrationNotFound = errors.New("service: registration not found")
 var ErrRegistrationExpired = errors.New("service: registration expired")
+var ErrUnauthenticated = errors.New("service: unauthenticated")
 
 // UserService coordinates user-related use cases.
 type UserService struct {
@@ -37,6 +38,26 @@ type RegistrationLookup struct {
 
 func NewUserService(repo *repository.Repository, fb *client.Firebase) *UserService {
 	return &UserService{repo: repo, fb: fb}
+}
+
+// UserForIDToken verifies the Firebase ID token and returns the persisted user for that UID.
+func (s *UserService) UserForIDToken(ctx context.Context, idToken string) (*domain.User, error) {
+	idToken = strings.TrimSpace(idToken)
+	if idToken == "" {
+		return nil, fmt.Errorf("%w: id token required", ErrValidation)
+	}
+	tok, err := s.fb.VerifyIDToken(ctx, idToken)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrUnauthenticated, err)
+	}
+	row, err := s.repo.UserByUID(ctx, tok.UID)
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			return nil, fmt.Errorf("%w", ErrUserNotFound)
+		}
+		return nil, fmt.Errorf("service: user by uid: %w", err)
+	}
+	return domainUserFromRepo(row), nil
 }
 
 func (s *UserService) RegistrationByCode(ctx context.Context, code string) (*RegistrationLookup, error) {

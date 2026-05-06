@@ -6,10 +6,10 @@ import { AuthShell } from "../components/AuthShell";
 const SIGN_UP_LOGO_URL = "https://storage.googleapis.com/righteous-assets/450x450xTransparent.png";
 
 const labelClass =
-  "mt-1.5 text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/75";
+  "mt-1.5 text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-[#c4b8d6]";
 
 const baseInput =
-  "mb-1 rounded-lg border border-white/[0.18] bg-black/35 px-3 py-2.5 text-base text-white outline-none focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.75)] disabled:opacity-65";
+  "mb-1 rounded-lg border border-transparent bg-[#332d3c] px-3 py-2.5 text-base text-[#f4f0fa] outline-none placeholder:text-[#8a7fa0] focus-visible:ring-2 focus-visible:ring-purple-500/55 focus-visible:ring-offset-2 focus-visible:ring-offset-[#423b4e] disabled:opacity-65";
 
 const inputErrorRing =
   "border-red-300/70 shadow-[0_0_0_1px_rgba(255,120,120,0.18)] focus-visible:ring-red-300/45";
