@@ -159,7 +159,7 @@ export default function InviteUser({ onNavigate }) {
             setEmail(e.target.value);
             setDone(false);
           }}
-          placeholder="name@company.com"
+          placeholder="name@gmail.com"
           disabled={submitting}
         />
 
