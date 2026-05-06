@@ -3,7 +3,7 @@ export function AuthShell({ narrow = false, variant = "light", children }) {
   const outer =
     variant === "dark"
       ? "flex min-h-screen items-center justify-center bg-[linear-gradient(165deg,#120818_0%,#1a0a2e_45%,#0a0512_100%)] bg-[radial-gradient(ellipse_80%_60%_at_50%_20%,rgba(102,51,153,0.35),transparent_55%)] p-6 text-[#f4f0fa]"
-      : "flex min-h-screen items-center justify-center bg-[#f3f0f7] bg-[radial-gradient(ellipse_52%_44%_at_50%_40%,rgba(206,188,238,0.55),transparent_68%)] p-6 text-[#f4f0fa]";
+      : "bg-shell-light-fog flex min-h-screen items-center justify-center p-6 text-[#f4f0fa]";
 
   const inner =
     variant === "dark"

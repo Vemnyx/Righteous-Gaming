@@ -67,4 +67,21 @@
       radial-gradient(ellipse 70% 50% at 50% 30%, rgb(102 51 153 / 0.3), transparent 55%),
       linear-gradient(165deg, #120818 0%, #1a0a2e 50%, #0a0512 100%);
   }
+
+  /*
+   Light shell: pale base + diffuse purple fog upper-center (above login/dashboard card).
+   First gradient paints on top — concentrated glow; second is a wider soft wash toward the top edge.
+  */
+  .bg-shell-light-fog {
+    background-color: #f3f0f7;
+    background-image:
+      radial-gradient(
+        ellipse 76% 58% at 50% 21%,
+        rgb(148 114 192 / 0.44) 0%,
+        rgb(218 200 238 / 0.22) 44%,
+        transparent 70%
+      ),
+      radial-gradient(ellipse 115% 88% at 50% 4%, rgb(106 74 154 / 0.16) 0%, transparent 52%);
+    background-repeat: no-repeat;
+  }
 }

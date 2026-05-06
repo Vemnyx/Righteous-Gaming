@@ -17,7 +17,7 @@ const shellDark =
 
 /* Light: pale lavender page + radial glow; UI chrome matches dark styling (screenshot reference). */
 const shellLight =
-  "box-border flex min-h-screen flex-col bg-[#f3f0f7] bg-[radial-gradient(ellipse_52%_44%_at_50%_40%,rgba(206,188,238,0.55),transparent_68%)] px-4 pb-6 pt-3 text-[#f4f0fa] sm:px-5";
+  "bg-shell-light-fog box-border flex min-h-screen flex-col px-4 pb-6 pt-3 text-[#f4f0fa] sm:px-5";
 
 const tabsRootSharedWidth =
   "mx-auto flex w-full max-w-5xl flex-1 flex-col gap-3 lg:max-w-6xl xl:max-w-7xl";
@@ -28,14 +28,15 @@ const tabsRootDark = tabsRootSharedWidth;
 const tabsRootLight = tabsRootSharedWidth;
 
 const desktopTabListDark =
-  "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-center md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-white/[0.12] md:bg-black/30 md:p-0.5";
+  "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-stretch md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-white/[0.12] md:bg-black/30 md:p-1";
 
 /* Same layout/size as desktopTabListDark; opaque purple-grey rail on lavender shell */
 const desktopTabListLight =
-  "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-center md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-white/[0.12] md:bg-[rgba(42,37,54,0.9)] md:p-0.5 md:backdrop-blur-sm";
+  "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-stretch md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-white/[0.12] md:bg-[rgba(42,37,54,0.9)] md:p-1 md:backdrop-blur-sm";
 
+/* ~30% taller bar vs min-h-9; ~50% wider hit area vs px-3 */
 const desktopTriggerDark =
-  "inline-flex min-h-9 shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-md border border-transparent px-3 py-1.5 text-[0.8125rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-purple-300/45 hover:text-white focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.92)] data-[state=active]:border-[rgba(142,90,200,0.75)] data-[state=active]:bg-gradient-to-br data-[state=active]:from-[rgba(80,40,120,0.55)] data-[state=active]:to-[rgba(40,20,70,0.65)] data-[state=active]:text-white data-[state=active]:shadow-[0_3px_16px_rgba(90,40,140,0.22)]";
+  "inline-flex min-h-12 shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-md border border-transparent px-[1.125rem] py-2.5 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-purple-300/45 hover:text-white focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.92)] data-[state=active]:border-[rgba(142,90,200,0.75)] data-[state=active]:bg-gradient-to-br data-[state=active]:from-[rgba(80,40,120,0.55)] data-[state=active]:to-[rgba(40,20,70,0.65)] data-[state=active]:text-white data-[state=active]:shadow-[0_3px_16px_rgba(90,40,140,0.22)]";
 
 /* Same trigger dimensions/states as dark (top bar parity on light shell) */
 const desktopTriggerLight = desktopTriggerDark;
@@ -72,7 +73,7 @@ function ThemeToggle({ theme, onChange }) {
   const lightMode = theme === "light";
   return (
     <div
-      className={`flex shrink-0 overflow-hidden rounded-lg border p-0.5 text-[0.7rem] font-semibold leading-none sm:text-[0.72rem] ${
+      className={`flex min-h-11 shrink-0 items-stretch gap-0 overflow-hidden rounded-lg border p-0.5 text-[0.74rem] font-semibold leading-none sm:min-h-12 sm:text-[0.8rem] ${
         lightMode
           ? "border-white/15 bg-[rgba(42,37,54,0.82)] backdrop-blur-sm"
           : "border-white/20 bg-black/40"
@@ -84,7 +85,7 @@ function ThemeToggle({ theme, onChange }) {
         type="button"
         aria-pressed={lightMode}
         onClick={() => onChange("light")}
-        className={`rounded-md px-2 py-2 sm:px-2.5 ${
+        className={`flex flex-1 items-center justify-center rounded-md px-3 py-2.5 sm:px-3.5 ${
           lightMode
             ? "bg-white/18 text-white shadow-inner"
             : "text-[#f4f0fa]/70 hover:bg-white/10 hover:text-white"
@@ -96,7 +97,7 @@ function ThemeToggle({ theme, onChange }) {
         type="button"
         aria-pressed={!lightMode}
         onClick={() => onChange("dark")}
-        className={`rounded-md px-2 py-2 sm:px-2.5 ${
+        className={`flex flex-1 items-center justify-center rounded-md px-3 py-2.5 sm:px-3.5 ${
           !lightMode
             ? "bg-white/15 text-white shadow-inner"
             : "text-[#f4f0fa]/70 hover:bg-white/10 hover:text-white"
@@ -148,8 +149,8 @@ export default function Dashboard() {
         className={isLight ? tabsRootLight : tabsRootDark}
       >
         <header
-          className={`flex items-center gap-2 border-b pt-1 ${
-            isLight ? "border-[rgba(80,65,110,0.22)] pb-2" : "border-white/10 pb-2"
+          className={`flex min-h-[4.25rem] items-center gap-2 border-b py-2 md:min-h-[4.5rem] ${
+            isLight ? "border-[rgba(80,65,110,0.22)]" : "border-white/10"
           }`}
         >
           <Tabs.List
@@ -171,8 +172,8 @@ export default function Dashboard() {
             type="button"
             className={
               isLight
-                ? "-ml-0.5 inline-flex shrink-0 items-center justify-center rounded-lg border border-white/[0.22] bg-[rgba(42,37,54,0.88)] p-2 text-[#f4f0fa] hover:border-[rgba(232,197,71,0.35)] hover:bg-[rgba(42,37,54,0.95)] md:hidden"
-                : "-ml-0.5 inline-flex shrink-0 items-center justify-center rounded-lg border border-white/[0.22] bg-black/35 p-2 text-white hover:border-[rgba(232,197,71,0.35)] md:hidden"
+                ? "-ml-0.5 inline-flex size-11 shrink-0 items-center justify-center rounded-lg border border-white/[0.22] bg-[rgba(42,37,54,0.88)] text-[#f4f0fa] hover:border-[rgba(232,197,71,0.35)] hover:bg-[rgba(42,37,54,0.95)] md:hidden"
+                : "-ml-0.5 inline-flex size-11 shrink-0 items-center justify-center rounded-lg border border-white/[0.22] bg-black/35 text-white hover:border-[rgba(232,197,71,0.35)] md:hidden"
             }
             aria-label={mobileNavOpen ? "Close navigation menu" : "Open navigation menu"}
             aria-expanded={mobileNavOpen}
@@ -189,8 +190,8 @@ export default function Dashboard() {
               type="button"
               className={
                 isLight
-                  ? "cursor-pointer rounded-lg border border-white/15 bg-[#5f5b6c] px-3 py-1.5 text-[0.8rem] font-semibold text-white hover:brightness-110"
-                  : "cursor-pointer rounded-lg border border-white/[0.22] bg-black/35 px-3 py-1.5 text-[0.8rem] font-semibold text-white hover:border-[rgba(232,197,71,0.45)]"
+                  ? "min-h-11 cursor-pointer rounded-lg border border-white/15 bg-[#5f5b6c] px-4 py-2.5 text-[0.875rem] font-semibold text-white hover:brightness-110 sm:min-h-12"
+                  : "min-h-11 cursor-pointer rounded-lg border border-white/[0.22] bg-black/35 px-4 py-2.5 text-[0.875rem] font-semibold text-white hover:border-[rgba(232,197,71,0.45)] sm:min-h-12"
               }
               onClick={() => void signOut()}
             >
@@ -214,7 +215,7 @@ export default function Dashboard() {
               {TABS.map((tab) => {
                 const selected = activeTab === tab.id;
                 let itemClass =
-                  "rounded-lg px-3 py-2.5 text-left text-[0.88rem] font-semibold outline-none transition-colors ";
+                  "rounded-lg px-[1.125rem] py-3.5 text-left text-[0.95rem] font-semibold outline-none transition-colors ";
                 if (selected) {
                   itemClass +=
                     "border border-[rgba(142,90,200,0.75)] bg-gradient-to-br from-[rgba(80,40,120,0.55)] to-[rgba(40,20,70,0.65)] text-white shadow-[0_3px_16px_rgba(90,40,140,0.22)] focus-visible:ring-2 focus-visible:ring-purple-500/65";
@@ -254,9 +255,6 @@ export default function Dashboard() {
             <div className="relative flex flex-1 flex-col items-center justify-center px-4 py-8 text-center">
               <span className={comingSoonGlow} aria-hidden />
               <p className={comingSoonTitle}>Coming Soon!</p>
-              <p className="relative z-[1] m-0 text-[0.92rem] tracking-wide text-[#f4f0fa]/55">
-                {tab.label} will appear here.
-              </p>
             </div>
           </Tabs.Content>
         ))}
