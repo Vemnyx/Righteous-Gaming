@@ -245,10 +245,10 @@ export default function Dashboard() {
           <Tabs.Content
             key={tab.id}
             value={tab.id}
-            className={`flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl p-8 outline-none sm:p-10 ${
+            className={`flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl border border-white/[0.12] p-8 outline-none sm:p-10 focus-visible:ring-2 focus-visible:ring-purple-500/50 ${
               isLight
-                ? "mt-4 border border-white/[0.12] bg-gradient-to-b from-[#434054] via-[#353145] to-[#292433] shadow-[0_22px_50px_rgba(24,14,38,0.45)] focus-visible:ring-2 focus-visible:ring-purple-500/50"
-                : "border border-white/[0.12] bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)] focus-visible:ring-2 focus-visible:ring-purple-500/50"
+                ? "bg-gradient-to-b from-[#434054] via-[#353145] to-[#292433] shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
+                : "bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
             }`}
           >
             <div className="relative flex flex-1 flex-col items-center justify-center px-4 py-8 text-center">

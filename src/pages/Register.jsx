@@ -3,22 +3,24 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { getFirebaseAuth, isFirebaseConfigured } from "../firebaseClient";
 import { AuthShell } from "../components/AuthShell";
 
-const SIGN_UP_LOGO_URL = "/righteous-logo-horizontal.png";
+const SIGN_UP_LOGO_URL = "https://storage.googleapis.com/righteous-assets/450x450xTransparent.png";
 
 const labelClass =
-  "mt-1.5 text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-[#c4b8d6]";
+  "mt-1.5 text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/75";
 
 const baseInput =
-  "mb-1 rounded-lg border border-transparent bg-[#332d3c] px-3 py-2.5 text-base text-[#f4f0fa] outline-none focus-visible:ring-2 focus-visible:ring-purple-500/55 focus-visible:ring-offset-2 focus-visible:ring-offset-[#423b4e] disabled:opacity-65";
+  "mb-1 rounded-lg border border-white/[0.18] bg-black/35 px-3 py-2.5 text-base text-white outline-none focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.75)] disabled:opacity-65";
 
 const inputErrorRing =
-  "border border-red-400/45 shadow-[0_0_0_1px_rgba(255,140,140,0.2)] focus-visible:ring-red-400/40";
+  "border-red-300/70 shadow-[0_0_0_1px_rgba(255,120,120,0.18)] focus-visible:ring-red-300/45";
 
 const primaryBtnClass =
-  "mt-4 cursor-pointer rounded-lg border-none bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] px-4 py-2.5 text-[0.95rem] font-semibold text-white shadow-[0_6px_20px_rgba(60,30,95,0.35)] hover:brightness-[1.06] disabled:cursor-not-allowed disabled:opacity-70";
+  "mt-4 cursor-pointer rounded-lg border-none bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] px-4 py-2.5 text-[0.95rem] font-semibold text-white hover:brightness-[1.06] disabled:cursor-not-allowed disabled:opacity-70";
 
 const ghostBtnClass =
-  "mt-2.5 w-full cursor-pointer rounded-lg border border-white/25 bg-transparent px-4 py-2.5 text-[0.92rem] font-semibold text-[#f4f0fa] hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-65";
+  "mt-2.5 cursor-pointer rounded-lg border border-white/[0.22] bg-transparent px-4 py-2.5 text-[0.92rem] text-[#f4f0fa] hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-65";
+
+const ghostBtnFullClass = `${ghostBtnClass} w-full`;
 
 export default function Register({ onSuccess, onBackToLogin }) {
   const [email, setEmail] = useState("");
@@ -139,7 +141,7 @@ export default function Register({ onSuccess, onBackToLogin }) {
   if (loadingRegistration) {
     return (
       <AuthShell narrow>
-        <h1 className="mb-2 text-[1.35rem] font-[650] tracking-wide text-[#f4f0fa]">Checking invitation...</h1>
+        <h1 className="mb-2 text-[1.35rem] font-[650] tracking-wide">Checking invitation...</h1>
       </AuthShell>
     );
   }
@@ -147,13 +149,13 @@ export default function Register({ onSuccess, onBackToLogin }) {
   if (registrationExpired) {
     return (
       <AuthShell narrow>
-        <h1 className="mb-2 text-[1.35rem] font-[650] tracking-wide text-[#f4f0fa]">Registration expired</h1>
+        <h1 className="mb-2 text-[1.35rem] font-[650] tracking-wide">Registration expired</h1>
         <p className="mb-5 text-[0.88rem] leading-relaxed text-[#f4f0fa]/[0.72]">
           This registration link has expired. Please contact your admin to send a new invite.
         </p>
         <button
           type="button"
-          className={ghostBtnClass}
+          className={ghostBtnFullClass}
           onClick={onBackToLogin}
         >
           Back to sign in
@@ -165,11 +167,11 @@ export default function Register({ onSuccess, onBackToLogin }) {
   return (
     <AuthShell>
       <img
-        className="mx-auto mb-3.5 block h-auto w-[min(340px,92%)]"
+        className="mx-auto mb-3.5 block h-auto w-[min(220px,80%)]"
         src={SIGN_UP_LOGO_URL}
         alt="Righteous Gaming"
       />
-      <h1 className="mb-2 text-[1.35rem] font-[650] tracking-wide text-[#f4f0fa]">Sign Up</h1>
+      <h1 className="mb-2 text-[1.35rem] font-[650] tracking-wide">Sign Up</h1>
       <form className="flex flex-col gap-1" onSubmit={handleSubmit}>
         <label className={labelClass} htmlFor="register-email">
           Email
@@ -249,7 +251,7 @@ export default function Register({ onSuccess, onBackToLogin }) {
           <input
             id="register-show-passwords"
             type="checkbox"
-            className="size-4 shrink-0 rounded border border-white/25 bg-[#332d3c] text-purple-400 accent-[#a78bfa]"
+            className="size-4 shrink-0 rounded border border-white/25 bg-black/35 accent-[#a78bfa]"
             checked={showPasswords}
             onChange={(e) => setShowPasswords(e.target.checked)}
             disabled={submitting}

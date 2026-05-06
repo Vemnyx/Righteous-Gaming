@@ -21,12 +21,12 @@ function AppGate() {
   }, []);
 
   if (!configured) {
-    return <Login onRegisterWithInvite={() => navigate("/register")} />;
+    return <Login />;
   }
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f3f0f7] bg-[radial-gradient(ellipse_52%_44%_at_50%_40%,rgba(206,188,238,0.55),transparent_68%)] font-sans text-[#6b6080]">
+      <div className="bg-shell-auth flex min-h-screen items-center justify-center font-sans text-[#f4f0fa]/85">
         <p>Loading…</p>
       </div>
     );
@@ -36,7 +36,7 @@ function AppGate() {
     if (path === "/register") {
       return <Register onSuccess={() => navigate("/welcome")} onBackToLogin={() => navigate("/")} />;
     }
-    return <Login onRegisterWithInvite={() => navigate("/register")} />;
+    return <Login />;
   }
 
   return <Dashboard />;
