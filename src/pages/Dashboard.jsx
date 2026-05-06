@@ -10,14 +10,26 @@ const TABS = [
 ];
 
 const MD_UP = "(min-width: 768px)";
+const THEME_STORAGE_KEY = "rg-dashboard-theme";
 
-const desktopTabListClass =
+const shellDark =
+  "bg-shell-dashboard box-border flex min-h-screen flex-col px-4 pb-6 pt-3 text-[#f4f0fa] sm:px-5";
+const shellLight =
+  "box-border flex min-h-screen flex-col bg-zinc-50 px-4 pb-6 pt-3 text-zinc-900 sm:px-5";
+
+const desktopTabListDark =
   "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-center md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-white/[0.12] md:bg-black/30 md:p-0.5";
 
-const desktopTriggerClass =
+const desktopTabListLight =
+  "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-center md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-zinc-200 md:bg-zinc-100 md:p-0.5 md:shadow-inner";
+
+const desktopTriggerDark =
   "inline-flex min-h-9 shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-md border border-transparent px-3 py-1.5 text-[0.8125rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-purple-300/45 hover:text-white focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.92)] data-[state=active]:border-[rgba(142,90,200,0.75)] data-[state=active]:bg-gradient-to-br data-[state=active]:from-[rgba(80,40,120,0.55)] data-[state=active]:to-[rgba(40,20,70,0.65)] data-[state=active]:text-white data-[state=active]:shadow-[0_3px_16px_rgba(90,40,140,0.22)]";
 
-function HamburgerIcon() {
+const desktopTriggerLight =
+  "inline-flex min-h-9 shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-md border border-transparent px-3 py-1.5 text-[0.8125rem] font-semibold tracking-wide text-zinc-600 outline-none transition-colors hover:border-zinc-300 hover:bg-white hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-[#7350a8]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-50 data-[state=active]:border-[#5a3d83] data-[state=active]:bg-[#6d4ba8] data-[state=active]:text-white data-[state=active]:shadow-sm";
+
+function HamburgerIcon({ className }) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -29,7 +41,7 @@ function HamburgerIcon() {
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="text-[#f4f0fa]"
+      className={className}
       aria-hidden
     >
       <line x1="4" x2="20" y1="6" y2="6" />
@@ -39,10 +51,64 @@ function HamburgerIcon() {
   );
 }
 
+function ThemeToggle({ theme, onChange }) {
+  const isDark = theme === "dark";
+  return (
+    <div
+      className={`flex shrink-0 overflow-hidden rounded-lg border p-0.5 text-[0.7rem] font-semibold leading-none sm:text-[0.72rem] ${
+        isDark ? "border-white/20 bg-black/40" : "border-zinc-300 bg-zinc-100"
+      }`}
+      role="group"
+      aria-label="Dashboard appearance"
+    >
+      <button
+        type="button"
+        aria-pressed={isDark}
+        onClick={() => onChange("dark")}
+        className={`rounded-md px-2 py-2 sm:px-2.5 ${
+          isDark
+            ? "bg-white/15 text-white shadow-inner"
+            : "text-zinc-500 hover:bg-zinc-200/90 hover:text-zinc-800"
+        }`}
+      >
+        Purple
+      </button>
+      <button
+        type="button"
+        aria-pressed={!isDark}
+        onClick={() => onChange("light")}
+        className={`rounded-md px-2 py-2 sm:px-2.5 ${
+          !isDark
+            ? "bg-[#6d4ba8] text-white shadow-sm"
+            : "text-[#f4f0fa]/70 hover:bg-white/10 hover:text-white"
+        }`}
+      >
+        Light
+      </button>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { signOut } = useAuth();
   const [activeTab, setActiveTab] = useState(TABS[0].id);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [theme, setTheme] = useState(() => {
+    try {
+      const v = localStorage.getItem(THEME_STORAGE_KEY);
+      return v === "light" ? "light" : "dark";
+    } catch {
+      return "dark";
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      /* ignore */
+    }
+  }, [theme]);
 
   useEffect(() => {
     const mq = window.matchMedia(MD_UP);
@@ -53,17 +119,30 @@ export default function Dashboard() {
     return () => mq.removeEventListener("change", closeMobileIfDesktop);
   }, []);
 
+  const isLight = theme === "light";
+
   return (
-    <div className="bg-shell-dashboard box-border flex min-h-screen flex-col px-4 pb-6 pt-3 text-[#f4f0fa] sm:px-5">
+    <div className={isLight ? shellLight : shellDark}>
       <Tabs.Root
         value={activeTab}
         onValueChange={setActiveTab}
         className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-3 lg:max-w-6xl xl:max-w-7xl"
       >
-        <header className="flex items-center gap-2 border-b border-white/10 pb-2 pt-1">
-          <Tabs.List className={desktopTabListClass} aria-label="Dashboard sections">
+        <header
+          className={`flex items-center gap-2 pb-2 pt-1 ${
+            isLight ? "border-b border-zinc-200" : "border-b border-white/10"
+          }`}
+        >
+          <Tabs.List
+            className={isLight ? desktopTabListLight : desktopTabListDark}
+            aria-label="Dashboard sections"
+          >
             {TABS.map((tab) => (
-              <Tabs.Trigger key={tab.id} className={desktopTriggerClass} value={tab.id}>
+              <Tabs.Trigger
+                key={tab.id}
+                className={isLight ? desktopTriggerLight : desktopTriggerDark}
+                value={tab.id}
+              >
                 {tab.label}
               </Tabs.Trigger>
             ))}
@@ -71,30 +150,41 @@ export default function Dashboard() {
 
           <button
             type="button"
-            className="-ml-0.5 inline-flex shrink-0 items-center justify-center rounded-lg border border-white/[0.22] bg-black/35 p-2 text-white hover:border-[rgba(232,197,71,0.35)] md:hidden"
+            className={
+              isLight
+                ? "-ml-0.5 inline-flex shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-white p-2 text-zinc-800 shadow-sm hover:border-zinc-400 hover:bg-zinc-50 md:hidden"
+                : "-ml-0.5 inline-flex shrink-0 items-center justify-center rounded-lg border border-white/[0.22] bg-black/35 p-2 text-white hover:border-[rgba(232,197,71,0.35)] md:hidden"
+            }
             aria-label={mobileNavOpen ? "Close navigation menu" : "Open navigation menu"}
             aria-expanded={mobileNavOpen}
             aria-controls="dashboard-mobile-nav"
             id="dashboard-menu-button"
             onClick={() => setMobileNavOpen((o) => !o)}
           >
-            <HamburgerIcon />
+            <HamburgerIcon className={isLight ? "text-zinc-800" : "text-[#f4f0fa]"} />
           </button>
 
-          <button
-            type="button"
-            className="ml-auto shrink-0 cursor-pointer rounded-lg border border-white/[0.22] bg-black/35 px-3 py-1.5 text-[0.8rem] font-semibold text-white hover:border-[rgba(232,197,71,0.45)]"
-            onClick={() => void signOut()}
-          >
-            Sign out
-          </button>
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <ThemeToggle theme={theme} onChange={setTheme} />
+            <button
+              type="button"
+              className={
+                isLight
+                  ? "cursor-pointer rounded-lg border border-zinc-400 bg-[#6d4ba8] px-3 py-1.5 text-[0.8rem] font-semibold text-white shadow-sm hover:border-zinc-500 hover:bg-[#5e4090]"
+                  : "cursor-pointer rounded-lg border border-white/[0.22] bg-black/35 px-3 py-1.5 text-[0.8rem] font-semibold text-white hover:border-[rgba(232,197,71,0.45)]"
+              }
+              onClick={() => void signOut()}
+            >
+              Sign out
+            </button>
+          </div>
         </header>
 
         <div
           id="dashboard-mobile-nav"
-          className={`grid border-b border-white/[0.08] transition-[grid-template-rows] duration-200 ease-out md:hidden ${
+          className={`grid transition-[grid-template-rows] duration-200 ease-out md:hidden ${
             mobileNavOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-          }`}
+          } ${isLight ? "border-b border-zinc-200" : "border-b border-white/[0.08]"}`}
           aria-hidden={!mobileNavOpen}
         >
           <div className="min-h-0 overflow-hidden">
@@ -104,15 +194,22 @@ export default function Dashboard() {
             >
               {TABS.map((tab) => {
                 const selected = activeTab === tab.id;
+                let itemClass =
+                  "rounded-lg px-3 py-2.5 text-left text-[0.88rem] font-semibold outline-none transition-colors ";
+                if (isLight) {
+                  itemClass += selected
+                    ? "border border-[#5e4090] bg-[#6d4ba8] text-white shadow-sm focus-visible:ring-2 focus-visible:ring-[#7350a8] focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-50"
+                    : "border border-transparent bg-white text-zinc-800 hover:border-zinc-200 hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-[#7350a8]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-50";
+                } else {
+                  itemClass += selected
+                    ? "border border-[rgba(142,90,200,0.75)] bg-gradient-to-br from-[rgba(80,40,120,0.55)] to-[rgba(40,20,70,0.65)] text-white shadow-[0_3px_16px_rgba(90,40,140,0.22)] focus-visible:ring-2 focus-visible:ring-purple-500/65"
+                    : "border border-transparent bg-black/25 text-[#f4f0fa]/88 hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-purple-500/65";
+                }
                 return (
                   <button
                     key={tab.id}
                     type="button"
-                    className={`rounded-lg px-3 py-2.5 text-left text-[0.88rem] font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-purple-500/65 ${
-                      selected
-                        ? "border border-[rgba(142,90,200,0.75)] bg-gradient-to-br from-[rgba(80,40,120,0.55)] to-[rgba(40,20,70,0.65)] text-white shadow-[0_3px_16px_rgba(90,40,140,0.22)]"
-                        : "border border-transparent bg-black/25 text-[#f4f0fa]/88 hover:bg-white/[0.06]"
-                    }`}
+                    className={itemClass}
                     aria-current={selected ? "page" : undefined}
                     onClick={() => {
                       setActiveTab(tab.id);
@@ -131,15 +228,25 @@ export default function Dashboard() {
           <Tabs.Content
             key={tab.id}
             value={tab.id}
-            className="flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl border border-white/[0.12] bg-[rgba(16,8,28,0.65)] p-8 shadow-[0_20px_50px_rgba(0,0,0,0.35)] outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 sm:p-10"
+            className={`flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl p-8 outline-none sm:p-10 ${
+              isLight
+                ? "border border-zinc-200/90 bg-zinc-100 text-zinc-900 shadow-[0_8px_30px_rgb(24_24_27/0.08)] focus-visible:ring-2 focus-visible:ring-[#7350a8]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-50"
+                : "border border-white/[0.12] bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)] focus-visible:ring-2 focus-visible:ring-purple-500/50"
+            }`}
           >
             <div className="relative flex flex-1 flex-col items-center justify-center px-4 py-8 text-center">
               <span
-                className="pointer-events-none absolute left-1/2 top-1/2 size-[min(18rem,70vw)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(150,90,210,0.22)_0%,transparent_68%)]"
+                className={`pointer-events-none absolute left-1/2 top-1/2 size-[min(18rem,70vw)] -translate-x-1/2 -translate-y-1/2 rounded-full ${
+                  isLight ? "bg-violet-200/35" : "bg-[radial-gradient(circle,rgba(150,90,210,0.22)_0%,transparent_68%)]"
+                }`}
                 aria-hidden
               />
               <p
-                className="relative m-0 bg-[length:200%_auto] bg-gradient-to-r from-white from-0% via-violet-300 via-40% via-purple-500 via-70% to-fuchsia-100 to-100% bg-clip-text text-[clamp(1.75rem,6vw,2.75rem)] font-bold uppercase tracking-[0.06em] text-transparent [animation:dashboard-shimmer_8s_ease-in-out_infinite]"
+                className={
+                  isLight
+                    ? "relative m-0 bg-[length:200%_auto] bg-gradient-to-r from-violet-900 from-0% via-purple-900 via-45% to-violet-950 to-100% bg-clip-text text-[clamp(1.75rem,6vw,2.75rem)] font-bold uppercase tracking-[0.06em] text-transparent [animation:dashboard-shimmer_8s_ease-in-out_infinite]"
+                    : "relative m-0 bg-[length:200%_auto] bg-gradient-to-r from-white from-0% via-violet-300 via-40% via-purple-500 via-70% to-fuchsia-100 to-100% bg-clip-text text-[clamp(1.75rem,6vw,2.75rem)] font-bold uppercase tracking-[0.06em] text-transparent [animation:dashboard-shimmer_8s_ease-in-out_infinite]"
+                }
               >
                 Coming Soon!
               </p>

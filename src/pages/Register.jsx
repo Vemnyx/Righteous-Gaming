@@ -3,7 +3,7 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { getFirebaseAuth, isFirebaseConfigured } from "../firebaseClient";
 import { AuthShell } from "../components/AuthShell";
 
-const SIGN_UP_LOGO_URL = "https://storage.googleapis.com/righteous-assets/NameTransparent.png";
+const SIGN_UP_LOGO_URL = "/righteous-logo-horizontal.png";
 
 const labelClass = "mt-1.5 text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/75";
 
@@ -158,7 +158,7 @@ export default function Register({ onSuccess, onBackToLogin }) {
   return (
     <AuthShell>
       <img
-        className="mx-auto mb-3.5 block h-auto w-[min(220px,80%)]"
+        className="mx-auto mb-3.5 block h-auto w-[min(340px,92%)]"
         src={SIGN_UP_LOGO_URL}
         alt="Righteous Gaming"
       />

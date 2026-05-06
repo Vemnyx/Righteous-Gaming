@@ -3,7 +3,8 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { getFirebaseAuth, isFirebaseConfigured } from "../firebaseClient";
 import { AuthShell } from "../components/AuthShell";
 
-const LOGIN_LOGO_URL = "https://storage.googleapis.com/righteous-assets/450x450xTransparent.png";
+/** Horizontal mark (lion + wordmark); regenerate with `npm run build:logo`. */
+const LOGIN_LOGO_URL = "/righteous-logo-horizontal.png";
 
 const inputClass =
   "mb-1 rounded-lg border border-white/[0.18] bg-black/35 px-3 py-2.5 text-base text-white outline-none focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.75)] disabled:opacity-65";
@@ -67,7 +68,7 @@ export default function Login() {
   return (
     <AuthShell>
       <img
-        className="mx-auto mb-3.5 block h-auto w-[min(220px,80%)]"
+        className="mx-auto mb-3.5 block h-auto w-[min(340px,92%)]"
         src={LOGIN_LOGO_URL}
         alt="Righteous Gaming"
       />
