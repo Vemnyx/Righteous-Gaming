@@ -68,6 +68,21 @@ RETURNING id, email, username, uid, role, created_at`
 	return &u, nil
 }
 
+// CreateUserIfAbsent inserts a user row for email/role and ignores duplicate-email conflicts.
+func (r *Repository) CreateUserIfAbsent(ctx context.Context, email string, role int) error {
+	if r.pool == nil {
+		return fmt.Errorf("repository: pool is closed")
+	}
+	const q = `
+INSERT INTO users (email, role)
+VALUES ($1, $2)
+ON CONFLICT (email) DO NOTHING`
+	if _, err := r.pool.Exec(ctx, q, email, role); err != nil {
+		return fmt.Errorf("repository: create user if absent: %w", err)
+	}
+	return nil
+}
+
 // DeleteUserByID removes a user row by primary key (used when compensating a failed downstream step).
 func (r *Repository) DeleteUserByID(ctx context.Context, id int) error {
 	if r.pool == nil {

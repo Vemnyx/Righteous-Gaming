@@ -97,6 +97,11 @@ func (a *App) SendGmail(ctx context.Context, to, subject, body string) error {
 	return a.Gmail.SendEmail(ctx, to, subject, body)
 }
 
+// SendGmailHTML sends an HTML email via the configured Gmail API client (OAuth).
+func (a *App) SendGmailHTML(ctx context.Context, to, subject, body string) error {
+	return a.Gmail.SendHTMLEmail(ctx, to, subject, body)
+}
+
 // Close releases the database pool and closes the info log file.
 func (a *App) Close() {
 	if a.Repo != nil {

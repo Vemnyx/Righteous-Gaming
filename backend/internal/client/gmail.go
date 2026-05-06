@@ -100,11 +100,23 @@ func NewGmail(ctx context.Context) (*Gmail, error) {
 // SendEmail sends a plain-text email from the configured Gmail sender
 // (GMAIL_SENDER_EMAIL / GMAIL_SENDERER_EMAIL after optional Secret Manager lookup).
 func (g *Gmail) SendEmail(ctx context.Context, to, subject, body string) error {
+	return g.send(ctx, to, subject, body, "text/plain; charset=UTF-8")
+}
+
+// SendHTMLEmail sends an HTML email from the configured Gmail sender.
+func (g *Gmail) SendHTMLEmail(ctx context.Context, to, subject, body string) error {
+	return g.send(ctx, to, subject, body, "text/html; charset=UTF-8")
+}
+
+func (g *Gmail) send(ctx context.Context, to, subject, body, contentType string) error {
 	to = strings.TrimSpace(to)
 	if to == "" {
 		return fmt.Errorf("gmail: recipient is required")
 	}
 	subject = strings.TrimSpace(subject)
+	if strings.TrimSpace(contentType) == "" {
+		contentType = "text/plain; charset=UTF-8"
+	}
 	from := (&mail.Address{Name: g.senderName, Address: g.sender}).String()
 
 	raw := strings.Join([]string{
@@ -112,7 +124,7 @@ func (g *Gmail) SendEmail(ctx context.Context, to, subject, body string) error {
 		fmt.Sprintf("To: %s", to),
 		fmt.Sprintf("Subject: %s", subject),
 		"MIME-Version: 1.0",
-		"Content-Type: text/plain; charset=UTF-8",
+		fmt.Sprintf("Content-Type: %s", contentType),
 		"",
 		body,
 	}, "\r\n")

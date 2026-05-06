@@ -131,6 +131,23 @@ func (s *UserService) CompleteRegistration(ctx context.Context, email string, us
 	return domainUserFromRepo(row), nil
 }
 
+// CreateInvitedUser inserts an invited user using email/role without creating Firebase credentials.
+// Duplicate-email inserts are intentionally ignored.
+func (s *UserService) CreateInvitedUser(ctx context.Context, email string, role int) error {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return fmt.Errorf("%w: email is required", ErrValidation)
+	}
+	r := domain.Role(role)
+	if !r.Valid() {
+		return fmt.Errorf("%w: invalid role", ErrValidation)
+	}
+	if err := s.repo.CreateUserIfAbsent(ctx, email, role); err != nil {
+		return fmt.Errorf("service: create invited user: %w", err)
+	}
+	return nil
+}
+
 // firebaseDefaultPassword is a provisional password for new Firebase Email/Password users.
 // Replace with a secure random value or delegated auth before production.
 const firebaseDefaultPassword = "temp-password"
