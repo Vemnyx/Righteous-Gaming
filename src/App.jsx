@@ -1,7 +1,7 @@
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import Welcome from "./pages/Welcome";
+import Dashboard from "./pages/Dashboard";
 import { useCallback, useEffect, useState } from "react";
 
 function AppGate() {
@@ -39,7 +39,7 @@ function AppGate() {
     return <Login onRegister={() => navigate("/register")} />;
   }
 
-  return <Welcome />;
+  return <Dashboard />;
 }
 
 export default function App() {
