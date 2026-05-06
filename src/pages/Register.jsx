@@ -3,12 +3,14 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { getFirebaseAuth, isFirebaseConfigured } from "../firebaseClient";
 import "./Login.css";
 
-const LOGIN_LOGO_URL = "https://storage.googleapis.com/righteous-assets/450x450xTransparent.png";
+const SIGN_UP_LOGO_URL = "https://storage.googleapis.com/righteous-assets/NameTransparent.png";
 
 export default function Register({ onSuccess, onBackToLogin }) {
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPasswords, setShowPasswords] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
 
@@ -17,6 +19,14 @@ export default function Register({ onSuccess, onBackToLogin }) {
     setError(null);
     if (!isFirebaseConfigured()) {
       setError("Firebase is not configured.");
+      return;
+    }
+    if (password.length < 8 || password.length > 64) {
+      setError("Password must be between 8 and 64 characters.");
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
       return;
     }
 
@@ -47,8 +57,8 @@ export default function Register({ onSuccess, onBackToLogin }) {
   return (
     <div className="auth-shell">
       <div className="auth-card">
-        <img className="auth-logo" src={LOGIN_LOGO_URL} alt="Righteous Gaming" />
-        <h1 className="auth-title">Create account</h1>
+        <img className="auth-logo" src={SIGN_UP_LOGO_URL} alt="Righteous Gaming" />
+        <h1 className="auth-title">Sign Up</h1>
         <form className="auth-form" onSubmit={handleSubmit}>
           <label className="auth-label" htmlFor="register-email">
             Email
@@ -83,19 +93,47 @@ export default function Register({ onSuccess, onBackToLogin }) {
           <input
             id="register-password"
             className="auth-input"
-            type="password"
+            type={showPasswords ? "text" : "password"}
             autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            minLength={6}
+            minLength={8}
+            maxLength={64}
             disabled={submitting}
           />
+
+          <label className="auth-label" htmlFor="register-confirm-password">
+            Confirm password
+          </label>
+          <input
+            id="register-confirm-password"
+            className="auth-input"
+            type={showPasswords ? "text" : "password"}
+            autoComplete="new-password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+            minLength={8}
+            maxLength={64}
+            disabled={submitting}
+          />
+
+          <label className="auth-checkbox-row" htmlFor="register-show-passwords">
+            <input
+              id="register-show-passwords"
+              type="checkbox"
+              checked={showPasswords}
+              onChange={(e) => setShowPasswords(e.target.checked)}
+              disabled={submitting}
+            />
+            Show passwords
+          </label>
 
           {error ? <p className="auth-error">{error}</p> : null}
 
           <button className="auth-submit" type="submit" disabled={submitting}>
-            {submitting ? "Creating account..." : "Create account"}
+            {submitting ? "Signing up..." : "Sign Up"}
           </button>
           <button
             className="auth-secondary"

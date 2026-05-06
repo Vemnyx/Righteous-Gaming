@@ -22,7 +22,7 @@ function mapAuthError(code) {
   }
 }
 
-export default function Login({ onRegister }) {
+export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -94,9 +94,6 @@ export default function Login({ onRegister }) {
           {error ? <p className="auth-error">{error}</p> : null}
           <button className="auth-submit" type="submit" disabled={submitting}>
             {submitting ? "Signing in…" : "Sign in"}
-          </button>
-          <button className="auth-secondary" type="button" onClick={onRegister} disabled={submitting}>
-            Create account
           </button>
         </form>
       </div>

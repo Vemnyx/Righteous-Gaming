@@ -92,6 +92,15 @@
   color: #ffb4b4;
 }
 
+.auth-checkbox-row {
+  margin-top: 0.2rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  color: rgba(244, 240, 250, 0.85);
+}
+
 .auth-submit {
   margin-top: 1rem;
   padding: 0.65rem 1rem;
