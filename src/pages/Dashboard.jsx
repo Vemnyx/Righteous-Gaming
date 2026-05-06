@@ -1,16 +1,25 @@
 import * as Tabs from "@radix-ui/react-tabs";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 
-const TABS = [
+/** Matches backend/domain: RoleAdmin = 0, RoleMember = 1 */
+const ROLE_ADMIN = 0;
+
+/**
+ * Users tab requires admin (`role === 0`). Omit `requiresAdmin` for member-visible tabs.
+ * @typedef {{ id: string, label: string, requiresAdmin?: boolean }} DashboardTabSpec
+ */
+const ALL_TABS = [
   { id: "announcements", label: "Announcements" },
   { id: "data", label: "Data" },
   { id: "resources", label: "Resources" },
-  { id: "users", label: "Users" },
+  { id: "users", label: "Users", requiresAdmin: true },
 ];
 
 const MD_UP = "(min-width: 768px)";
 const THEME_STORAGE_KEY = "rg-dashboard-theme";
+
+const DASHBOARD_LOGO_URL = "https://storage.googleapis.com/righteous-assets/righteous-logo-horizontal.png";
 
 const shellDark =
   "bg-shell-dashboard box-border flex min-h-screen flex-col px-4 pb-6 pt-3 text-[#f4f0fa] sm:px-5";
@@ -38,8 +47,9 @@ const desktopTabListLight =
 const desktopTriggerDark =
   "inline-flex min-h-12 shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-md border border-transparent px-[1.125rem] py-2.5 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-purple-300/45 hover:text-white focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.92)] data-[state=active]:border-[rgba(142,90,200,0.75)] data-[state=active]:bg-gradient-to-br data-[state=active]:from-[rgba(80,40,120,0.55)] data-[state=active]:to-[rgba(40,20,70,0.65)] data-[state=active]:text-white data-[state=active]:shadow-[0_3px_16px_rgba(90,40,140,0.22)]";
 
-/* Same trigger dimensions/states as dark (top bar parity on light shell) */
-const desktopTriggerLight = desktopTriggerDark;
+/* Active/hover purples track Login gradient: from-[#7b4cb8] to-[#5a2f8f] */
+const desktopTriggerLight =
+  "inline-flex min-h-12 shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-md border border-transparent px-[1.125rem] py-2.5 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-[#b998e8]/55 hover:text-white focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(42,37,54,0.92)] data-[state=active]:border-[rgba(152,117,207,0.9)] data-[state=active]:bg-gradient-to-b data-[state=active]:from-[#7b4cb8] data-[state=active]:to-[#5a2f8f] data-[state=active]:text-white data-[state=active]:shadow-[0_4px_18px_rgb(103_61_154/0.42)]";
 
 const comingSoonTitle =
   "relative z-[1] m-0 mb-2.5 bg-[length:200%_auto] bg-gradient-to-r from-white from-0% via-violet-300 via-40% via-purple-500 via-70% to-fuchsia-100 to-100% bg-clip-text text-[clamp(1.75rem,6vw,2.75rem)] font-bold uppercase tracking-[0.06em] text-transparent [animation:dashboard-shimmer_8s_ease-in-out_infinite]";
@@ -110,9 +120,21 @@ function ThemeToggle({ theme, onChange }) {
 }
 
 export default function Dashboard() {
-  const { signOut } = useAuth();
-  const [activeTab, setActiveTab] = useState(TABS[0].id);
+  const { signOut, sessionProfile } = useAuth();
+  const [activeTab, setActiveTab] = useState(ALL_TABS[0].id);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  const tabs = useMemo(() => {
+    const isAdmin = Number(sessionProfile?.role) === ROLE_ADMIN;
+    return ALL_TABS.filter((t) => !t.requiresAdmin || isAdmin);
+  }, [sessionProfile]);
+
+  useEffect(() => {
+    setActiveTab((prev) => {
+      const stillValid = tabs.some((t) => t.id === prev);
+      return stillValid ? prev : tabs[0].id;
+    });
+  }, [tabs]);
   const [theme, setTheme] = useState(() => {
     try {
       const v = localStorage.getItem(THEME_STORAGE_KEY);
@@ -149,15 +171,20 @@ export default function Dashboard() {
         className={isLight ? tabsRootLight : tabsRootDark}
       >
         <header
-          className={`flex min-h-[4.25rem] items-center gap-2 border-b py-2 md:min-h-[4.5rem] ${
+          className={`flex min-h-[4.25rem] items-center gap-3 border-b py-2 md:min-h-[4.5rem] ${
             isLight ? "border-[rgba(80,65,110,0.22)]" : "border-white/10"
           }`}
         >
+          <img
+            src={DASHBOARD_LOGO_URL}
+            alt="Righteous Gaming"
+            className="h-9 w-auto max-w-[min(200px,46vw)] shrink-0 object-contain object-left md:h-10 md:max-w-[240px]"
+          />
           <Tabs.List
             className={isLight ? desktopTabListLight : desktopTabListDark}
             aria-label="Dashboard sections"
           >
-            {TABS.map((tab) => (
+            {tabs.map((tab) => (
               <Tabs.Trigger
                 key={tab.id}
                 className={isLight ? desktopTriggerLight : desktopTriggerDark}
@@ -172,8 +199,8 @@ export default function Dashboard() {
             type="button"
             className={
               isLight
-                ? "-ml-0.5 inline-flex size-11 shrink-0 items-center justify-center rounded-lg border border-white/[0.22] bg-[rgba(42,37,54,0.88)] text-[#f4f0fa] hover:border-[rgba(232,197,71,0.35)] hover:bg-[rgba(42,37,54,0.95)] md:hidden"
-                : "-ml-0.5 inline-flex size-11 shrink-0 items-center justify-center rounded-lg border border-white/[0.22] bg-black/35 text-white hover:border-[rgba(232,197,71,0.35)] md:hidden"
+                ? "inline-flex size-11 shrink-0 items-center justify-center rounded-lg border border-white/[0.22] bg-[rgba(42,37,54,0.88)] text-[#f4f0fa] hover:border-[rgba(232,197,71,0.35)] hover:bg-[rgba(42,37,54,0.95)] md:hidden"
+                : "inline-flex size-11 shrink-0 items-center justify-center rounded-lg border border-white/[0.22] bg-black/35 text-white hover:border-[rgba(232,197,71,0.35)] md:hidden"
             }
             aria-label={mobileNavOpen ? "Close navigation menu" : "Open navigation menu"}
             aria-expanded={mobileNavOpen}
@@ -212,16 +239,18 @@ export default function Dashboard() {
               className="flex flex-col gap-1 py-2"
               aria-labelledby="dashboard-menu-button"
             >
-              {TABS.map((tab) => {
+              {tabs.map((tab) => {
                 const selected = activeTab === tab.id;
                 let itemClass =
                   "rounded-lg px-[1.125rem] py-3.5 text-left text-[0.95rem] font-semibold outline-none transition-colors ";
                 if (selected) {
-                  itemClass +=
-                    "border border-[rgba(142,90,200,0.75)] bg-gradient-to-br from-[rgba(80,40,120,0.55)] to-[rgba(40,20,70,0.65)] text-white shadow-[0_3px_16px_rgba(90,40,140,0.22)] focus-visible:ring-2 focus-visible:ring-purple-500/65";
+                  itemClass += isLight
+                    ? "border border-[rgba(152,117,207,0.9)] bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] text-white shadow-[0_4px_18px_rgb(103_61_154/0.42)] focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/70"
+                    : "border border-[rgba(142,90,200,0.75)] bg-gradient-to-br from-[rgba(80,40,120,0.55)] to-[rgba(40,20,70,0.65)] text-white shadow-[0_3px_16px_rgba(90,40,140,0.22)] focus-visible:ring-2 focus-visible:ring-purple-500/65";
                 } else {
-                  itemClass +=
-                    "border border-transparent bg-black/25 text-[#f4f0fa]/88 hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-purple-500/65";
+                  itemClass += isLight
+                    ? "border border-transparent bg-black/25 text-[#f4f0fa]/88 hover:border-[#b998e8]/35 hover:bg-white/[0.08] focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/60"
+                    : "border border-transparent bg-black/25 text-[#f4f0fa]/88 hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-purple-500/65";
                 }
                 return (
                   <button
@@ -242,7 +271,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <Tabs.Content
             key={tab.id}
             value={tab.id}
