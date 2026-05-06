@@ -14,20 +14,21 @@ const THEME_STORAGE_KEY = "rg-dashboard-theme";
 
 const shellDark =
   "bg-shell-dashboard box-border flex min-h-screen flex-col px-4 pb-6 pt-3 text-[#f4f0fa] sm:px-5";
+/* Post–Tailwind-refactor feel: soft white → cool grey wash */
 const shellLight =
-  "box-border flex min-h-screen flex-col bg-zinc-50 px-4 pb-6 pt-3 text-zinc-900 sm:px-5";
+  "box-border flex min-h-screen flex-col bg-gradient-to-b from-white via-zinc-50 to-zinc-200/90 px-4 pb-6 pt-3 text-zinc-900 sm:px-5";
 
 const desktopTabListDark =
   "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-center md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-white/[0.12] md:bg-black/30 md:p-0.5";
 
 const desktopTabListLight =
-  "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-center md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-zinc-200 md:bg-zinc-100 md:p-0.5 md:shadow-inner";
+  "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-center md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-zinc-300/90 md:bg-zinc-200/70 md:p-0.5 md:shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]";
 
 const desktopTriggerDark =
   "inline-flex min-h-9 shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-md border border-transparent px-3 py-1.5 text-[0.8125rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-purple-300/45 hover:text-white focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.92)] data-[state=active]:border-[rgba(142,90,200,0.75)] data-[state=active]:bg-gradient-to-br data-[state=active]:from-[rgba(80,40,120,0.55)] data-[state=active]:to-[rgba(40,20,70,0.65)] data-[state=active]:text-white data-[state=active]:shadow-[0_3px_16px_rgba(90,40,140,0.22)]";
 
 const desktopTriggerLight =
-  "inline-flex min-h-9 shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-md border border-transparent px-3 py-1.5 text-[0.8125rem] font-semibold tracking-wide text-zinc-600 outline-none transition-colors hover:border-zinc-300 hover:bg-white hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-[#7350a8]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-50 data-[state=active]:border-[#5a3d83] data-[state=active]:bg-[#6d4ba8] data-[state=active]:text-white data-[state=active]:shadow-sm";
+  "inline-flex min-h-9 shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-md border border-transparent px-3 py-1.5 text-[0.8125rem] font-semibold tracking-wide text-zinc-600 outline-none transition-colors hover:border-zinc-400/80 hover:bg-zinc-100/90 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-[#7350a8]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100 data-[state=active]:border-[#5a3d83] data-[state=active]:bg-[#6d4ba8] data-[state=active]:text-white data-[state=active]:shadow-sm";
 
 function HamburgerIcon({ className }) {
   return (
@@ -52,38 +53,40 @@ function HamburgerIcon({ className }) {
 }
 
 function ThemeToggle({ theme, onChange }) {
-  const isDark = theme === "dark";
+  const isLight = theme === "light";
   return (
     <div
       className={`flex shrink-0 overflow-hidden rounded-lg border p-0.5 text-[0.7rem] font-semibold leading-none sm:text-[0.72rem] ${
-        isDark ? "border-white/20 bg-black/40" : "border-zinc-300 bg-zinc-100"
+        isLight
+          ? "border-zinc-300/90 bg-white/85 shadow-sm backdrop-blur-sm"
+          : "border-white/20 bg-black/40"
       }`}
       role="group"
-      aria-label="Dashboard appearance"
+      aria-label="Color mode"
     >
       <button
         type="button"
-        aria-pressed={isDark}
-        onClick={() => onChange("dark")}
-        className={`rounded-md px-2 py-2 sm:px-2.5 ${
-          isDark
-            ? "bg-white/15 text-white shadow-inner"
-            : "text-zinc-500 hover:bg-zinc-200/90 hover:text-zinc-800"
-        }`}
-      >
-        Purple
-      </button>
-      <button
-        type="button"
-        aria-pressed={!isDark}
+        aria-pressed={isLight}
         onClick={() => onChange("light")}
         className={`rounded-md px-2 py-2 sm:px-2.5 ${
-          !isDark
-            ? "bg-[#6d4ba8] text-white shadow-sm"
+          isLight
+            ? "bg-zinc-200/95 text-zinc-900 shadow-inner"
             : "text-[#f4f0fa]/70 hover:bg-white/10 hover:text-white"
         }`}
       >
         Light
+      </button>
+      <button
+        type="button"
+        aria-pressed={!isLight}
+        onClick={() => onChange("dark")}
+        className={`rounded-md px-2 py-2 sm:px-2.5 ${
+          !isLight
+            ? "bg-white/15 text-white shadow-inner"
+            : "text-zinc-500 hover:bg-zinc-100/90 hover:text-zinc-800"
+        }`}
+      >
+        Dark
       </button>
     </div>
   );
@@ -130,7 +133,7 @@ export default function Dashboard() {
       >
         <header
           className={`flex items-center gap-2 pb-2 pt-1 ${
-            isLight ? "border-b border-zinc-200" : "border-b border-white/10"
+            isLight ? "border-b border-zinc-300/70" : "border-b border-white/10"
           }`}
         >
           <Tabs.List
@@ -152,7 +155,7 @@ export default function Dashboard() {
             type="button"
             className={
               isLight
-                ? "-ml-0.5 inline-flex shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-white p-2 text-zinc-800 shadow-sm hover:border-zinc-400 hover:bg-zinc-50 md:hidden"
+                ? "-ml-0.5 inline-flex shrink-0 items-center justify-center rounded-lg border border-zinc-300/90 bg-zinc-200/60 p-2 text-zinc-800 shadow-sm hover:border-zinc-400 hover:bg-zinc-200/90 md:hidden"
                 : "-ml-0.5 inline-flex shrink-0 items-center justify-center rounded-lg border border-white/[0.22] bg-black/35 p-2 text-white hover:border-[rgba(232,197,71,0.35)] md:hidden"
             }
             aria-label={mobileNavOpen ? "Close navigation menu" : "Open navigation menu"}
@@ -184,7 +187,7 @@ export default function Dashboard() {
           id="dashboard-mobile-nav"
           className={`grid transition-[grid-template-rows] duration-200 ease-out md:hidden ${
             mobileNavOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-          } ${isLight ? "border-b border-zinc-200" : "border-b border-white/[0.08]"}`}
+          } ${isLight ? "border-b border-zinc-300/70" : "border-b border-white/[0.08]"}`}
           aria-hidden={!mobileNavOpen}
         >
           <div className="min-h-0 overflow-hidden">
@@ -198,8 +201,8 @@ export default function Dashboard() {
                   "rounded-lg px-3 py-2.5 text-left text-[0.88rem] font-semibold outline-none transition-colors ";
                 if (isLight) {
                   itemClass += selected
-                    ? "border border-[#5e4090] bg-[#6d4ba8] text-white shadow-sm focus-visible:ring-2 focus-visible:ring-[#7350a8] focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-50"
-                    : "border border-transparent bg-white text-zinc-800 hover:border-zinc-200 hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-[#7350a8]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-50";
+                    ? "border border-[#5e4090] bg-[#6d4ba8] text-white shadow-sm focus-visible:ring-2 focus-visible:ring-[#7350a8] focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100"
+                    : "border border-zinc-300/60 bg-zinc-200/50 text-zinc-800 hover:border-zinc-400 hover:bg-zinc-200/80 focus-visible:ring-2 focus-visible:ring-[#7350a8]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100";
                 } else {
                   itemClass += selected
                     ? "border border-[rgba(142,90,200,0.75)] bg-gradient-to-br from-[rgba(80,40,120,0.55)] to-[rgba(40,20,70,0.65)] text-white shadow-[0_3px_16px_rgba(90,40,140,0.22)] focus-visible:ring-2 focus-visible:ring-purple-500/65"
@@ -230,14 +233,16 @@ export default function Dashboard() {
             value={tab.id}
             className={`flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl p-8 outline-none sm:p-10 ${
               isLight
-                ? "border border-zinc-200/90 bg-zinc-100 text-zinc-900 shadow-[0_8px_30px_rgb(24_24_27/0.08)] focus-visible:ring-2 focus-visible:ring-[#7350a8]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-50"
+                ? "border border-zinc-300/80 bg-zinc-200/85 text-zinc-900 shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_10px_28px_rgb(24_24_27/0.07)] focus-visible:ring-2 focus-visible:ring-[#7350a8]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100"
                 : "border border-white/[0.12] bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)] focus-visible:ring-2 focus-visible:ring-purple-500/50"
             }`}
           >
             <div className="relative flex flex-1 flex-col items-center justify-center px-4 py-8 text-center">
               <span
                 className={`pointer-events-none absolute left-1/2 top-1/2 size-[min(18rem,70vw)] -translate-x-1/2 -translate-y-1/2 rounded-full ${
-                  isLight ? "bg-violet-200/35" : "bg-[radial-gradient(circle,rgba(150,90,210,0.22)_0%,transparent_68%)]"
+                  isLight
+                    ? "bg-[radial-gradient(circle,rgb(139_92_246/0.12)_0%,transparent_65%)]"
+                    : "bg-[radial-gradient(circle,rgba(150,90,210,0.22)_0%,transparent_68%)]"
                 }`}
                 aria-hidden
               />
