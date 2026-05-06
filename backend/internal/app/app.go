@@ -92,6 +92,11 @@ func New(ctx context.Context) (*App, error) {
 	return a, nil
 }
 
+// SendGmail sends a plain-text email via the configured Gmail API client (OAuth).
+func (a *App) SendGmail(ctx context.Context, to, subject, body string) error {
+	return a.Gmail.SendEmail(ctx, to, subject, body)
+}
+
 // Close releases the database pool and closes the info log file.
 func (a *App) Close() {
 	if a.Repo != nil {

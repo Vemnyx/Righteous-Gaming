@@ -11,10 +11,10 @@ import (
 // Config holds PostgreSQL connection settings from the environment.
 //
 // Resolution order:
-//   1. DATABASE_URL
-//   2. DATABASE_URL_SECRET — full Secret Manager version resource name; payload
-//      must be the connection string (e.g. postgres://...). Uses ADC on GCE.
-//   3. PGHOST, PGUSER, PGPASSWORD, PGDATABASE (optional: PGPORT, PGSSLMODE).
+//  1. DATABASE_URL
+//  2. DATABASE_URL_SECRET — full Secret Manager version resource name; payload
+//     must be the connection string (e.g. postgres://...). Uses ADC on GCE.
+//  3. PGHOST, PGUSER, PGPASSWORD, PGDATABASE (optional: PGPORT, PGSSLMODE).
 type Config struct {
 	ConnString string
 }
