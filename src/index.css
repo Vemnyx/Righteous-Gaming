@@ -34,3 +34,21 @@
     background-position: 100% center;
   }
 }
+
+/* Matches pre-Tailwind auth pages (Login.css .auth-shell) */
+@layer utilities {
+  .bg-shell-auth {
+    background-color: #0a0512;
+    background-image:
+      radial-gradient(ellipse 80% 60% at 50% 20%, rgb(102 51 153 / 0.35), transparent 55%),
+      linear-gradient(165deg, #120818 0%, #1a0a2e 45%, #0a0512 100%);
+  }
+
+  /* Matches pre-Tailwind dashboard / welcome shell */
+  .bg-shell-dashboard {
+    background-color: #0a0512;
+    background-image:
+      radial-gradient(ellipse 70% 50% at 50% 30%, rgb(102 51 153 / 0.3), transparent 55%),
+      linear-gradient(165deg, #120818 0%, #1a0a2e 50%, #0a0512 100%);
+  }
+}

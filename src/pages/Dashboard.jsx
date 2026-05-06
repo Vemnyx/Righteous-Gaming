@@ -18,9 +18,7 @@ export default function Dashboard() {
   const { user, signOut } = useAuth();
 
   return (
-    <div
-      className="box-border flex min-h-screen flex-col bg-[linear-gradient(165deg,#120818_0%,#1a0a2e_50%,#0a0512_100%)] bg-[radial-gradient(ellipse_70%_50%_at_50%_25%,rgba(102,51,153,0.32),transparent_55%)] px-5 py-5 pb-7 text-[#f4f0fa] sm:px-6"
-    >
+    <div className="bg-shell-dashboard box-border flex min-h-screen flex-col px-5 py-5 pb-7 text-[#f4f0fa] sm:px-6">
       <header className="mb-5 flex flex-wrap items-start justify-between gap-4 border-b border-white/10 pb-4">
         <div className="min-w-0">
           <h1 className="mb-0.5 bg-gradient-to-r from-white via-[#e8d4ff] to-[#c9a8e8] bg-clip-text text-[clamp(1.35rem,4vw,1.75rem)] font-bold tracking-wide text-transparent">
