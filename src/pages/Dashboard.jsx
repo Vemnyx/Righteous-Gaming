@@ -15,12 +15,9 @@ const THEME_STORAGE_KEY = "rg-dashboard-theme";
 const shellDark =
   "bg-shell-dashboard box-border flex min-h-screen flex-col px-4 pb-6 pt-3 text-[#f4f0fa] sm:px-5";
 
-/*
- * Light shell: 970ed44 spacing + bright dual-layer (linear + radial), same idea as that commit’s
- * shell but inverted for light. Colors unchanged from that light analogue.
- */
+/* Light: pale lavender page + radial glow; UI chrome matches dark styling (screenshot reference). */
 const shellLight =
-  "box-border flex min-h-screen flex-col bg-[linear-gradient(165deg,#ffffff_0%,#f4f4f5_50%,#e4e4e7_100%)] bg-[radial-gradient(ellipse_70%_50%_at_50%_25%,rgb(255_255_255/0.92),transparent_55%)] px-5 py-5 pb-7 text-zinc-900 sm:px-6";
+  "box-border flex min-h-screen flex-col bg-[#f3f0f7] bg-[radial-gradient(ellipse_52%_44%_at_50%_40%,rgba(206,188,238,0.55),transparent_68%)] px-4 pb-6 pt-3 text-[#f4f0fa] sm:px-5";
 
 const tabsRootSharedWidth =
   "mx-auto flex w-full max-w-5xl flex-1 flex-col gap-3 lg:max-w-6xl xl:max-w-7xl";
@@ -30,31 +27,24 @@ const tabsRootDark = tabsRootSharedWidth;
 /** Wide layout only; no extra surface (matches pre–purple-card light look). */
 const tabsRootLight = tabsRootSharedWidth;
 
-/* 970ed44 tabListClass rhythm: gap-1.5 rounded-xl border … p-1 with light zinc tokens */
-const tabListLightCommit =
-  "gap-1.5 rounded-xl border border-zinc-300/80 bg-zinc-200/60 p-1 inline-flex min-h-0 min-w-0 flex-1 flex-nowrap overflow-x-auto";
-
 const desktopTabListDark =
   "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-center md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-white/[0.12] md:bg-black/30 md:p-0.5";
 
-const desktopTabListLight = `hidden md:flex md:min-w-0 md:flex-1 md:items-center ${tabListLightCommit}`;
+/* Same layout/size as desktopTabListDark; opaque purple-grey rail on lavender shell */
+const desktopTabListLight =
+  "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-center md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-white/[0.12] md:bg-[rgba(42,37,54,0.9)] md:p-0.5 md:backdrop-blur-sm";
 
 const desktopTriggerDark =
   "inline-flex min-h-9 shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-md border border-transparent px-3 py-1.5 text-[0.8125rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-purple-300/45 hover:text-white focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.92)] data-[state=active]:border-[rgba(142,90,200,0.75)] data-[state=active]:bg-gradient-to-br data-[state=active]:from-[rgba(80,40,120,0.55)] data-[state=active]:to-[rgba(40,20,70,0.65)] data-[state=active]:text-white data-[state=active]:shadow-[0_3px_16px_rgba(90,40,140,0.22)]";
 
-/* 970ed44 tabTriggerClass: min-h-10 rounded-lg px-4 py-2 text-[0.88rem] — light token swap */
-const desktopTriggerLight =
-  "inline-flex min-h-10 shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-lg border border-transparent px-4 py-2 text-[0.88rem] font-semibold tracking-wide text-zinc-600 outline-none transition-colors hover:border-zinc-400 hover:bg-zinc-100/90 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-[#7350a8]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100 data-[state=active]:border-[rgba(142,90,200,0.75)] data-[state=active]:bg-gradient-to-br data-[state=active]:from-[rgba(90,55,140,0.85)] data-[state=active]:to-[rgba(60,35,100,0.92)] data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(90,40,140,0.18)]";
+/* Same trigger dimensions/states as dark (top bar parity on light shell) */
+const desktopTriggerLight = desktopTriggerDark;
 
-/*
- * 970ed44 Coming Soon: same size, shimmer, and multi-stop gradient shape; hues shifted
- * slightly darker so the title stays legible on the light grey panel (commit used a dark card).
- */
-const comingSoonTitleLight =
-  "relative z-[1] m-0 mb-2.5 bg-[length:200%_auto] bg-gradient-to-r from-violet-950 from-0% via-violet-600 via-40% via-fuchsia-600 via-70% to-violet-800 to-100% bg-clip-text text-[clamp(1.75rem,6vw,2.75rem)] font-bold uppercase tracking-[0.06em] text-transparent [animation:dashboard-shimmer_8s_ease-in-out_infinite]";
+const comingSoonTitle =
+  "relative z-[1] m-0 mb-2.5 bg-[length:200%_auto] bg-gradient-to-r from-white from-0% via-violet-300 via-40% via-purple-500 via-70% to-fuchsia-100 to-100% bg-clip-text text-[clamp(1.75rem,6vw,2.75rem)] font-bold uppercase tracking-[0.06em] text-transparent [animation:dashboard-shimmer_8s_ease-in-out_infinite]";
 
-const comingSoonGlowLight =
-  "pointer-events-none absolute left-1/2 top-1/2 size-[min(18rem,70vw)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(150,90,210,0.14)_0%,transparent_68%)]";
+const comingSoonGlow =
+  "pointer-events-none absolute left-1/2 top-1/2 size-[min(18rem,70vw)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(150,90,210,0.22)_0%,transparent_68%)]";
 
 function HamburgerIcon({ className }) {
   return (
@@ -79,12 +69,12 @@ function HamburgerIcon({ className }) {
 }
 
 function ThemeToggle({ theme, onChange }) {
-  const isLight = theme === "light";
+  const lightMode = theme === "light";
   return (
     <div
       className={`flex shrink-0 overflow-hidden rounded-lg border p-0.5 text-[0.7rem] font-semibold leading-none sm:text-[0.72rem] ${
-        isLight
-          ? "border-zinc-300/90 bg-white/85 shadow-sm backdrop-blur-sm"
+        lightMode
+          ? "border-white/15 bg-[rgba(42,37,54,0.82)] backdrop-blur-sm"
           : "border-white/20 bg-black/40"
       }`}
       role="group"
@@ -92,11 +82,11 @@ function ThemeToggle({ theme, onChange }) {
     >
       <button
         type="button"
-        aria-pressed={isLight}
+        aria-pressed={lightMode}
         onClick={() => onChange("light")}
         className={`rounded-md px-2 py-2 sm:px-2.5 ${
-          isLight
-            ? "bg-zinc-200/95 text-zinc-900 shadow-inner"
+          lightMode
+            ? "bg-white/18 text-white shadow-inner"
             : "text-[#f4f0fa]/70 hover:bg-white/10 hover:text-white"
         }`}
       >
@@ -104,12 +94,12 @@ function ThemeToggle({ theme, onChange }) {
       </button>
       <button
         type="button"
-        aria-pressed={!isLight}
+        aria-pressed={!lightMode}
         onClick={() => onChange("dark")}
         className={`rounded-md px-2 py-2 sm:px-2.5 ${
-          !isLight
+          !lightMode
             ? "bg-white/15 text-white shadow-inner"
-            : "text-zinc-500 hover:bg-zinc-100/90 hover:text-zinc-800"
+            : "text-[#f4f0fa]/70 hover:bg-white/10 hover:text-white"
         }`}
       >
         Dark
@@ -158,10 +148,8 @@ export default function Dashboard() {
         className={isLight ? tabsRootLight : tabsRootDark}
       >
         <header
-          className={`flex items-center gap-2 pt-1 ${
-            isLight
-              ? "border-b border-zinc-300/80 pb-4"
-              : "border-b border-white/10 pb-2"
+          className={`flex items-center gap-2 border-b pt-1 ${
+            isLight ? "border-[rgba(80,65,110,0.22)] pb-2" : "border-white/10 pb-2"
           }`}
         >
           <Tabs.List
@@ -183,7 +171,7 @@ export default function Dashboard() {
             type="button"
             className={
               isLight
-                ? "-ml-0.5 inline-flex shrink-0 items-center justify-center rounded-xl border border-zinc-300/90 bg-zinc-200/60 p-2 text-zinc-800 shadow-sm hover:border-zinc-400 hover:bg-zinc-200/90 md:hidden"
+                ? "-ml-0.5 inline-flex shrink-0 items-center justify-center rounded-lg border border-white/[0.22] bg-[rgba(42,37,54,0.88)] p-2 text-[#f4f0fa] hover:border-[rgba(232,197,71,0.35)] hover:bg-[rgba(42,37,54,0.95)] md:hidden"
                 : "-ml-0.5 inline-flex shrink-0 items-center justify-center rounded-lg border border-white/[0.22] bg-black/35 p-2 text-white hover:border-[rgba(232,197,71,0.35)] md:hidden"
             }
             aria-label={mobileNavOpen ? "Close navigation menu" : "Open navigation menu"}
@@ -192,7 +180,7 @@ export default function Dashboard() {
             id="dashboard-menu-button"
             onClick={() => setMobileNavOpen((o) => !o)}
           >
-            <HamburgerIcon className={isLight ? "text-zinc-800" : "text-[#f4f0fa]"} />
+            <HamburgerIcon className="text-[#f4f0fa]" />
           </button>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -201,7 +189,7 @@ export default function Dashboard() {
               type="button"
               className={
                 isLight
-                  ? "cursor-pointer rounded-lg border border-zinc-500/80 bg-[#6d4ba8] px-4 py-2 text-[0.85rem] font-semibold text-white shadow-[0_4px_16px_rgb(24_24_27/0.15)] hover:border-zinc-600 hover:bg-[#5e4090]"
+                  ? "cursor-pointer rounded-lg border border-white/15 bg-[#5f5b6c] px-3 py-1.5 text-[0.8rem] font-semibold text-white hover:brightness-110"
                   : "cursor-pointer rounded-lg border border-white/[0.22] bg-black/35 px-3 py-1.5 text-[0.8rem] font-semibold text-white hover:border-[rgba(232,197,71,0.45)]"
               }
               onClick={() => void signOut()}
@@ -215,7 +203,7 @@ export default function Dashboard() {
           id="dashboard-mobile-nav"
             className={`grid transition-[grid-template-rows] duration-200 ease-out md:hidden ${
             mobileNavOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-          } ${isLight ? "border-b border-zinc-300/80" : "border-b border-white/[0.08]"}`}
+          } ${isLight ? "border-b border-[rgba(80,65,110,0.2)]" : "border-b border-white/[0.08]"}`}
           aria-hidden={!mobileNavOpen}
         >
           <div className="min-h-0 overflow-hidden">
@@ -227,14 +215,12 @@ export default function Dashboard() {
                 const selected = activeTab === tab.id;
                 let itemClass =
                   "rounded-lg px-3 py-2.5 text-left text-[0.88rem] font-semibold outline-none transition-colors ";
-                if (isLight) {
-                  itemClass += selected
-                    ? "border border-[rgba(142,90,200,0.75)] bg-gradient-to-br from-[rgba(90,55,140,0.88)] to-[rgba(60,35,100,0.95)] text-white shadow-[0_4px_20px_rgba(90,40,140,0.18)] focus-visible:ring-2 focus-visible:ring-[#7350a8] focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100"
-                    : "border border-zinc-300/70 bg-zinc-200/55 text-zinc-800 hover:border-zinc-400 hover:bg-zinc-200/85 focus-visible:ring-2 focus-visible:ring-[#7350a8]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100";
+                if (selected) {
+                  itemClass +=
+                    "border border-[rgba(142,90,200,0.75)] bg-gradient-to-br from-[rgba(80,40,120,0.55)] to-[rgba(40,20,70,0.65)] text-white shadow-[0_3px_16px_rgba(90,40,140,0.22)] focus-visible:ring-2 focus-visible:ring-purple-500/65";
                 } else {
-                  itemClass += selected
-                    ? "border border-[rgba(142,90,200,0.75)] bg-gradient-to-br from-[rgba(80,40,120,0.55)] to-[rgba(40,20,70,0.65)] text-white shadow-[0_3px_16px_rgba(90,40,140,0.22)] focus-visible:ring-2 focus-visible:ring-purple-500/65"
-                    : "border border-transparent bg-black/25 text-[#f4f0fa]/88 hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-purple-500/65";
+                  itemClass +=
+                    "border border-transparent bg-black/25 text-[#f4f0fa]/88 hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-purple-500/65";
                 }
                 return (
                   <button
@@ -261,20 +247,16 @@ export default function Dashboard() {
             value={tab.id}
             className={`flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl p-8 outline-none sm:p-10 ${
               isLight
-                ? "mt-4 border border-zinc-300/90 bg-[#e8e8ec] text-zinc-900 shadow-[0_20px_50px_rgb(24_24_27/0.12)] focus-visible:ring-2 focus-visible:ring-[#7350a8]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+                ? "mt-4 border border-white/[0.12] bg-gradient-to-b from-[#434054] via-[#353145] to-[#292433] shadow-[0_22px_50px_rgba(24,14,38,0.45)] focus-visible:ring-2 focus-visible:ring-purple-500/50"
                 : "border border-white/[0.12] bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)] focus-visible:ring-2 focus-visible:ring-purple-500/50"
             }`}
           >
             <div className="relative flex flex-1 flex-col items-center justify-center px-4 py-8 text-center">
-              <span className={isLight ? comingSoonGlowLight : "pointer-events-none absolute left-1/2 top-1/2 size-[min(18rem,70vw)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(150,90,210,0.22)_0%,transparent_68%)]"} aria-hidden />
-              <p className={isLight ? comingSoonTitleLight : "relative z-[1] m-0 bg-[length:200%_auto] bg-gradient-to-r from-white from-0% via-violet-300 via-40% via-purple-500 via-70% to-fuchsia-100 to-100% bg-clip-text text-[clamp(1.75rem,6vw,2.75rem)] font-bold uppercase tracking-[0.06em] text-transparent [animation:dashboard-shimmer_8s_ease-in-out_infinite]"}>
-                Coming Soon!
+              <span className={comingSoonGlow} aria-hidden />
+              <p className={comingSoonTitle}>Coming Soon!</p>
+              <p className="relative z-[1] m-0 text-[0.92rem] tracking-wide text-[#f4f0fa]/55">
+                {tab.label} will appear here.
               </p>
-              {isLight ? (
-                <p className="relative z-[1] m-0 text-[0.92rem] tracking-wide text-zinc-500">
-                  {tab.label} will appear here.
-                </p>
-              ) : null}
             </div>
           </Tabs.Content>
         ))}
