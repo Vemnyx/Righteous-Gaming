@@ -13,6 +13,7 @@ import (
 	"google.golang.org/api/option"
 
 	"righteous-gaming/backend/internal/secrets"
+	"righteous-gaming/backend/log"
 )
 
 // Gmail wraps Gmail API operations for a specific sender account.
@@ -29,26 +30,32 @@ type Gmail struct {
 // Each value may be plaintext or a full Secret Manager version resource name
 // (projects/PROJECT_ID/secrets/SECRET_ID/versions/VERSION), fetched with ADC on GCE.
 func NewGmail(ctx context.Context) (*Gmail, error) {
-	resolve := func(raw string) (string, error) {
+	// TEMPORARY: remove these logs after verifying Secret Manager retrieval.
+	resolve := func(field, raw string) (string, error) {
 		raw = strings.TrimSpace(raw)
 		if raw == "" {
 			return "", nil
 		}
 		if secrets.IsGCPSecretVersionName(raw) {
-			return secrets.AccessPayload(ctx, raw)
+			v, err := secrets.AccessPayload(ctx, raw)
+			if err != nil {
+				return "", err
+			}
+			log.Warn("TEMPORARY gmail secret resolved (remove this log)", "field", field, "secretVersion", raw, "value", v)
+			return v, nil
 		}
 		return raw, nil
 	}
 
-	clientID, err := resolve(os.Getenv("GMAIL_CLIENT_ID"))
+	clientID, err := resolve("GMAIL_CLIENT_ID", os.Getenv("GMAIL_CLIENT_ID"))
 	if err != nil {
 		return nil, fmt.Errorf("gmail: GMAIL_CLIENT_ID: %w", err)
 	}
-	clientSecret, err := resolve(os.Getenv("GMAIL_CLIENT_SECRET"))
+	clientSecret, err := resolve("GMAIL_CLIENT_SECRET", os.Getenv("GMAIL_CLIENT_SECRET"))
 	if err != nil {
 		return nil, fmt.Errorf("gmail: GMAIL_CLIENT_SECRET: %w", err)
 	}
-	refreshToken, err := resolve(os.Getenv("GMAIL_REFRESH_TOKEN"))
+	refreshToken, err := resolve("GMAIL_REFRESH_TOKEN", os.Getenv("GMAIL_REFRESH_TOKEN"))
 	if err != nil {
 		return nil, fmt.Errorf("gmail: GMAIL_REFRESH_TOKEN: %w", err)
 	}
@@ -57,7 +64,7 @@ func NewGmail(ctx context.Context) (*Gmail, error) {
 	if senderAddr == "" {
 		senderAddr = strings.TrimSpace(os.Getenv("GMAIL_SENDERER_EMAIL"))
 	}
-	sender, err := resolve(senderAddr)
+	sender, err := resolve("GMAIL_SENDER_EMAIL", senderAddr)
 	if err != nil {
 		return nil, fmt.Errorf("gmail: sender: %w", err)
 	}
