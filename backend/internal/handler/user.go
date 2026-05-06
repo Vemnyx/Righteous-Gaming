@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -13,6 +12,8 @@ import (
 	"righteous-gaming/backend/internal/service"
 	"righteous-gaming/backend/log"
 )
+
+const adminInviteRegisterURL = "https://righteousgaming.team/register"
 
 type userHTTP struct {
 	svc *service.UserService
@@ -120,8 +121,7 @@ func (h *userHTTP) adminRegisterUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	subject := "You're invited to Righteous Gaming"
-	registerURL := registerURLFromRequest(r)
-	content, err := emailtemplates.RenderAdminRegisterInvite(registerURL)
+	content, err := emailtemplates.RenderAdminRegisterInvite(adminInviteRegisterURL)
 	if err != nil {
 		log.Error("failed to render registration invite email", "error", err)
 		http.Error(w, "failed to render invite email", http.StatusInternalServerError)
@@ -135,19 +135,4 @@ func (h *userHTTP) adminRegisterUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func registerURLFromRequest(r *http.Request) string {
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	if xfProto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); xfProto != "" {
-		scheme = xfProto
-	}
-	host := strings.TrimSpace(r.Host)
-	if host == "" {
-		return "/register"
-	}
-	return fmt.Sprintf("%s://%s/register", scheme, host)
 }
