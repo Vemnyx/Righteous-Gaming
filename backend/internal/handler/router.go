@@ -14,8 +14,8 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mh := &mailHTTP{app: application}
 
 	mux.HandleFunc("POST /api/users", uh.createUser)
-	mux.HandleFunc("POST /complete-registration", uh.completeRegistration)
-	mux.HandleFunc("POST /send-email", mh.sendEmail)
+	mux.HandleFunc("POST /api/complete-registration", uh.completeRegistration)
+	mux.HandleFunc("POST /api/send-email", mh.sendEmail)
 
 	return mux
 }

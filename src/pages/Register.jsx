@@ -22,7 +22,7 @@ export default function Register({ onSuccess, onBackToLogin }) {
 
     setSubmitting(true);
     try {
-      const res = await fetch("/complete-registration", {
+      const res = await fetch("/api/complete-registration", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
