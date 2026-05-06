@@ -50,6 +50,57 @@ WHERE uid = $1`
 	return &u, nil
 }
 
+// UserByEmail returns the user with the given email, or ErrUserNotFound.
+func (r *Repository) UserByEmail(ctx context.Context, email string) (*User, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	const q = `
+SELECT id, email, username, COALESCE(uid, ''), role, created_at
+FROM users
+WHERE email = $1`
+	row := r.pool.QueryRow(ctx, q, email)
+	var u User
+	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("repository: user by email: %w", err)
+	}
+	return &u, nil
+}
+
+// UsersByEmailOrUsername returns all users whose email matches, or whose username
+// matches when username is non-nil.
+func (r *Repository) UsersByEmailOrUsername(ctx context.Context, email string, username *string) ([]User, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	const q = `
+SELECT id, email, username, COALESCE(uid, ''), role, created_at
+FROM users
+WHERE email = $1 OR ($2::varchar IS NOT NULL AND username = $2)`
+	rows, err := r.pool.Query(ctx, q, email, username)
+	if err != nil {
+		return nil, fmt.Errorf("repository: users by email or username: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]User, 0, 2)
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt); err != nil {
+			return nil, fmt.Errorf("repository: users by email or username scan: %w", err)
+		}
+		out = append(out, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: users by email or username rows: %w", err)
+	}
+	return out, nil
+}
+
 // CreateUser inserts a new user and returns the persisted row.
 func (r *Repository) CreateUser(ctx context.Context, in CreateUserInput) (*User, error) {
 	if r.pool == nil {

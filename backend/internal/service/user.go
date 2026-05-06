@@ -14,6 +14,9 @@ import (
 )
 
 var ErrValidation = errors.New("service: validation failed")
+var ErrAlreadyRegistered = errors.New("service: user already registered")
+var ErrEmailAlreadyRegistered = errors.New("service: email already registered")
+var ErrUsernameNotAvailable = errors.New("service: username not available")
 
 // UserService coordinates user-related use cases.
 type UserService struct {
@@ -96,6 +99,21 @@ func (s *UserService) CompleteRegistration(ctx context.Context, email string, us
 		}
 	}
 
+	candidates, err := s.repo.UsersByEmailOrUsername(ctx, email, cleanUsername)
+	if err != nil {
+		return nil, fmt.Errorf("service: lookup registration conflicts: %w", err)
+	}
+	for _, candidate := range candidates {
+		if strings.EqualFold(strings.TrimSpace(candidate.Email), email) && strings.TrimSpace(candidate.UID) != "" {
+			return nil, fmt.Errorf("%w: email is already registered", ErrEmailAlreadyRegistered)
+		}
+		if cleanUsername != nil && candidate.Username != nil {
+			if strings.EqualFold(strings.TrimSpace(*candidate.Username), *cleanUsername) {
+				return nil, fmt.Errorf("%w: username is not available", ErrUsernameNotAvailable)
+			}
+		}
+	}
+
 	params := (&firebaseauth.UserToCreate{}).
 		Email(email).
 		EmailVerified(false).
@@ -142,8 +160,18 @@ func (s *UserService) CreateInvitedUser(ctx context.Context, email string, role 
 	if !r.Valid() {
 		return fmt.Errorf("%w: invalid role", ErrValidation)
 	}
-	if err := s.repo.CreateUserIfAbsent(ctx, email, role); err != nil {
-		return fmt.Errorf("service: create invited user: %w", err)
+
+	existing, err := s.repo.UserByEmail(ctx, email)
+	if err != nil && !errors.Is(err, repository.ErrUserNotFound) {
+		return fmt.Errorf("service: find invited user: %w", err)
+	}
+	if err == nil && strings.TrimSpace(existing.UID) != "" {
+		return fmt.Errorf("%w: user is already registered", ErrAlreadyRegistered)
+	}
+	if errors.Is(err, repository.ErrUserNotFound) {
+		if err := s.repo.CreateUserIfAbsent(ctx, email, role); err != nil {
+			return fmt.Errorf("service: create invited user: %w", err)
+		}
 	}
 	return nil
 }

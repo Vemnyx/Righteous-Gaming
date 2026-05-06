@@ -31,6 +31,11 @@ type adminRegisterUserRequest struct {
 	Role  int    `json:"role"`
 }
 
+type fieldErrorResponse struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+}
+
 func (h *userHTTP) createUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -82,6 +87,14 @@ func (h *userHTTP) completeRegistration(w http.ResponseWriter, r *http.Request) 
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if errors.Is(err, service.ErrEmailAlreadyRegistered) {
+			writeFieldError(w, http.StatusConflict, "email", "Email is already registered.")
+			return
+		}
+		if errors.Is(err, service.ErrUsernameNotAvailable) {
+			writeFieldError(w, http.StatusConflict, "username", "Username is not available.")
+			return
+		}
 		log.Error("failed to complete registration", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
@@ -115,6 +128,10 @@ func (h *userHTTP) adminRegisterUser(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if errors.Is(err, service.ErrAlreadyRegistered) {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
 		log.Error("failed to create invited user", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
@@ -135,4 +152,13 @@ func (h *userHTTP) adminRegisterUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func writeFieldError(w http.ResponseWriter, status int, field, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(fieldErrorResponse{
+		Field:   field,
+		Message: message,
+	})
 }
