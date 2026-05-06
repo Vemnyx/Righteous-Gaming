@@ -13,15 +13,31 @@
     box-sizing: border-box;
   }
 
-  html,
-  body,
-  #root {
+  /*
+   Match app shell darkest tone so mobile overscroll / “pull past edge” is not plain white.
+  */
+  html {
+    background-color: #0a0512;
     min-height: 100%;
   }
 
   body {
     margin: 0;
     font-family: var(--font-sans);
+    background-color: #0a0512;
+    min-height: 100%;
+  }
+
+  #root {
+    min-height: 100%;
+  }
+
+  @supports (min-height: 100dvh) {
+    html,
+    body,
+    #root {
+      min-height: 100dvh;
+    }
   }
 }
 
