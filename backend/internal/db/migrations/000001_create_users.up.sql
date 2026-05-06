@@ -6,6 +6,7 @@ CREATE TABLE users (
     uid varchar(128),
     role integer NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
+    registered_at timestamptz,
     CONSTRAINT users_email_key UNIQUE (email),
     CONSTRAINT users_username_key UNIQUE (username),
     CONSTRAINT users_uid_key UNIQUE (uid),
