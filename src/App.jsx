@@ -26,7 +26,7 @@ function AppGate() {
 
   if (loading) {
     return (
-      <div className="bg-shell-auth flex min-h-screen items-center justify-center font-sans text-[#f4f0fa]/85">
+      <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(165deg,#ffffff_0%,#f4f4f5_50%,#e4e4e7_100%)] bg-[radial-gradient(ellipse_70%_50%_at_50%_25%,rgb(255_255_255/0.92),transparent_55%)] font-sans text-zinc-600">
         <p>Loading…</p>
       </div>
     );

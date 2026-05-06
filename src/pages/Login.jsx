@@ -7,9 +7,9 @@ import { AuthShell } from "../components/AuthShell";
 const LOGIN_LOGO_URL = "/righteous-logo-horizontal.png";
 
 const inputClass =
-  "mb-1 rounded-lg border border-white/[0.18] bg-black/35 px-3 py-2.5 text-base text-white outline-none focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.75)] disabled:opacity-65";
+  "mb-1 rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-base text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-[#7350a8]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f0f0f4] disabled:opacity-65";
 
-const labelClass = "mt-1.5 text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/75";
+const labelClass = "mt-1.5 text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-zinc-600";
 
 function mapAuthError(code) {
   switch (code) {
@@ -54,11 +54,11 @@ export default function Login() {
   if (!isFirebaseConfigured()) {
     return (
       <AuthShell narrow>
-        <h1 className="mb-2 text-[1.35rem] font-[650] tracking-wide">Configuration needed</h1>
-        <p className="mb-5 text-[0.88rem] leading-relaxed text-[#f4f0fa]/[0.72]">
-          Add <code className="rounded bg-black/35 px-1 py-0.5 text-[0.82em]">VITE_FIREBASE_*</code> in{" "}
-          <code className="rounded bg-black/35 px-1 py-0.5 text-[0.82em]">.env.local</code> (see{" "}
-          <code className="rounded bg-black/35 px-1 py-0.5 text-[0.82em]">.env.example</code>), then
+        <h1 className="mb-2 text-[1.35rem] font-[650] tracking-wide text-zinc-900">Configuration needed</h1>
+        <p className="mb-5 text-[0.88rem] leading-relaxed text-zinc-600">
+          Add <code className="rounded bg-zinc-200 px-1 py-0.5 text-[0.82em] text-zinc-900">VITE_FIREBASE_*</code> in{" "}
+          <code className="rounded bg-zinc-200 px-1 py-0.5 text-[0.82em] text-zinc-900">.env.local</code> (see{" "}
+          <code className="rounded bg-zinc-200 px-1 py-0.5 text-[0.82em] text-zinc-900">.env.example</code>), then
           restart the dev server.
         </p>
       </AuthShell>
@@ -72,7 +72,7 @@ export default function Login() {
         src={LOGIN_LOGO_URL}
         alt="Righteous Gaming"
       />
-      <h1 className="mb-2 text-[1.35rem] font-[650] tracking-wide">Sign in</h1>
+      <h1 className="mb-2 text-[1.35rem] font-[650] tracking-wide text-zinc-900">Sign in</h1>
       <form className="flex flex-col gap-1" onSubmit={handleSubmit}>
         <label className={labelClass} htmlFor="email">
           Email
@@ -100,11 +100,11 @@ export default function Login() {
           required
           disabled={submitting}
         />
-        {error ? <p className="mt-1.5 text-[0.85rem] text-[#ffb4b4]">{error}</p> : null}
+        {error ? <p className="mt-1.5 text-[0.85rem] text-red-600">{error}</p> : null}
         <button
           type="submit"
           disabled={submitting}
-          className="mt-4 cursor-pointer rounded-lg border-none bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] px-4 py-2.5 text-[0.95rem] font-semibold text-white hover:brightness-[1.06] disabled:cursor-not-allowed disabled:opacity-70"
+          className="mt-4 cursor-pointer rounded-lg border-none bg-[#6d4ba8] px-4 py-2.5 text-[0.95rem] font-semibold text-white shadow-[0_4px_16px_rgb(24_24_27/0.15)] hover:bg-[#5e4090] disabled:cursor-not-allowed disabled:opacity-70"
         >
           {submitting ? "Signing in…" : "Sign in"}
         </button>
