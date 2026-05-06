@@ -14,19 +14,28 @@ const THEME_STORAGE_KEY = "rg-dashboard-theme";
 
 const shellDark =
   "bg-shell-dashboard box-border flex min-h-screen flex-col px-4 pb-6 pt-3 text-[#f4f0fa] sm:px-5";
+
 /*
- * Light analogue of 970ed44 dashboard shell: same dual-layer idea (linear + radial),
- * inverted to a bright/fading page. Padding matches that commit: px-5 py-5 pb-7 sm:px-6.
+ * Light shell: 970ed44 spacing + bright dual-layer (linear + radial), same idea as that commit’s
+ * shell but inverted for light. Colors unchanged from that light analogue.
  */
 const shellLight =
   "box-border flex min-h-screen flex-col bg-[linear-gradient(165deg,#ffffff_0%,#f4f4f5_50%,#e4e4e7_100%)] bg-[radial-gradient(ellipse_70%_50%_at_50%_25%,rgb(255_255_255/0.92),transparent_55%)] px-5 py-5 pb-7 text-zinc-900 sm:px-6";
 
-const desktopTabListDark =
-  "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-center md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-white/[0.12] md:bg-black/30 md:p-0.5";
+const tabsRootSharedWidth =
+  "mx-auto flex w-full max-w-5xl flex-1 flex-col gap-3 lg:max-w-6xl xl:max-w-7xl";
 
-/* 970ed44 tabListClass: gap-1.5 rounded-xl border … p-1; desktop rail is nowrap + scroll */
+const tabsRootDark = tabsRootSharedWidth;
+
+/** Wide layout only; no extra surface (matches pre–purple-card light look). */
+const tabsRootLight = tabsRootSharedWidth;
+
+/* 970ed44 tabListClass rhythm: gap-1.5 rounded-xl border … p-1 with light zinc tokens */
 const tabListLightCommit =
   "gap-1.5 rounded-xl border border-zinc-300/80 bg-zinc-200/60 p-1 inline-flex min-h-0 min-w-0 flex-1 flex-nowrap overflow-x-auto";
+
+const desktopTabListDark =
+  "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-center md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-white/[0.12] md:bg-black/30 md:p-0.5";
 
 const desktopTabListLight = `hidden md:flex md:min-w-0 md:flex-1 md:items-center ${tabListLightCommit}`;
 
@@ -146,11 +155,7 @@ export default function Dashboard() {
       <Tabs.Root
         value={activeTab}
         onValueChange={setActiveTab}
-        className={
-          isLight
-            ? "mx-auto flex w-full max-w-4xl flex-1 flex-col"
-            : "mx-auto flex w-full max-w-5xl flex-1 flex-col gap-3 lg:max-w-6xl xl:max-w-7xl"
-        }
+        className={isLight ? tabsRootLight : tabsRootDark}
       >
         <header
           className={`flex items-center gap-2 pt-1 ${

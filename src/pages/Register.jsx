@@ -8,7 +8,7 @@ const SIGN_UP_LOGO_URL = "/righteous-logo-horizontal.png";
 const labelClass = "mt-1.5 text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-zinc-600";
 
 const baseInput =
-  "mb-1 rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-base text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-[#7350a8]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#f0f0f4] disabled:opacity-65";
+  "mb-1 rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-base text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-[#7350a8]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#e8e8ec] disabled:opacity-65";
 
 const inputErrorRing =
   "border-red-300/70 shadow-[0_0_0_1px_rgba(255,120,120,0.18)] focus-visible:ring-red-300/45";
