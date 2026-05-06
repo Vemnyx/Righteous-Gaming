@@ -14,21 +14,38 @@ const THEME_STORAGE_KEY = "rg-dashboard-theme";
 
 const shellDark =
   "bg-shell-dashboard box-border flex min-h-screen flex-col px-4 pb-6 pt-3 text-[#f4f0fa] sm:px-5";
-/* Post–Tailwind-refactor feel: soft white → cool grey wash */
+/*
+ * Light analogue of 970ed44 dashboard shell: same dual-layer idea (linear + radial),
+ * inverted to a bright/fading page. Padding matches that commit: px-5 py-5 pb-7 sm:px-6.
+ */
 const shellLight =
-  "box-border flex min-h-screen flex-col bg-gradient-to-b from-white via-zinc-50 to-zinc-200/90 px-4 pb-6 pt-3 text-zinc-900 sm:px-5";
+  "box-border flex min-h-screen flex-col bg-[linear-gradient(165deg,#ffffff_0%,#f4f4f5_50%,#e4e4e7_100%)] bg-[radial-gradient(ellipse_70%_50%_at_50%_25%,rgb(255_255_255/0.92),transparent_55%)] px-5 py-5 pb-7 text-zinc-900 sm:px-6";
 
 const desktopTabListDark =
   "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-center md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-white/[0.12] md:bg-black/30 md:p-0.5";
 
-const desktopTabListLight =
-  "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-center md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-zinc-300/90 md:bg-zinc-200/70 md:p-0.5 md:shadow-[inset_0_1px_0_rgb(255_255_255/0.5)]";
+/* 970ed44 tabListClass: gap-1.5 rounded-xl border … p-1; desktop rail is nowrap + scroll */
+const tabListLightCommit =
+  "gap-1.5 rounded-xl border border-zinc-300/80 bg-zinc-200/60 p-1 inline-flex min-h-0 min-w-0 flex-1 flex-nowrap overflow-x-auto";
+
+const desktopTabListLight = `hidden md:flex md:min-w-0 md:flex-1 md:items-center ${tabListLightCommit}`;
 
 const desktopTriggerDark =
   "inline-flex min-h-9 shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-md border border-transparent px-3 py-1.5 text-[0.8125rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-purple-300/45 hover:text-white focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.92)] data-[state=active]:border-[rgba(142,90,200,0.75)] data-[state=active]:bg-gradient-to-br data-[state=active]:from-[rgba(80,40,120,0.55)] data-[state=active]:to-[rgba(40,20,70,0.65)] data-[state=active]:text-white data-[state=active]:shadow-[0_3px_16px_rgba(90,40,140,0.22)]";
 
+/* 970ed44 tabTriggerClass: min-h-10 rounded-lg px-4 py-2 text-[0.88rem] — light token swap */
 const desktopTriggerLight =
-  "inline-flex min-h-9 shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-md border border-transparent px-3 py-1.5 text-[0.8125rem] font-semibold tracking-wide text-zinc-600 outline-none transition-colors hover:border-zinc-400/80 hover:bg-zinc-100/90 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-[#7350a8]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100 data-[state=active]:border-[#5a3d83] data-[state=active]:bg-[#6d4ba8] data-[state=active]:text-white data-[state=active]:shadow-sm";
+  "inline-flex min-h-10 shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-lg border border-transparent px-4 py-2 text-[0.88rem] font-semibold tracking-wide text-zinc-600 outline-none transition-colors hover:border-zinc-400 hover:bg-zinc-100/90 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-[#7350a8]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100 data-[state=active]:border-[rgba(142,90,200,0.75)] data-[state=active]:bg-gradient-to-br data-[state=active]:from-[rgba(90,55,140,0.85)] data-[state=active]:to-[rgba(60,35,100,0.92)] data-[state=active]:text-white data-[state=active]:shadow-[0_4px_20px_rgba(90,40,140,0.18)]";
+
+/*
+ * 970ed44 Coming Soon: same size, shimmer, and multi-stop gradient shape; hues shifted
+ * slightly darker so the title stays legible on the light grey panel (commit used a dark card).
+ */
+const comingSoonTitleLight =
+  "relative z-[1] m-0 mb-2.5 bg-[length:200%_auto] bg-gradient-to-r from-violet-950 from-0% via-violet-600 via-40% via-fuchsia-600 via-70% to-violet-800 to-100% bg-clip-text text-[clamp(1.75rem,6vw,2.75rem)] font-bold uppercase tracking-[0.06em] text-transparent [animation:dashboard-shimmer_8s_ease-in-out_infinite]";
+
+const comingSoonGlowLight =
+  "pointer-events-none absolute left-1/2 top-1/2 size-[min(18rem,70vw)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(150,90,210,0.14)_0%,transparent_68%)]";
 
 function HamburgerIcon({ className }) {
   return (
@@ -129,11 +146,17 @@ export default function Dashboard() {
       <Tabs.Root
         value={activeTab}
         onValueChange={setActiveTab}
-        className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-3 lg:max-w-6xl xl:max-w-7xl"
+        className={
+          isLight
+            ? "mx-auto flex w-full max-w-4xl flex-1 flex-col"
+            : "mx-auto flex w-full max-w-5xl flex-1 flex-col gap-3 lg:max-w-6xl xl:max-w-7xl"
+        }
       >
         <header
-          className={`flex items-center gap-2 pb-2 pt-1 ${
-            isLight ? "border-b border-zinc-300/70" : "border-b border-white/10"
+          className={`flex items-center gap-2 pt-1 ${
+            isLight
+              ? "border-b border-zinc-300/80 pb-4"
+              : "border-b border-white/10 pb-2"
           }`}
         >
           <Tabs.List
@@ -155,7 +178,7 @@ export default function Dashboard() {
             type="button"
             className={
               isLight
-                ? "-ml-0.5 inline-flex shrink-0 items-center justify-center rounded-lg border border-zinc-300/90 bg-zinc-200/60 p-2 text-zinc-800 shadow-sm hover:border-zinc-400 hover:bg-zinc-200/90 md:hidden"
+                ? "-ml-0.5 inline-flex shrink-0 items-center justify-center rounded-xl border border-zinc-300/90 bg-zinc-200/60 p-2 text-zinc-800 shadow-sm hover:border-zinc-400 hover:bg-zinc-200/90 md:hidden"
                 : "-ml-0.5 inline-flex shrink-0 items-center justify-center rounded-lg border border-white/[0.22] bg-black/35 p-2 text-white hover:border-[rgba(232,197,71,0.35)] md:hidden"
             }
             aria-label={mobileNavOpen ? "Close navigation menu" : "Open navigation menu"}
@@ -173,7 +196,7 @@ export default function Dashboard() {
               type="button"
               className={
                 isLight
-                  ? "cursor-pointer rounded-lg border border-zinc-400 bg-[#6d4ba8] px-3 py-1.5 text-[0.8rem] font-semibold text-white shadow-sm hover:border-zinc-500 hover:bg-[#5e4090]"
+                  ? "cursor-pointer rounded-lg border border-zinc-500/80 bg-[#6d4ba8] px-4 py-2 text-[0.85rem] font-semibold text-white shadow-[0_4px_16px_rgb(24_24_27/0.15)] hover:border-zinc-600 hover:bg-[#5e4090]"
                   : "cursor-pointer rounded-lg border border-white/[0.22] bg-black/35 px-3 py-1.5 text-[0.8rem] font-semibold text-white hover:border-[rgba(232,197,71,0.45)]"
               }
               onClick={() => void signOut()}
@@ -185,9 +208,9 @@ export default function Dashboard() {
 
         <div
           id="dashboard-mobile-nav"
-          className={`grid transition-[grid-template-rows] duration-200 ease-out md:hidden ${
+            className={`grid transition-[grid-template-rows] duration-200 ease-out md:hidden ${
             mobileNavOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-          } ${isLight ? "border-b border-zinc-300/70" : "border-b border-white/[0.08]"}`}
+          } ${isLight ? "border-b border-zinc-300/80" : "border-b border-white/[0.08]"}`}
           aria-hidden={!mobileNavOpen}
         >
           <div className="min-h-0 overflow-hidden">
@@ -201,8 +224,8 @@ export default function Dashboard() {
                   "rounded-lg px-3 py-2.5 text-left text-[0.88rem] font-semibold outline-none transition-colors ";
                 if (isLight) {
                   itemClass += selected
-                    ? "border border-[#5e4090] bg-[#6d4ba8] text-white shadow-sm focus-visible:ring-2 focus-visible:ring-[#7350a8] focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100"
-                    : "border border-zinc-300/60 bg-zinc-200/50 text-zinc-800 hover:border-zinc-400 hover:bg-zinc-200/80 focus-visible:ring-2 focus-visible:ring-[#7350a8]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100";
+                    ? "border border-[rgba(142,90,200,0.75)] bg-gradient-to-br from-[rgba(90,55,140,0.88)] to-[rgba(60,35,100,0.95)] text-white shadow-[0_4px_20px_rgba(90,40,140,0.18)] focus-visible:ring-2 focus-visible:ring-[#7350a8] focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100"
+                    : "border border-zinc-300/70 bg-zinc-200/55 text-zinc-800 hover:border-zinc-400 hover:bg-zinc-200/85 focus-visible:ring-2 focus-visible:ring-[#7350a8]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100";
                 } else {
                   itemClass += selected
                     ? "border border-[rgba(142,90,200,0.75)] bg-gradient-to-br from-[rgba(80,40,120,0.55)] to-[rgba(40,20,70,0.65)] text-white shadow-[0_3px_16px_rgba(90,40,140,0.22)] focus-visible:ring-2 focus-visible:ring-purple-500/65"
@@ -233,28 +256,20 @@ export default function Dashboard() {
             value={tab.id}
             className={`flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl p-8 outline-none sm:p-10 ${
               isLight
-                ? "border border-zinc-300/80 bg-zinc-200/85 text-zinc-900 shadow-[inset_0_1px_0_rgb(255_255_255/0.45),0_10px_28px_rgb(24_24_27/0.07)] focus-visible:ring-2 focus-visible:ring-[#7350a8]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-100"
+                ? "mt-4 border border-zinc-300/90 bg-[#e8e8ec] text-zinc-900 shadow-[0_20px_50px_rgb(24_24_27/0.12)] focus-visible:ring-2 focus-visible:ring-[#7350a8]/45 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
                 : "border border-white/[0.12] bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)] focus-visible:ring-2 focus-visible:ring-purple-500/50"
             }`}
           >
             <div className="relative flex flex-1 flex-col items-center justify-center px-4 py-8 text-center">
-              <span
-                className={`pointer-events-none absolute left-1/2 top-1/2 size-[min(18rem,70vw)] -translate-x-1/2 -translate-y-1/2 rounded-full ${
-                  isLight
-                    ? "bg-[radial-gradient(circle,rgb(139_92_246/0.12)_0%,transparent_65%)]"
-                    : "bg-[radial-gradient(circle,rgba(150,90,210,0.22)_0%,transparent_68%)]"
-                }`}
-                aria-hidden
-              />
-              <p
-                className={
-                  isLight
-                    ? "relative m-0 bg-[length:200%_auto] bg-gradient-to-r from-violet-900 from-0% via-purple-900 via-45% to-violet-950 to-100% bg-clip-text text-[clamp(1.75rem,6vw,2.75rem)] font-bold uppercase tracking-[0.06em] text-transparent [animation:dashboard-shimmer_8s_ease-in-out_infinite]"
-                    : "relative m-0 bg-[length:200%_auto] bg-gradient-to-r from-white from-0% via-violet-300 via-40% via-purple-500 via-70% to-fuchsia-100 to-100% bg-clip-text text-[clamp(1.75rem,6vw,2.75rem)] font-bold uppercase tracking-[0.06em] text-transparent [animation:dashboard-shimmer_8s_ease-in-out_infinite]"
-                }
-              >
+              <span className={isLight ? comingSoonGlowLight : "pointer-events-none absolute left-1/2 top-1/2 size-[min(18rem,70vw)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(150,90,210,0.22)_0%,transparent_68%)]"} aria-hidden />
+              <p className={isLight ? comingSoonTitleLight : "relative z-[1] m-0 bg-[length:200%_auto] bg-gradient-to-r from-white from-0% via-violet-300 via-40% via-purple-500 via-70% to-fuchsia-100 to-100% bg-clip-text text-[clamp(1.75rem,6vw,2.75rem)] font-bold uppercase tracking-[0.06em] text-transparent [animation:dashboard-shimmer_8s_ease-in-out_infinite]"}>
                 Coming Soon!
               </p>
+              {isLight ? (
+                <p className="relative z-[1] m-0 text-[0.92rem] tracking-wide text-zinc-500">
+                  {tab.label} will appear here.
+                </p>
+              ) : null}
             </div>
           </Tabs.Content>
         ))}
