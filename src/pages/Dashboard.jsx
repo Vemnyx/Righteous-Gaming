@@ -1,6 +1,7 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { UsersAdminTable } from "../components/UsersAdminTable";
 
 /** Matches backend/domain: RoleAdmin = 0, RoleMember = 1 */
 const ROLE_ADMIN = 0;
@@ -43,13 +44,17 @@ const desktopTabListDark =
 const desktopTabListLight =
   "hidden md:flex md:flex-1 md:min-w-0 md:flex-nowrap md:items-stretch md:gap-1 md:overflow-x-auto md:rounded-lg md:border md:border-white/[0.12] md:bg-[rgba(42,37,54,0.9)] md:p-1 md:backdrop-blur-sm";
 
-/* ~30% taller bar vs min-h-9; ~50% wider hit area vs px-3 */
+/* ~30% taller bar vs min-h-9; ~50% wider hit area vs px-3. Equal-width tabs on desktop: flex-1 + basis-0 */
 const desktopTriggerDark =
-  "inline-flex min-h-12 shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-md border border-transparent px-[1.125rem] py-2.5 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-purple-300/45 hover:text-white focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.92)] data-[state=active]:border-[rgba(142,90,200,0.75)] data-[state=active]:bg-gradient-to-br data-[state=active]:from-[rgba(80,40,120,0.55)] data-[state=active]:to-[rgba(40,20,70,0.65)] data-[state=active]:text-white data-[state=active]:shadow-[0_3px_16px_rgba(90,40,140,0.22)]";
+  "inline-flex min-h-12 min-w-0 basis-0 cursor-pointer select-none items-center justify-center rounded-md border border-transparent px-[1.125rem] py-2.5 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-purple-300/45 hover:text-white focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.92)] data-[state=active]:border-[rgba(142,90,200,0.75)] data-[state=active]:bg-gradient-to-br data-[state=active]:from-[rgba(80,40,120,0.55)] data-[state=active]:to-[rgba(40,20,70,0.65)] data-[state=active]:text-white data-[state=active]:shadow-[0_3px_16px_rgba(90,40,140,0.22)] md:flex-1 md:whitespace-normal md:text-center md:leading-snug md:break-words";
 
 /* Active/hover purples track Login gradient: from-[#7b4cb8] to-[#5a2f8f] */
 const desktopTriggerLight =
-  "inline-flex min-h-12 shrink-0 cursor-pointer select-none items-center justify-center whitespace-nowrap rounded-md border border-transparent px-[1.125rem] py-2.5 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-[#b998e8]/55 hover:text-white focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(42,37,54,0.92)] data-[state=active]:border-[rgba(152,117,207,0.9)] data-[state=active]:bg-gradient-to-b data-[state=active]:from-[#7b4cb8] data-[state=active]:to-[#5a2f8f] data-[state=active]:text-white data-[state=active]:shadow-[0_4px_18px_rgb(103_61_154/0.42)]";
+  "inline-flex min-h-12 min-w-0 basis-0 cursor-pointer select-none items-center justify-center rounded-md border border-transparent px-[1.125rem] py-2.5 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-[#b998e8]/55 hover:text-white focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(42,37,54,0.92)] data-[state=active]:border-[rgba(152,117,207,0.9)] data-[state=active]:bg-gradient-to-b data-[state=active]:from-[#7b4cb8] data-[state=active]:to-[#5a2f8f] data-[state=active]:text-white data-[state=active]:shadow-[0_4px_18px_rgb(103_61_154/0.42)] md:flex-1 md:whitespace-normal md:text-center md:leading-snug md:break-words";
+
+/** Same surface as desktop tab rails in light mode (logo header chip). */
+const logoChipLight =
+  "rounded-lg border border-white/[0.12] bg-[rgba(42,37,54,0.9)] px-3 py-2 backdrop-blur-sm md:px-3.5";
 
 const comingSoonTitle =
   "relative z-[1] m-0 mb-2.5 bg-[length:200%_auto] bg-gradient-to-r from-white from-0% via-violet-300 via-40% via-purple-500 via-70% to-fuchsia-100 to-100% bg-clip-text text-[clamp(1.75rem,6vw,2.75rem)] font-bold uppercase tracking-[0.06em] text-transparent [animation:dashboard-shimmer_8s_ease-in-out_infinite]";
@@ -79,15 +84,15 @@ function HamburgerIcon({ className }) {
   );
 }
 
-function ThemeToggle({ theme, onChange }) {
+function ThemeToggle({ theme, onChange, className = "" }) {
   const lightMode = theme === "light";
   return (
     <div
-      className={`flex min-h-11 shrink-0 items-stretch gap-0 overflow-hidden rounded-lg border p-0.5 text-[0.74rem] font-semibold leading-none sm:min-h-12 sm:text-[0.8rem] ${
+      className={`flex min-h-11 min-w-0 items-stretch gap-0 overflow-hidden rounded-lg border p-0.5 text-[0.74rem] font-semibold leading-none sm:min-h-12 sm:text-[0.8rem] ${
         lightMode
           ? "border-white/15 bg-[rgba(42,37,54,0.82)] backdrop-blur-sm"
           : "border-white/20 bg-black/40"
-      }`}
+      } ${className}`}
       role="group"
       aria-label="Color mode"
     >
@@ -171,30 +176,10 @@ export default function Dashboard() {
         className={isLight ? tabsRootLight : tabsRootDark}
       >
         <header
-          className={`flex min-h-[4.25rem] items-center gap-3 border-b py-2 md:min-h-[4.5rem] ${
+          className={`flex min-h-[4.25rem] items-center gap-2 border-b py-2 sm:gap-3 md:min-h-[4.5rem] ${
             isLight ? "border-[rgba(80,65,110,0.22)]" : "border-white/10"
           }`}
         >
-          <img
-            src={DASHBOARD_LOGO_URL}
-            alt="Righteous Gaming"
-            className="h-9 w-auto max-w-[min(200px,46vw)] shrink-0 object-contain object-left md:h-10 md:max-w-[240px]"
-          />
-          <Tabs.List
-            className={isLight ? desktopTabListLight : desktopTabListDark}
-            aria-label="Dashboard sections"
-          >
-            {tabs.map((tab) => (
-              <Tabs.Trigger
-                key={tab.id}
-                className={isLight ? desktopTriggerLight : desktopTriggerDark}
-                value={tab.id}
-              >
-                {tab.label}
-              </Tabs.Trigger>
-            ))}
-          </Tabs.List>
-
           <button
             type="button"
             className={
@@ -211,8 +196,39 @@ export default function Dashboard() {
             <HamburgerIcon className="text-[#f4f0fa]" />
           </button>
 
+          <div
+            className={
+              isLight
+                ? `shrink-0 ${logoChipLight}`
+                : "shrink-0"
+            }
+          >
+            <img
+              src={DASHBOARD_LOGO_URL}
+              alt="Righteous Gaming"
+              className="h-9 w-auto max-w-[min(200px,46vw)] object-contain object-left md:h-10 md:max-w-[240px]"
+            />
+          </div>
+
+          <Tabs.List
+            className={isLight ? desktopTabListLight : desktopTabListDark}
+            aria-label="Dashboard sections"
+          >
+            {tabs.map((tab) => (
+              <Tabs.Trigger
+                key={tab.id}
+                className={isLight ? desktopTriggerLight : desktopTriggerDark}
+                value={tab.id}
+              >
+                {tab.label}
+              </Tabs.Trigger>
+            ))}
+          </Tabs.List>
+
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            <ThemeToggle theme={theme} onChange={setTheme} />
+            <div className="hidden shrink-0 md:block">
+              <ThemeToggle theme={theme} onChange={setTheme} />
+            </div>
             <button
               type="button"
               className={
@@ -267,6 +283,17 @@ export default function Dashboard() {
                   </button>
                 );
               })}
+              <div
+                className={`mt-3 border-t px-[1.125rem] pb-1 pt-4 ${
+                  isLight ? "border-[rgba(80,65,110,0.25)]" : "border-white/[0.08]"
+                }`}
+              >
+                <ThemeToggle
+                  theme={theme}
+                  onChange={setTheme}
+                  className="w-full"
+                />
+              </div>
             </nav>
           </div>
         </div>
@@ -281,10 +308,14 @@ export default function Dashboard() {
                 : "bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
             }`}
           >
-            <div className="relative flex flex-1 flex-col items-center justify-center px-4 py-8 text-center">
-              <span className={comingSoonGlow} aria-hidden />
-              <p className={comingSoonTitle}>Coming Soon!</p>
-            </div>
+            {tab.id === "users" ? (
+              <UsersAdminTable isLight={isLight} active={activeTab === tab.id} />
+            ) : (
+              <div className="relative flex flex-1 flex-col items-center justify-center px-4 py-8 text-center">
+                <span className={comingSoonGlow} aria-hidden />
+                <p className={comingSoonTitle}>Coming Soon!</p>
+              </div>
+            )}
           </Tabs.Content>
         ))}
       </Tabs.Root>

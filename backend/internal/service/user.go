@@ -22,6 +22,7 @@ var ErrUserNotFound = errors.New("service: user not found")
 var ErrRegistrationNotFound = errors.New("service: registration not found")
 var ErrRegistrationExpired = errors.New("service: registration expired")
 var ErrUnauthenticated = errors.New("service: unauthenticated")
+var ErrForbidden = errors.New("service: forbidden")
 
 // UserService coordinates user-related use cases.
 type UserService struct {
@@ -58,6 +59,19 @@ func (s *UserService) UserForIDToken(ctx context.Context, idToken string) (*doma
 		return nil, fmt.Errorf("service: user by uid: %w", err)
 	}
 	return domainUserFromRepo(row), nil
+}
+
+// ListUsersPagedForAdmin verifies the Firebase token, ensures the caller is an admin,
+// then returns paginated rows from Postgres.
+func (s *UserService) ListUsersPagedForAdmin(ctx context.Context, idToken string, limit, offset int) ([]repository.User, int, error) {
+	caller, err := s.UserForIDToken(ctx, idToken)
+	if err != nil {
+		return nil, 0, err
+	}
+	if caller.Role == nil || *caller.Role != domain.RoleAdmin {
+		return nil, 0, fmt.Errorf("%w", ErrForbidden)
+	}
+	return s.repo.ListUsersPaged(ctx, limit, offset)
 }
 
 func (s *UserService) RegistrationByCode(ctx context.Context, code string) (*RegistrationLookup, error) {

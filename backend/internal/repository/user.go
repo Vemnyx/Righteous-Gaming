@@ -220,6 +220,51 @@ ON CONFLICT (email) DO NOTHING`
 	return nil
 }
 
+// ListUsersPaged returns a page of users ordered by id ascending, plus total row count for pagination.
+func (r *Repository) ListUsersPaged(ctx context.Context, limit, offset int) ([]User, int, error) {
+	if r.pool == nil {
+		return nil, 0, fmt.Errorf("repository: pool is closed")
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	var total int
+	if err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("repository: count users: %w", err)
+	}
+
+	const q = `
+SELECT id, email, username, COALESCE(uid, ''), role, created_at
+FROM users
+ORDER BY id ASC
+LIMIT $1 OFFSET $2`
+	rows, err := r.pool.Query(ctx, q, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("repository: list users paged: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]User, 0, limit)
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt); err != nil {
+			return nil, 0, fmt.Errorf("repository: list users paged scan: %w", err)
+		}
+		list = append(list, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("repository: list users paged rows: %w", err)
+	}
+	return list, total, nil
+}
+
 // DeleteUserByID removes a user row by primary key (used when compensating a failed downstream step).
 func (r *Repository) DeleteUserByID(ctx context.Context, id int) error {
 	if r.pool == nil {

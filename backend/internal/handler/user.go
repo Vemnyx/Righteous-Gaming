@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -51,6 +52,102 @@ type registrationLookupResponse struct {
 	Email    string    `json:"email"`
 	Code     string    `json:"code"`
 	ExpireAt time.Time `json:"expire_at"`
+}
+
+type adminListedUserJSON struct {
+	ID        int       `json:"id"`
+	Email     string    `json:"email"`
+	Username  *string   `json:"username,omitempty"`
+	UID       string    `json:"uid"`
+	Role      int       `json:"role"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type adminUsersListResponse struct {
+	Users []adminListedUserJSON `json:"users"`
+	Total int                   `json:"total"`
+	Page  int                   `json:"page"`
+	Limit int                   `json:"limit"`
+}
+
+func (h *userHTTP) adminListUsers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	idToken := bearerIDToken(r.Header.Get("Authorization"))
+	if idToken == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	q := r.URL.Query()
+	limit := clampIntQuery(q.Get("limit"), 15, 1, 100)
+	page := clampIntQuery(q.Get("page"), 1, 1, 1_000_000)
+	offset := (page - 1) * limit
+
+	rows, total, err := h.svc.ListUsersPagedForAdmin(r.Context(), idToken, limit, offset)
+	if err != nil {
+		if errors.Is(err, service.ErrValidation) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, service.ErrUnauthenticated) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if errors.Is(err, service.ErrForbidden) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		if errors.Is(err, service.ErrUserNotFound) {
+			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
+		log.Error("failed to list users for admin", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	out := make([]adminListedUserJSON, 0, len(rows))
+	for _, row := range rows {
+		uname := row.Username
+		out = append(out, adminListedUserJSON{
+			ID:        row.ID,
+			Email:     row.Email,
+			Username:  uname,
+			UID:       row.UID,
+			Role:      row.Role,
+			CreatedAt: row.CreatedAt,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(adminUsersListResponse{
+		Users: out,
+		Total: total,
+		Page:  page,
+		Limit: limit,
+	})
+}
+
+func clampIntQuery(s string, fallback, min, max int) int {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return fallback
+	}
+	if n < min {
+		return min
+	}
+	if n > max {
+		return max
+	}
+	return n
 }
 
 func (h *userHTTP) createUser(w http.ResponseWriter, r *http.Request) {
