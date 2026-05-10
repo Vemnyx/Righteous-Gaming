@@ -149,7 +149,7 @@ const desktopTabListShared =
 
 /** One bar: logo + tabs (desktop); logo only surface on mobile while list is hidden. */
 const navRailDark =
-  "box-border flex min-h-[2.875rem] min-w-0 flex-1 items-center gap-1 overflow-visible rounded-lg border border-white/[0.12] bg-black/30 p-1 sm:min-h-12 md:min-h-0 md:items-stretch";
+  "box-border flex min-h-[2.875rem] min-w-0 flex-1 items-center gap-1 overflow-visible rounded-lg border border-white/[0.24] bg-black/30 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:min-h-12 md:min-h-0 md:items-stretch";
 
 const navRailLight =
   "box-border flex min-h-[2.875rem] min-w-0 flex-1 items-center gap-1 overflow-visible rounded-lg border border-white/[0.12] bg-[rgba(42,37,54,0.9)] p-1 backdrop-blur-sm sm:min-h-12 md:min-h-0 md:items-stretch";
@@ -183,8 +183,8 @@ function mobileNavItemSurface(selected, isLight) {
 }
 
 /** Logo sits inside `navRail*`. Mobile: no right divider (tabs hidden); logo centered in rail. */
-const logoInRail =
-  "box-border flex min-w-0 flex-1 items-center justify-center px-2 py-0.5 md:flex-none md:shrink-0 md:justify-start md:border-r md:border-white/[0.1] md:px-2 md:py-0 md:pl-2 md:pr-3";
+const logoInRailBase =
+  "box-border flex min-w-0 flex-1 items-center justify-center px-2 py-0.5 md:flex-none md:shrink-0 md:justify-start md:border-r md:px-2 md:py-0 md:pl-2 md:pr-3";
 
 const comingSoonTitle =
   "relative z-[1] m-0 mb-2.5 bg-[length:200%_auto] bg-gradient-to-r from-white from-0% via-violet-300 via-40% via-purple-500 via-70% to-fuchsia-100 to-100% bg-clip-text text-[clamp(1.75rem,6vw,2.75rem)] font-bold uppercase tracking-[0.06em] text-transparent [animation:dashboard-shimmer_8s_ease-in-out_infinite]";
@@ -198,7 +198,7 @@ const comingSoonGlow =
  * `rounded-b-none` read as one expanded surface.
  */
 const resourcesMenuDark =
-  "absolute left-0 right-0 top-full z-30 flex min-w-0 -translate-y-px flex-col gap-0.5 rounded-b-md rounded-t-none border border-t-0 border-white/[0.12] bg-[rgba(16,8,28,0.97)] p-1 pt-1 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm before:pointer-events-auto before:absolute before:inset-x-0 before:bottom-full before:z-[1] before:h-5 before:content-['']";
+  "absolute left-0 right-0 top-full z-30 flex min-w-0 -translate-y-px flex-col gap-0.5 rounded-b-md rounded-t-none border border-t-0 border-white/[0.24] bg-[rgba(16,8,28,0.97)] p-1 pt-1 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm before:pointer-events-auto before:absolute before:inset-x-0 before:bottom-full before:z-[1] before:h-5 before:content-['']";
 
 const resourcesMenuLight =
   "absolute left-0 right-0 top-full z-30 flex min-w-0 -translate-y-px flex-col gap-0.5 rounded-b-md rounded-t-none border border-t-0 border-white/[0.12] bg-[rgba(42,37,54,0.98)] p-1 pt-1 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-sm before:pointer-events-auto before:absolute before:inset-x-0 before:bottom-full before:z-[1] before:h-5 before:content-['']";
@@ -244,7 +244,7 @@ function ThemeToggle({ theme, onChange, className = "" }) {
       className={`flex min-h-11 min-w-0 items-stretch gap-0 overflow-hidden rounded-lg border p-0.5 text-[0.74rem] font-semibold leading-none sm:min-h-12 sm:text-[0.8rem] ${
         lightMode
           ? "border-white/15 bg-[rgba(42,37,54,0.82)] backdrop-blur-sm"
-          : "border-white/20 bg-black/40"
+          : "border-white/[0.28] bg-black/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
       } ${className}`}
       role="group"
       aria-label="Color mode"
@@ -394,7 +394,7 @@ export default function Dashboard({ onNavigate }) {
         <div className="relative z-50 md:z-auto">
           <header
             className={`relative z-10 flex min-h-[4.25rem] items-center gap-2 border-b-0 py-2 sm:gap-3 md:min-h-[4.5rem] md:border-b ${
-              isLight ? "md:border-[rgba(80,65,110,0.22)]" : "md:border-white/10"
+              isLight ? "md:border-[rgba(80,65,110,0.22)]" : "md:border-white/[0.22]"
             }`}
           >
           <button
@@ -414,7 +414,11 @@ export default function Dashboard({ onNavigate }) {
           </button>
 
           <div className={isLight ? navRailLight : navRailDark}>
-            <div className={logoInRail}>
+            <div
+              className={`${logoInRailBase} ${
+                isLight ? "md:border-white/[0.1]" : "md:border-white/[0.22]"
+              }`}
+            >
               <img
                 src={DASHBOARD_LOGO_URL}
                 alt="Righteous Gaming"
@@ -509,7 +513,7 @@ export default function Dashboard({ onNavigate }) {
           className={`absolute left-0 right-0 top-full z-20 max-h-[min(75dvh,calc(100dvh-4.5rem))] overflow-y-auto overscroll-contain rounded-b-2xl border border-t-0 px-2 py-2 shadow-[0_24px_48px_rgba(0,0,0,0.45)] backdrop-blur-md transition-[opacity,transform] duration-200 ease-out md:hidden ${
             isLight
               ? "border-[rgba(80,65,110,0.28)] bg-[rgba(42,37,54,0.98)]"
-              : "border-white/[0.12] bg-[rgba(16,8,28,0.97)]"
+              : "border-white/[0.26] bg-[rgba(16,8,28,0.97)]"
           } ${
             mobileNavOpen
               ? "pointer-events-auto translate-y-0 opacity-100"
@@ -555,7 +559,7 @@ export default function Dashboard({ onNavigate }) {
                       {mobileResourcesOpen ? (
                         <div
                           className={`flex flex-col gap-1 border-l pl-2 ${
-                            isLight ? "border-[rgba(80,65,110,0.35)]" : "border-white/[0.12]"
+                            isLight ? "border-[rgba(80,65,110,0.35)]" : "border-white/[0.22]"
                           }`}
                           role="group"
                           aria-label="Resources pages"
@@ -604,7 +608,7 @@ export default function Dashboard({ onNavigate }) {
               })}
               <div
                 className={`mt-3 border-t px-[1.125rem] pb-1 pt-4 ${
-                  isLight ? "border-[rgba(80,65,110,0.25)]" : "border-white/[0.08]"
+                  isLight ? "border-[rgba(80,65,110,0.25)]" : "border-white/[0.18]"
                 }`}
               >
                 <ThemeToggle
@@ -621,10 +625,10 @@ export default function Dashboard({ onNavigate }) {
           <Tabs.Content
             key={tab.id}
             value={tab.id}
-            className={`relative z-0 flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl border border-white/[0.12] p-8 outline-none sm:p-10 focus-visible:ring-2 focus-visible:ring-purple-500/50 ${
+            className={`relative z-0 flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl border p-8 outline-none sm:p-10 focus-visible:ring-2 focus-visible:ring-purple-500/50 ${
               isLight
-                ? "bg-gradient-to-b from-[#434054] via-[#353145] to-[#292433] shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
-                : "bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
+                ? "border-white/[0.12] bg-gradient-to-b from-[#434054] via-[#353145] to-[#292433] shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
+                : "border-white/[0.26] bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.06]"
             }`}
           >
             {tab.id === "users" ? (

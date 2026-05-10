@@ -5,7 +5,10 @@ import { cardTypeName } from "../constants/cardType";
 const MD_MIN = 768;
 const TABLE_PAGE_SIZE = 25;
 const PREVIEW_WIDTH = 320;
-const PREVIEW_OFFSET = 20;
+/** Gap from cursor to preview’s left edge — keeps the card clearly to the right of the pointer. */
+const PREVIEW_GAP_X = 36;
+/** Small downward nudge so the preview isn’t glued to the cursor; vertical follow stays gentle. */
+const PREVIEW_GAP_Y = 10;
 
 /** @returns {boolean} */
 function useMediaNarrow() {
@@ -137,16 +140,24 @@ function GridDensityIcon({ level }) {
 function clampPreviewPosition(pos) {
   const w = PREVIEW_WIDTH;
   const maxH = 440;
-  let x = pos.clientX + PREVIEW_OFFSET;
-  let y = pos.clientY + PREVIEW_OFFSET;
-  if (x + w > window.innerWidth - 8) {
-    x = pos.clientX - w - PREVIEW_OFFSET;
+  const pad = 8;
+
+  // Prefer the preview to the right of the cursor (not tucked under / bottom-right of viewport).
+  let x = pos.clientX + PREVIEW_GAP_X;
+  if (x + w > window.innerWidth - pad) {
+    x = pos.clientX - w - PREVIEW_GAP_X;
   }
-  if (x < 8) x = 8;
-  if (y + maxH > window.innerHeight - 8) {
-    y = window.innerHeight - maxH - 8;
+  if (x < pad) x = pad;
+
+  // Start just below the cursor; if there isn’t room below, float above the cursor instead of pinning to the screen bottom.
+  let y = pos.clientY + PREVIEW_GAP_Y;
+  if (y + maxH > window.innerHeight - pad) {
+    y = pos.clientY - maxH - PREVIEW_GAP_Y;
   }
-  if (y < 8) y = 8;
+  if (y < pad) y = pad;
+  if (y + maxH > window.innerHeight - pad) {
+    y = window.innerHeight - maxH - pad;
+  }
   return { x, y };
 }
 
@@ -241,12 +252,21 @@ export function CardsCatalog({ isLight, active }) {
     "inline-flex size-10 items-center justify-center rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 disabled:opacity-40";
   const iconIdle = isLight
     ? "border-white/20 bg-black/25 text-[#f4f0fa]/85 hover:border-white/35 hover:bg-black/35"
-    : "border-white/15 bg-black/20 text-[#f4f0fa]/88 hover:border-white/30 hover:bg-black/30";
+    : "border-white/[0.28] bg-black/20 text-[#f4f0fa]/88 hover:border-white/40 hover:bg-black/30";
   const iconActive = isLight
     ? "border-[#b998e8]/55 bg-[#7b4cb8]/35 text-white shadow-inner"
     : "border-purple-400/45 bg-purple-950/50 text-white";
 
-  const paginatorBtn = `rounded-lg border px-3 py-1.5 text-[0.8125rem] font-medium ${iconIdle} border-white/25 disabled:opacity-40`;
+  const paginatorBtn = `rounded-lg border px-3 py-1.5 text-[0.8125rem] font-medium ${iconIdle} ${
+    isLight ? "border-white/25" : "border-white/[0.28]"
+  } disabled:opacity-40`;
+
+  const tableChromeBorder = isLight
+    ? "border-white/[0.12]"
+    : "border-white/[0.24] ring-1 ring-white/[0.05]";
+  const tableHeadBorder = isLight ? "border-white/[0.12]" : "border-white/[0.20]";
+  const tableRowBorder = isLight ? "border-white/[0.06]" : "border-white/[0.12]";
+  const gridThumbBorder = isLight ? "border-white/[0.1]" : "border-white/[0.20]";
 
   return (
     <div className="relative flex w-full flex-1 flex-col gap-4 px-1 py-2 sm:px-2">
@@ -315,10 +335,10 @@ export function CardsCatalog({ isLight, active }) {
 
       {!loading && view === "table" && !error ? (
         <>
-          <div className="overflow-x-auto rounded-xl border border-white/[0.12] bg-black/20">
+          <div className={`overflow-x-auto rounded-xl border bg-black/20 ${tableChromeBorder}`}>
             <table className="w-full min-w-[36rem] border-collapse text-left text-[0.875rem] text-[#f4f0fa]">
               <thead>
-                <tr className="border-b border-white/[0.12] bg-black/30">
+                <tr className={`border-b bg-black/30 ${tableHeadBorder}`}>
                   <th className="px-4 py-3 font-semibold">Name</th>
                   <th className="min-w-[10rem] px-4 py-3 font-semibold">Set</th>
                   <th className="whitespace-nowrap px-4 py-3 font-semibold">Code</th>
@@ -329,7 +349,7 @@ export function CardsCatalog({ isLight, active }) {
                 {pagedTable.map((c) => (
                   <tr
                     key={c.id}
-                    className="cursor-default border-b border-white/[0.06] transition-colors hover:bg-white/[0.04]"
+                    className={`cursor-default border-b transition-colors hover:bg-white/[0.04] ${tableRowBorder}`}
                   >
                     <td
                       className="relative max-w-[min(28rem,50vw)] px-4 py-2.5 font-medium"
@@ -349,10 +369,14 @@ export function CardsCatalog({ isLight, active }) {
                       }}
                       onMouseLeave={() => setImagePreview(null)}
                     >
-                      <span className="flex items-center gap-2">
-                        <span className="line-clamp-2 min-w-0 flex-1">{c.name}</span>
-                        <PitchDot pitch={c.pitch} />
-                      </span>
+                      <div className="flex max-w-full items-center justify-start gap-1.5">
+                        <span className="min-w-0 max-w-[calc(100%-1.75rem)] break-words line-clamp-2">
+                          {c.name}
+                        </span>
+                        <span className="shrink-0">
+                          <PitchDot pitch={c.pitch} />
+                        </span>
+                      </div>
                     </td>
                     <td className="px-4 py-2.5 text-[#f4f0fa]/90">
                       {c.set_name?.trim() ? c.set_name : "—"}
@@ -403,7 +427,7 @@ export function CardsCatalog({ isLight, active }) {
             {pagedGrid.map((c) => (
               <div
                 key={c.id}
-                className="flex aspect-[63/88] items-center justify-center overflow-hidden rounded-lg border border-white/[0.1] bg-black/30"
+                className={`flex aspect-[63/88] items-center justify-center overflow-hidden rounded-lg border bg-black/30 ${gridThumbBorder}`}
               >
                 {c.image_url ? (
                   <img
@@ -451,7 +475,9 @@ export function CardsCatalog({ isLight, active }) {
 
       {imagePreview ? (
         <div
-          className="pointer-events-none fixed z-[200] overflow-hidden rounded-lg border border-white/25 bg-[#1a1524] shadow-2xl"
+          className={`pointer-events-none fixed z-[200] overflow-hidden rounded-lg border bg-[#1a1524] shadow-2xl ${
+            isLight ? "border-white/25" : "border-white/[0.35]"
+          }`}
           style={{
             left: imagePreview.x,
             top: imagePreview.y,

@@ -64,7 +64,13 @@ export function UsersAdminTable({ isLight, active, onInviteUser }) {
     "rounded-lg border px-3 py-1.5 text-[0.8125rem] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40";
   const btnTheme = isLight
     ? "border-white/25 bg-black/25 text-[#f4f0fa] hover:border-white/40 hover:bg-black/35"
-    : "border-white/20 bg-black/20 text-[#f4f0fa] hover:border-white/35 hover:bg-black/30";
+    : "border-white/[0.28] bg-black/20 text-[#f4f0fa] hover:border-white/40 hover:bg-black/30";
+
+  const tableChromeBorder = isLight
+    ? "border-white/[0.12]"
+    : "border-white/[0.24] ring-1 ring-white/[0.05]";
+  const tableHeadBorder = isLight ? "border-white/12" : "border-white/[0.20]";
+  const tableRowBorder = isLight ? "border-white/[0.08]" : "border-white/[0.12]";
 
   const inviteBtn =
     "rounded-lg border border-white/[0.22] bg-gradient-to-br from-[#7b4cb8] to-[#5a2f8f] px-4 py-2 text-[0.8125rem] font-semibold text-white shadow-[0_3px_14px_rgba(90,47,143,0.38)] hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55";
@@ -97,10 +103,10 @@ export function UsersAdminTable({ isLight, active, onInviteUser }) {
         </div>
       ) : null}
 
-      <div className="overflow-x-auto rounded-xl border border-white/[0.12] bg-black/20">
+      <div className={`overflow-x-auto rounded-xl border bg-black/20 ${tableChromeBorder}`}>
         <table className="w-full min-w-[36rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
           <thead>
-            <tr className="border-b border-white/12 text-[0.68rem] uppercase tracking-wider text-[#f4f0fa]/55">
+            <tr className={`border-b text-[0.68rem] uppercase tracking-wider text-[#f4f0fa]/55 ${tableHeadBorder}`}>
               <th className="px-3 py-2.5 font-semibold sm:px-4">ID</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Email</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Username</th>
@@ -126,7 +132,7 @@ export function UsersAdminTable({ isLight, active, onInviteUser }) {
               rows.map((row) => (
                 <tr
                   key={row.id}
-                  className="border-b border-white/[0.08] last:border-0 hover:bg-white/[0.04]"
+                  className={`border-b last:border-0 hover:bg-white/[0.04] ${tableRowBorder}`}
                 >
                   <td className="whitespace-nowrap px-3 py-2.5 font-mono text-[0.75rem] sm:px-4">
                     {row.id}
