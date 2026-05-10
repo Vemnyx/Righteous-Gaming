@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
 import { cardTypeName } from "../constants/cardType";
 
@@ -176,6 +177,8 @@ export function CardsCatalog({ isLight, active }) {
   const [error, setError] = useState(/** @type {string | null} */ (null));
   /** @type {[{ url: string, x: number, y: number } | null, (v: { url: string, x: number, y: number } | null) => void]} */
   const [imagePreview, setImagePreview] = useState(null);
+  /** @type {[{ url: string, name: string } | null, (v: { url: string, name: string } | null) => void]} */
+  const [gridImageModal, setGridImageModal] = useState(null);
 
   const gridPageSizeVal = useMemo(() => gridPageSize(view, narrow), [view, narrow]);
   const totalGridPages = useMemo(() => {
@@ -203,6 +206,28 @@ export function CardsCatalog({ isLight, active }) {
   useEffect(() => {
     if (gridPage > totalGridPages) setGridPage(totalGridPages);
   }, [gridPage, totalGridPages]);
+
+  useEffect(() => {
+    if (view === "table") setGridImageModal(null);
+  }, [view]);
+
+  useEffect(() => {
+    if (!active) setGridImageModal(null);
+  }, [active]);
+
+  useEffect(() => {
+    if (!gridImageModal) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => {
+      if (e.key === "Escape") setGridImageModal(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [gridImageModal]);
 
   const load = useCallback(async () => {
     if (!active) return;
@@ -425,21 +450,31 @@ export function CardsCatalog({ isLight, active }) {
         <>
           <div className={`grid gap-2 ${gridColClass} sm:gap-2 md:gap-3`}>
             {pagedGrid.map((c) => (
-              <div
-                key={c.id}
-                className={`flex aspect-[63/88] items-center justify-center overflow-hidden rounded-lg border bg-black/30 ${gridThumbBorder}`}
-              >
+              <div key={c.id} className="min-w-0">
                 {c.image_url ? (
-                  <img
-                    src={c.image_url}
-                    alt=""
-                    className="h-full w-full object-contain"
-                    draggable={false}
-                  />
+                  <button
+                    type="button"
+                    className={`flex aspect-[63/88] w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg border bg-black/30 p-0 text-left transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 ${gridThumbBorder}`}
+                    aria-label={`Open full image: ${c.name}`}
+                    onClick={() =>
+                      setGridImageModal({ url: c.image_url, name: c.name ?? "" })
+                    }
+                  >
+                    <img
+                      src={c.image_url}
+                      alt=""
+                      className="h-full w-full object-contain"
+                      draggable={false}
+                    />
+                  </button>
                 ) : (
-                  <span className="px-1 text-center text-[0.65rem] leading-tight text-[#f4f0fa]/45">
-                    {c.name}
-                  </span>
+                  <div
+                    className={`flex aspect-[63/88] items-center justify-center overflow-hidden rounded-lg border bg-black/30 ${gridThumbBorder}`}
+                  >
+                    <span className="px-1 text-center text-[0.65rem] leading-tight text-[#f4f0fa]/45">
+                      {c.name}
+                    </span>
+                  </div>
                 )}
               </div>
             ))}
@@ -473,21 +508,46 @@ export function CardsCatalog({ isLight, active }) {
         </>
       ) : null}
 
-      {imagePreview ? (
-        <div
-          className={`pointer-events-none fixed z-[200] overflow-hidden rounded-lg border bg-[#1a1524] shadow-2xl ${
-            isLight ? "border-white/25" : "border-white/[0.35]"
-          }`}
-          style={{
-            left: imagePreview.x,
-            top: imagePreview.y,
-            width: PREVIEW_WIDTH,
-            maxWidth: "min(320px, calc(100vw - 16px))",
-          }}
-        >
-          <img src={imagePreview.url} alt="" className="h-auto w-full object-contain" draggable={false} />
-        </div>
-      ) : null}
+      {imagePreview && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className={`pointer-events-none fixed z-[10000] overflow-hidden rounded-lg border bg-[#1a1524] shadow-2xl ${
+                isLight ? "border-white/25" : "border-white/[0.35]"
+              }`}
+              style={{
+                left: imagePreview.x,
+                top: imagePreview.y,
+                width: PREVIEW_WIDTH,
+                maxWidth: "min(320px, calc(100vw - 16px))",
+              }}
+            >
+              <img src={imagePreview.url} alt="" className="h-auto w-full object-contain" draggable={false} />
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {gridImageModal && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[10001] flex cursor-default items-center justify-center bg-black/80 p-3 sm:p-6"
+              role="dialog"
+              aria-modal="true"
+              aria-label={gridImageModal.name ? `Card: ${gridImageModal.name}` : "Card image"}
+              onClick={() => setGridImageModal(null)}
+            >
+              <div className="flex h-[85vh] w-full max-w-[min(100%,96vw)] items-center justify-center">
+                <img
+                  src={gridImageModal.url}
+                  alt={gridImageModal.name || "Card"}
+                  className="max-h-full max-w-full object-contain select-none"
+                  draggable={false}
+                />
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
