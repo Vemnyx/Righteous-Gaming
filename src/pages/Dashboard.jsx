@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { UsersAdminTable } from "../components/UsersAdminTable";
 import { CardsCatalog } from "../components/CardsCatalog";
+import { CardDetailPage } from "../components/CardDetailPage";
 
 /** Persisted before opening Invite User so Back restores the dashboard URL (e.g. `/users`). */
 const SESSION_INVITE_RETURN_KEY = "rg-dashboard-return-url";
@@ -24,22 +25,30 @@ const RESOURCE_SUB_LINKS = [
 /**
  * @param {string} tabId
  * @param {string | null} resourcesChild — segment after `/resources/`, e.g. `cards`
+ * @param {string | null} [resourcesCardIdentifier] — Fab `card_identifier` for `/resources/cards/:id`
  */
-function buildDashboardPathname(tabId, resourcesChild) {
+function buildDashboardPathname(tabId, resourcesChild, resourcesCardIdentifier) {
   if (tabId === RESOURCES_TAB_ID) {
     const seg =
       resourcesChild === "cards" || resourcesChild === "card-ranker"
         ? resourcesChild
         : DEFAULT_RESOURCES_SEGMENT;
+    if (
+      seg === "cards" &&
+      resourcesCardIdentifier != null &&
+      String(resourcesCardIdentifier).trim() !== ""
+    ) {
+      return `/resources/cards/${encodeURIComponent(String(resourcesCardIdentifier).trim())}`;
+    }
     return `/resources/${seg}`;
   }
   return `/${tabId}`;
 }
 
-function replaceDashboardUrl(tabId, resourcesChild) {
+function replaceDashboardUrl(tabId, resourcesChild, resourcesCardIdentifier) {
   try {
     const u = new URL(window.location.href);
-    u.pathname = buildDashboardPathname(tabId, resourcesChild);
+    u.pathname = buildDashboardPathname(tabId, resourcesChild, resourcesCardIdentifier);
     u.search = "";
     const next = `${u.pathname}${u.search}${u.hash}`;
     const cur = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -49,64 +58,104 @@ function replaceDashboardUrl(tabId, resourcesChild) {
   }
 }
 
+function pushDashboardUrl(tabId, resourcesChild, resourcesCardIdentifier) {
+  try {
+    const u = new URL(window.location.href);
+    u.pathname = buildDashboardPathname(tabId, resourcesChild, resourcesCardIdentifier);
+    u.search = "";
+    const next = `${u.pathname}${u.search}${u.hash}`;
+    const cur = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (next !== cur) window.history.pushState({}, "", next);
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * @param {string} pathname
- * @returns {{ kind: "empty" } | { kind: "invalid" } | { kind: "ok", tabId: string, resourcesChild: string | null }}
+ * @returns {{ kind: "empty" } | { kind: "invalid" } | { kind: "ok", tabId: string, resourcesChild: string | null, resourcesCardIdentifier: string | null }}
  */
 function parseDashboardPathname(pathname) {
   const parts = pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
   if (parts.length === 0) return { kind: "empty" };
 
-  const [a, b, ...rest] = parts;
-  if (rest.length > 0) return { kind: "invalid" };
+  const [a, b, c, ...rest] = parts;
 
   if (a === "resources") {
-    if (b === "cards" || b === "card-ranker") {
-      return { kind: "ok", tabId: RESOURCES_TAB_ID, resourcesChild: b };
+    if (rest.length > 0) return { kind: "invalid" };
+    if (b === "cards") {
+      if (c === undefined) {
+        return {
+          kind: "ok",
+          tabId: RESOURCES_TAB_ID,
+          resourcesChild: "cards",
+          resourcesCardIdentifier: null,
+        };
+      }
+      return {
+        kind: "ok",
+        tabId: RESOURCES_TAB_ID,
+        resourcesChild: "cards",
+        resourcesCardIdentifier: decodeURIComponent(c),
+      };
+    }
+    if (b === "card-ranker") {
+      if (c !== undefined) return { kind: "invalid" };
+      return {
+        kind: "ok",
+        tabId: RESOURCES_TAB_ID,
+        resourcesChild: "card-ranker",
+        resourcesCardIdentifier: null,
+      };
     }
     return { kind: "invalid" };
   }
 
-  if (b !== undefined) return { kind: "invalid" };
+  if (b !== undefined || c !== undefined) return { kind: "invalid" };
 
-  return { kind: "ok", tabId: a, resourcesChild: null };
+  return {
+    kind: "ok",
+    tabId: a,
+    resourcesChild: null,
+    resourcesCardIdentifier: null,
+  };
 }
 
 /**
  * @param {string} pathname
  * @param {string} search
  * @param {{ id: string }[]} tabsAllowed
- * @returns {{ tabId: string, resourcesChild: string | null }}
+ * @returns {{ tabId: string, resourcesChild: string | null, resourcesCardIdentifier: string | null }}
  */
 function resolveDashboardLocation(pathname, search, tabsAllowed) {
   const parsed = parseDashboardPathname(pathname);
 
   if (parsed.kind === "invalid") {
-    return { tabId: FALLBACK_TAB_ID, resourcesChild: null };
+    return { tabId: FALLBACK_TAB_ID, resourcesChild: null, resourcesCardIdentifier: null };
   }
 
   if (parsed.kind === "empty") {
     try {
       const raw = new URLSearchParams(search).get("tab");
       if (raw === RESOURCES_TAB_ID) {
-        return { tabId: FALLBACK_TAB_ID, resourcesChild: null };
+        return { tabId: FALLBACK_TAB_ID, resourcesChild: null, resourcesCardIdentifier: null };
       }
       if (raw && tabsAllowed.some((t) => t.id === raw)) {
-        return { tabId: raw, resourcesChild: null };
+        return { tabId: raw, resourcesChild: null, resourcesCardIdentifier: null };
       }
     } catch {
       /* ignore */
     }
-    return { tabId: FALLBACK_TAB_ID, resourcesChild: null };
+    return { tabId: FALLBACK_TAB_ID, resourcesChild: null, resourcesCardIdentifier: null };
   }
 
-  let { tabId, resourcesChild } = parsed;
+  let { tabId, resourcesChild, resourcesCardIdentifier } = parsed;
 
   if (!tabsAllowed.some((t) => t.id === tabId)) {
-    return { tabId: FALLBACK_TAB_ID, resourcesChild: null };
+    return { tabId: FALLBACK_TAB_ID, resourcesChild: null, resourcesCardIdentifier: null };
   }
 
-  return { tabId, resourcesChild };
+  return { tabId, resourcesChild, resourcesCardIdentifier };
 }
 
 /** Matches backend/domain: RoleAdmin = 0, RoleMember = 1 */
@@ -285,6 +334,10 @@ export default function Dashboard({ onNavigate }) {
   const [activeTab, setActiveTab] = useState(ALL_TABS[0].id);
   /** When `activeTab === resources`, which sub-route is shown (`/resources/...`). */
   const [resourcesChild, setResourcesChild] = useState(/** @type {string | null} */ (null));
+  /** Fab `card_identifier` when URL is `/resources/cards/:identifier`. */
+  const [resourcesCardIdentifier, setResourcesCardIdentifier] = useState(
+    /** @type {string | null} */ (null),
+  );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileResourcesOpen, setMobileResourcesOpen] = useState(false);
   const [resourcesHovered, setResourcesHovered] = useState(false);
@@ -306,10 +359,12 @@ export default function Dashboard({ onNavigate }) {
     setActiveTab(tabId);
     if (tabId === RESOURCES_TAB_ID) {
       setResourcesChild(DEFAULT_RESOURCES_SEGMENT);
-      replaceDashboardUrl(RESOURCES_TAB_ID, DEFAULT_RESOURCES_SEGMENT);
+      setResourcesCardIdentifier(null);
+      replaceDashboardUrl(RESOURCES_TAB_ID, DEFAULT_RESOURCES_SEGMENT, null);
     } else {
       setResourcesChild(null);
-      replaceDashboardUrl(tabId, null);
+      setResourcesCardIdentifier(null);
+      replaceDashboardUrl(tabId, null, null);
       setMobileResourcesOpen(false);
     }
   }, []);
@@ -317,7 +372,22 @@ export default function Dashboard({ onNavigate }) {
   const goResourcesSub = useCallback((segment) => {
     setActiveTab(RESOURCES_TAB_ID);
     setResourcesChild(segment);
-    replaceDashboardUrl(RESOURCES_TAB_ID, segment);
+    setResourcesCardIdentifier(null);
+    replaceDashboardUrl(RESOURCES_TAB_ID, segment, null);
+  }, []);
+
+  const openCardDetail = useCallback((identifier) => {
+    const id = String(identifier).trim();
+    if (!id) return;
+    setActiveTab(RESOURCES_TAB_ID);
+    setResourcesChild("cards");
+    setResourcesCardIdentifier(id);
+    pushDashboardUrl(RESOURCES_TAB_ID, "cards", id);
+  }, []);
+
+  const closeCardDetail = useCallback(() => {
+    setResourcesCardIdentifier(null);
+    pushDashboardUrl(RESOURCES_TAB_ID, "cards", null);
   }, []);
 
   useEffect(() => {
@@ -329,9 +399,16 @@ export default function Dashboard({ onNavigate }) {
       );
       const nextTab = resolved.tabId;
       const nextChild = nextTab === RESOURCES_TAB_ID ? resolved.resourcesChild : null;
+      const nextCardId =
+        nextTab === RESOURCES_TAB_ID ? resolved.resourcesCardIdentifier : null;
       setActiveTab(nextTab);
       setResourcesChild(nextChild);
-      replaceDashboardUrl(nextTab, nextTab === RESOURCES_TAB_ID ? nextChild : null);
+      setResourcesCardIdentifier(nextCardId);
+      replaceDashboardUrl(
+        nextTab,
+        nextTab === RESOURCES_TAB_ID ? nextChild : null,
+        nextTab === RESOURCES_TAB_ID ? nextCardId : null,
+      );
       setMobileResourcesOpen(false);
     }
 
@@ -652,10 +729,26 @@ export default function Dashboard({ onNavigate }) {
                 }
               />
             ) : tab.id === RESOURCES_TAB_ID ? (
-              resourcesChild === "cards" ? (
+              resourcesChild === "cards" && resourcesCardIdentifier ? (
+                <CardDetailPage
+                  isLight={isLight}
+                  identifier={resourcesCardIdentifier}
+                  active={
+                    activeTab === RESOURCES_TAB_ID &&
+                    resourcesChild === "cards" &&
+                    Boolean(resourcesCardIdentifier)
+                  }
+                  onBackToCatalog={closeCardDetail}
+                />
+              ) : resourcesChild === "cards" ? (
                 <CardsCatalog
                   isLight={isLight}
-                  active={activeTab === RESOURCES_TAB_ID && resourcesChild === "cards"}
+                  active={
+                    activeTab === RESOURCES_TAB_ID &&
+                    resourcesChild === "cards" &&
+                    !resourcesCardIdentifier
+                  }
+                  onOpenCardDetail={openCardDetail}
                 />
               ) : (
                 <div

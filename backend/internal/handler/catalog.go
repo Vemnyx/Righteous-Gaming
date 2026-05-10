@@ -319,19 +319,24 @@ func (h *catalogHTTP) getCard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	idStr := strings.TrimSpace(r.PathValue("id"))
-	id, err := strconv.Atoi(idStr)
-	if err != nil || id <= 0 {
+	key := strings.TrimSpace(r.PathValue("id"))
+	if key == "" {
 		writeMessageError(w, http.StatusBadRequest, "invalid card id")
 		return
 	}
-	c, err := h.app.Repo.CardByID(r.Context(), id)
+	var c *repository.Card
+	var err error
+	if id, convErr := strconv.Atoi(key); convErr == nil && id > 0 {
+		c, err = h.app.Repo.CardByID(r.Context(), id)
+	} else {
+		c, err = h.app.Repo.CardByCardIdentifier(r.Context(), key)
+	}
 	if err != nil {
 		if errors.Is(err, repository.ErrCardNotFound) {
 			writeMessageError(w, http.StatusNotFound, "card not found")
 			return
 		}
-		log.Error("catalog get card", "error", err, "id", id)
+		log.Error("catalog get card", "error", err, "key", key)
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}

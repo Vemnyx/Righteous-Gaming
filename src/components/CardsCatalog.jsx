@@ -163,9 +163,9 @@ function clampPreviewPosition(pos) {
 }
 
 /**
- * @param {{ isLight: boolean, active: boolean }} props
+ * @param {{ isLight: boolean, active: boolean, onOpenCardDetail?: (identifier: string) => void }} props
  */
-export function CardsCatalog({ isLight, active }) {
+export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
   const { user } = useAuth();
   const narrow = useMediaNarrow();
   /** @type {['table' | 'grid-sm' | 'grid-md' | 'grid-lg', (v: 'table' | 'grid-sm' | 'grid-md' | 'grid-lg') => void]} */
@@ -396,7 +396,20 @@ export function CardsCatalog({ isLight, active }) {
                     >
                       <div className="flex max-w-full items-center justify-start gap-1.5">
                         <span className="min-w-0 max-w-[calc(100%-1.75rem)] break-words line-clamp-2">
-                          {c.name}
+                          {c.card_identifier && onOpenCardDetail ? (
+                            <a
+                              href={`/resources/cards/${encodeURIComponent(c.card_identifier)}`}
+                              className="font-medium text-[#c4a9ef] underline-offset-2 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                onOpenCardDetail(c.card_identifier);
+                              }}
+                            >
+                              {c.name}
+                            </a>
+                          ) : (
+                            <span className="font-medium">{c.name}</span>
+                          )}
                         </span>
                         <span className="shrink-0">
                           <PitchDot pitch={c.pitch} />

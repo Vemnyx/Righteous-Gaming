@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -204,19 +205,83 @@ func (r *Repository) CreateCardsBatch(ctx context.Context, inputs []CreateCardIn
 	return out, nil
 }
 
+// cardSelectJoinSet is cards plus set display name (set_name), for single-card reads and lists.
+const cardSelectJoinSet = `
+SELECT ` + cardSelectColumnsFromC + `, s.name AS set_name
+FROM cards c
+INNER JOIN sets s ON s.id = c.set_id
+`
+
 // CardByID returns the card with the given id, or ErrCardNotFound.
 func (r *Repository) CardByID(ctx context.Context, id int) (*Card, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
-	q := `SELECT ` + cardSelectColumns + ` FROM cards WHERE id = $1`
+	q := cardSelectJoinSet + ` WHERE c.id = $1`
 	row := r.pool.QueryRow(ctx, q, id)
-	c, err := scanCard(row)
+	c, err := scanCardWithSetName(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrCardNotFound
 		}
 		return nil, fmt.Errorf("repository: card by id: %w", err)
+	}
+	return c, nil
+}
+
+func scanCardWithSetName(row pgx.Row) (*Card, error) {
+	var c Card
+	err := row.Scan(
+		&c.ID,
+		&c.SetID,
+		&c.Name,
+		&c.CardIdentifier,
+		&c.ImageURL,
+		&c.FunctionalText,
+		&c.Rarity,
+		&c.SetCode,
+		&c.SetNum,
+		&c.Type,
+		&c.Subtypes,
+		&c.Classes,
+		&c.Hybrid,
+		&c.Talents,
+		&c.Pitch,
+		&c.Cost,
+		&c.Power,
+		&c.Block,
+		&c.Heroes,
+		&c.Life,
+		&c.Intellect,
+		&c.Keywords,
+		&c.Formats,
+		&c.Specializations,
+		&c.Fusions,
+		&c.SetName,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// CardByCardIdentifier returns the card with the given card_identifier, or ErrCardNotFound.
+func (r *Repository) CardByCardIdentifier(ctx context.Context, identifier string) (*Card, error) {
+	ident := strings.TrimSpace(identifier)
+	if ident == "" {
+		return nil, ErrCardNotFound
+	}
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	q := cardSelectJoinSet + ` WHERE c.card_identifier = $1`
+	row := r.pool.QueryRow(ctx, q, ident)
+	c, err := scanCardWithSetName(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrCardNotFound
+		}
+		return nil, fmt.Errorf("repository: card by card_identifier: %w", err)
 	}
 	return c, nil
 }
