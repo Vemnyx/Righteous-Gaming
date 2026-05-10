@@ -1,0 +1,98 @@
+Follow these rules to map card json presented to the card fields to populate a json that can be used to populate card rows in our database
+
+1. set_id
+
+set to 1
+
+name
+2. image_url
+
+set to the value of
+
+"https://content.fabrary.net/cards/" + card.defaultImage + ".webp"
+
+3. functional_text
+
+set to card.functionalText
+
+4. rarity
+
+use card.Rarity. If it is set to Basic then set it to the common enum. otherwise use the appropriate enums
+
+5. set_code
+
+Set to "OMN"
+
+6. set_num
+
+use card.SetIdentifiers. Use the numerical value next to "OMN"
+
+7. type
+
+use card.Types. Each value should only have 1 entry. Use the appropriate enums we set. If the type is action and it has the subtype of attack then set to Attack Action. If it does not have the subtype of attack then set to the Non-Attack Action enum.
+
+8. subtypes
+
+use card.Subtypes and set to the appropriate enums
+
+9. classes
+
+use card.Classes and set to the appropriate enums
+
+10. hybrid
+
+just let it default to false on all of these except for the card Third Eye of the Sphinx set that to true
+
+11. talents
+
+use card.Talents and set to the appropriate enums
+
+12. pitch
+
+set to the value of card.Pitch if the card has no pitch leave empty
+
+13. cost
+
+set to the value of card.Cost. if the card has no cost leave empty
+
+14. power
+
+set to the value of card.Power. if the card has no power then leave empty
+
+15. block
+
+set to the value of card.Defense. if the card has nod defense then leave empty
+
+16. heroes
+
+Set this to card.legalheroes and the appropriate enum values.
+
+17. life
+
+set to the value of card.Life. if the card has no life then leave empty.
+
+18. intellect
+
+set this to the value of card.Intellect. if the card has no intellect then leave empty.
+
+19. keywords
+
+set this to the value of card.Keywords.
+
+20. formats
+
+set this value to the value of card.Keys for the formats we support in the enums. Draft and Sealed can be mapped to our limited enum.
+
+21. card SetIdentifiers
+
+set this value to the value of card.SetIdentifier
+
+22. specializations
+
+set this values to the value of card.Specialization if they are available
+
+23. fusions
+
+set this values to the value of card.Fusions if they are available
+
+
