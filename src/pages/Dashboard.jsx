@@ -191,12 +191,16 @@ const comingSoonTitle =
 const comingSoonGlow =
   "pointer-events-none absolute left-1/2 top-1/2 size-[min(18rem,70vw)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(150,90,210,0.22)_0%,transparent_68%)]";
 
-/** Full-width rows under Resources tab on desktop (matches nav theme). */
+/**
+ * Flush under the tab trigger (`-translate-y-px`, no margin gap). `before:` extends an invisible
+ * hit area upward so the cursor can reach items without leaving hover. `rounded-t-none` + trigger
+ * `rounded-b-none` read as one expanded surface.
+ */
 const resourcesMenuDark =
-  "absolute left-0 right-0 top-full z-30 mt-1 flex min-w-0 flex-col gap-0.5 rounded-md border border-white/[0.12] bg-[rgba(16,8,28,0.97)] p-1 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm";
+  "absolute left-0 right-0 top-full z-30 flex min-w-0 -translate-y-px flex-col gap-0.5 rounded-b-md rounded-t-none border border-t-0 border-white/[0.12] bg-[rgba(16,8,28,0.97)] p-1 pt-1 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm before:pointer-events-auto before:absolute before:inset-x-0 before:bottom-full before:z-[1] before:h-5 before:content-['']";
 
 const resourcesMenuLight =
-  "absolute left-0 right-0 top-full z-30 mt-1 flex min-w-0 flex-col gap-0.5 rounded-md border border-white/[0.12] bg-[rgba(42,37,54,0.98)] p-1 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-sm";
+  "absolute left-0 right-0 top-full z-30 flex min-w-0 -translate-y-px flex-col gap-0.5 rounded-b-md rounded-t-none border border-t-0 border-white/[0.12] bg-[rgba(42,37,54,0.98)] p-1 pt-1 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-sm before:pointer-events-auto before:absolute before:inset-x-0 before:bottom-full before:z-[1] before:h-5 before:content-['']";
 
 const resourcesMenuItemDark =
   "w-full rounded-md px-3 py-2.5 text-left text-[0.8125rem] font-semibold tracking-wide text-[#f4f0fa]/90 outline-none transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:ring-2 focus-visible:ring-purple-500/65";
@@ -435,7 +439,11 @@ export default function Dashboard({ onNavigate }) {
                     }
                   >
                     <Tabs.Trigger
-                      className={isLight ? desktopTriggerLight : desktopTriggerDark}
+                      className={`${isLight ? desktopTriggerLight : desktopTriggerDark}${
+                        showDesktopSubmenu && resourcesHovered
+                          ? " relative z-[32] rounded-b-none md:rounded-b-none"
+                          : ""
+                      }`}
                       value={tab.id}
                     >
                       {triggerLabel}
