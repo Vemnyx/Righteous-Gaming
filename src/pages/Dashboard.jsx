@@ -142,16 +142,16 @@ const tabsRootDark = tabsRootSharedWidth;
 /** Wide layout only; no extra surface (matches pre–purple-card light look). */
 const tabsRootLight = tabsRootSharedWidth;
 
-/** Tab row only (border/background live on `navRail*` wrapper with logo). */
+/** Tab row only (border/background live on `navRail*` wrapper with logo). `overflow-visible` so Resources dropdown is not clipped. */
 const desktopTabListShared =
-  "hidden min-w-0 md:flex md:flex-1 md:flex-nowrap md:items-stretch md:gap-1 md:overflow-x-auto";
+  "hidden min-w-0 md:flex md:flex-1 md:flex-nowrap md:items-stretch md:gap-1 md:overflow-visible";
 
 /** One bar: logo + tabs (desktop); logo only surface on mobile while list is hidden. */
 const navRailDark =
-  "box-border flex min-h-[2.875rem] min-w-0 flex-1 items-center gap-1 rounded-lg border border-white/[0.12] bg-black/30 p-1 sm:min-h-12 md:min-h-0 md:items-stretch";
+  "box-border flex min-h-[2.875rem] min-w-0 flex-1 items-center gap-1 overflow-visible rounded-lg border border-white/[0.12] bg-black/30 p-1 sm:min-h-12 md:min-h-0 md:items-stretch";
 
 const navRailLight =
-  "box-border flex min-h-[2.875rem] min-w-0 flex-1 items-center gap-1 rounded-lg border border-white/[0.12] bg-[rgba(42,37,54,0.9)] p-1 backdrop-blur-sm sm:min-h-12 md:min-h-0 md:items-stretch";
+  "box-border flex min-h-[2.875rem] min-w-0 flex-1 items-center gap-1 overflow-visible rounded-lg border border-white/[0.12] bg-[rgba(42,37,54,0.9)] p-1 backdrop-blur-sm sm:min-h-12 md:min-h-0 md:items-stretch";
 
 /* ~30% taller bar vs min-h-9; ~50% wider hit area vs px-3. Equal-width tabs on desktop: flex-1 + basis-0 */
 const desktopTriggerDark =
@@ -170,6 +170,25 @@ const comingSoonTitle =
 
 const comingSoonGlow =
   "pointer-events-none absolute left-1/2 top-1/2 size-[min(18rem,70vw)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(150,90,210,0.22)_0%,transparent_68%)]";
+
+/** Full-width rows under Resources tab on desktop (matches nav theme). */
+const resourcesMenuDark =
+  "absolute left-0 right-0 top-full z-30 mt-1 flex min-w-0 flex-col gap-0.5 rounded-md border border-white/[0.12] bg-[rgba(16,8,28,0.97)] p-1 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-sm";
+
+const resourcesMenuLight =
+  "absolute left-0 right-0 top-full z-30 mt-1 flex min-w-0 flex-col gap-0.5 rounded-md border border-white/[0.12] bg-[rgba(42,37,54,0.98)] p-1 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-sm";
+
+const resourcesMenuItemDark =
+  "w-full rounded-md px-3 py-2.5 text-left text-[0.8125rem] font-semibold tracking-wide text-[#f4f0fa]/90 outline-none transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:ring-2 focus-visible:ring-purple-500/65";
+
+const resourcesMenuItemLight =
+  "w-full rounded-md px-3 py-2.5 text-left text-[0.8125rem] font-semibold tracking-wide text-[#f4f0fa]/90 outline-none transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/60";
+
+const resourcesMenuItemActiveDark =
+  "border border-[rgba(142,90,200,0.75)] bg-gradient-to-br from-[rgba(80,40,120,0.55)] to-[rgba(40,20,70,0.65)] text-white shadow-[0_2px_12px_rgba(90,40,140,0.22)]";
+
+const resourcesMenuItemActiveLight =
+  "border border-[rgba(152,117,207,0.85)] bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] text-white shadow-[0_2px_14px_rgb(103_61_154/0.35)]";
 
 function HamburgerIcon({ className }) {
   return (
@@ -250,6 +269,14 @@ export default function Dashboard({ onNavigate }) {
     return ALL_TABS.filter((t) => !t.requiresAdmin || isAdmin);
   }, [sessionProfile]);
 
+  const resourcesTabLabel = useMemo(() => {
+    if (activeTab !== RESOURCES_TAB_ID) {
+      return ALL_TABS.find((t) => t.id === RESOURCES_TAB_ID)?.label ?? "Resources";
+    }
+    const hit = RESOURCE_SUB_LINKS.find((l) => l.segment === resourcesChild);
+    return hit?.label ?? "Resources";
+  }, [activeTab, resourcesChild]);
+
   const handleTabNavigate = useCallback((tabId) => {
     setActiveTab(tabId);
     if (tabId === RESOURCES_TAB_ID) {
@@ -327,11 +354,21 @@ export default function Dashboard({ onNavigate }) {
         onValueChange={handleTabNavigate}
         className={isLight ? tabsRootLight : tabsRootDark}
       >
-        <header
-          className={`flex min-h-[4.25rem] items-center gap-2 border-b-0 py-2 sm:gap-3 md:min-h-[4.5rem] md:border-b ${
-            isLight ? "md:border-[rgba(80,65,110,0.22)]" : "md:border-white/10"
+        {/* Below header chrome; keeps mobile drawer above main panels */}
+        <div
+          className={`fixed inset-0 z-40 bg-black/45 transition-opacity duration-200 ease-out md:hidden ${
+            mobileNavOpen ? "opacity-100" : "pointer-events-none opacity-0"
           }`}
-        >
+          aria-hidden={!mobileNavOpen}
+          onClick={() => setMobileNavOpen(false)}
+        />
+
+        <div className="relative z-50 md:z-auto">
+          <header
+            className={`relative z-10 flex min-h-[4.25rem] items-center gap-2 border-b-0 py-2 sm:gap-3 md:min-h-[4.5rem] md:border-b ${
+              isLight ? "md:border-[rgba(80,65,110,0.22)]" : "md:border-white/10"
+            }`}
+          >
           <button
             type="button"
             className={
@@ -361,26 +398,37 @@ export default function Dashboard({ onNavigate }) {
                 tab.id === RESOURCES_TAB_ID ? (
                   <div
                     key={tab.id}
-                    className="relative flex min-h-12 min-w-0 flex-1 basis-0 flex-col justify-stretch"
+                    className="relative z-20 flex min-h-12 min-w-0 flex-1 basis-0 flex-col items-stretch self-stretch"
                     onMouseEnter={() => setResourcesHovered(true)}
                     onMouseLeave={() => setResourcesHovered(false)}
                   >
-                    {!resourcesHovered ? (
-                      <Tabs.Trigger
-                        className={isLight ? desktopTriggerLight : desktopTriggerDark}
-                        value={tab.id}
+                    <Tabs.Trigger
+                      className={isLight ? desktopTriggerLight : desktopTriggerDark}
+                      value={tab.id}
+                    >
+                      {resourcesTabLabel}
+                    </Tabs.Trigger>
+                    {resourcesHovered ? (
+                      <div
+                        className={isLight ? resourcesMenuLight : resourcesMenuDark}
+                        role="menu"
+                        aria-label="Resources pages"
                       >
-                        {tab.label}
-                      </Tabs.Trigger>
-                    ) : (
-                      <div className="flex min-h-12 min-w-0 flex-1 gap-1">
                         {RESOURCE_SUB_LINKS.map((link) => {
-                          const subActive = resourcesChild === link.segment;
+                          const subActive =
+                            activeTab === RESOURCES_TAB_ID && resourcesChild === link.segment;
                           return (
                             <button
                               key={link.segment}
                               type="button"
-                              className={isLight ? desktopTriggerLight : desktopTriggerDark}
+                              role="menuitem"
+                              className={`${isLight ? resourcesMenuItemLight : resourcesMenuItemDark} ${
+                                subActive
+                                  ? isLight
+                                    ? resourcesMenuItemActiveLight
+                                    : resourcesMenuItemActiveDark
+                                  : "border border-transparent"
+                              }`}
                               data-state={subActive ? "active" : "inactive"}
                               onClick={() => goResourcesSub(link.segment)}
                             >
@@ -389,7 +437,7 @@ export default function Dashboard({ onNavigate }) {
                           );
                         })}
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 ) : (
                   <Tabs.Trigger
@@ -420,18 +468,23 @@ export default function Dashboard({ onNavigate }) {
               Sign out
             </button>
           </div>
-        </header>
+          </header>
 
-        <div
+          <div
           id="dashboard-mobile-nav"
-            className={`grid transition-[grid-template-rows] duration-200 ease-out md:hidden ${
-            mobileNavOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-          } ${isLight ? "border-b border-[rgba(80,65,110,0.2)]" : "border-b border-white/[0.08]"}`}
+          className={`absolute left-0 right-0 top-full z-20 max-h-[min(75dvh,calc(100dvh-4.5rem))] overflow-y-auto overscroll-contain rounded-b-2xl border border-t-0 px-2 py-2 shadow-[0_24px_48px_rgba(0,0,0,0.45)] backdrop-blur-md transition-[opacity,transform] duration-200 ease-out md:hidden ${
+            isLight
+              ? "border-[rgba(80,65,110,0.28)] bg-[rgba(42,37,54,0.98)]"
+              : "border-white/[0.12] bg-[rgba(16,8,28,0.97)]"
+          } ${
+            mobileNavOpen
+              ? "pointer-events-auto translate-y-0 opacity-100"
+              : "pointer-events-none -translate-y-2 opacity-0"
+          }`}
           aria-hidden={!mobileNavOpen}
         >
-          <div className="min-h-0 overflow-hidden">
             <nav
-              className="flex flex-col gap-1 py-2"
+              className="flex flex-col gap-1 py-1"
               aria-labelledby="dashboard-menu-button"
             >
               {tabs.map((tab) => {
@@ -475,7 +528,7 @@ export default function Dashboard({ onNavigate }) {
                           }
                         }}
                       >
-                        {tab.label}
+                        {resourcesTabLabel}
                       </button>
                       {mobileResourcesOpen ? (
                         <div
@@ -551,14 +604,14 @@ export default function Dashboard({ onNavigate }) {
                 />
               </div>
             </nav>
-          </div>
+        </div>
         </div>
 
         {tabs.map((tab) => (
           <Tabs.Content
             key={tab.id}
             value={tab.id}
-            className={`flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl border border-white/[0.12] p-8 outline-none sm:p-10 focus-visible:ring-2 focus-visible:ring-purple-500/50 ${
+            className={`relative z-0 flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl border border-white/[0.12] p-8 outline-none sm:p-10 focus-visible:ring-2 focus-visible:ring-purple-500/50 ${
               isLight
                 ? "bg-gradient-to-b from-[#434054] via-[#353145] to-[#292433] shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
                 : "bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
