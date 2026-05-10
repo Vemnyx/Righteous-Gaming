@@ -100,6 +100,7 @@ type cardJSON struct {
 	Rarity          *int16  `json:"rarity"`
 	SetCode         string  `json:"set_code"`
 	SetNum          int16   `json:"set_num"`
+	SetName         string  `json:"set_name,omitempty"`
 	Type            int16   `json:"type"`
 	Subtypes        []int16 `json:"subtypes"`
 	Classes         []int16 `json:"classes"`
@@ -132,6 +133,7 @@ func cardToJSON(c *repository.Card) cardJSON {
 		Rarity:          c.Rarity,
 		SetCode:         c.SetCode,
 		SetNum:          c.SetNum,
+		SetName:         c.SetName,
 		Type:            c.Type,
 		Subtypes:        c.Subtypes,
 		Classes:         c.Classes,

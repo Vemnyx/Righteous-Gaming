@@ -3,6 +3,9 @@ import { useAuth } from "../auth/AuthContext";
 import { cardTypeName } from "../constants/cardType";
 
 const MD_MIN = 768;
+const TABLE_PAGE_SIZE = 25;
+const PREVIEW_WIDTH = 320;
+const PREVIEW_OFFSET = 20;
 
 /** @returns {boolean} */
 function useMediaNarrow() {
@@ -33,7 +36,7 @@ function gridPageSize(view, narrow) {
   return Infinity;
 }
 
-/** Mobile: 2 / 3 / 4 cols — md+: 5 / 6 / 7 (matches page sizes 2×10 … 7×10) */
+/** Mobile: 2 / 3 / 4 cols — md+: 5 / 6 / 7 */
 function gridColsClass(view) {
   if (view === "grid-sm") return "grid-cols-2 md:grid-cols-5";
   if (view === "grid-md") return "grid-cols-3 md:grid-cols-6";
@@ -41,22 +44,23 @@ function gridColsClass(view) {
   return "";
 }
 
+/** FAB-style collector number: OMN001, OMN003 (3-digit card index). */
+function formatCollectorCode(setCode, setNum) {
+  const code = String(setCode ?? "").trim();
+  const n = Math.max(0, Number(setNum) || 0);
+  return `${code}${String(n).padStart(3, "0")}`;
+}
+
 function PitchDot({ pitch }) {
-  if (pitch == null || pitch === undefined)
-    return (
-      <span className="text-[#f4f0fa]/35" aria-hidden>
-        —
-      </span>
-    );
+  if (pitch == null || pitch === undefined) return null;
   const p = Number(pitch);
+  if (p !== 1 && p !== 2 && p !== 3) return null;
   const cls =
     p === 1
       ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]"
       : p === 2
         ? "bg-amber-400 shadow-[0_0_8px_rgba(250,204,21,0.45)]"
-        : p === 3
-          ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"
-          : "bg-white/35";
+        : "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]";
   return (
     <span
       className={`inline-block size-3.5 shrink-0 rounded-full ${cls}`}
@@ -115,8 +119,36 @@ function GridDensityIcon({ level }) {
 }
 
 /**
- * @typedef {{ id: number, name: string, set_code: string, set_num: number, type: number, pitch: number | null, image_url: string | null }} CatalogCard
+ * @typedef {{
+ *   id: number,
+ *   name: string,
+ *   set_code: string,
+ *   set_num: number,
+ *   set_name?: string,
+ *   type: number,
+ *   pitch: number | null,
+ *   image_url: string | null
+ * }} CatalogCard
  */
+
+/**
+ * @param {{ clientX: number, clientY: number }} pos
+ */
+function clampPreviewPosition(pos) {
+  const w = PREVIEW_WIDTH;
+  const maxH = 440;
+  let x = pos.clientX + PREVIEW_OFFSET;
+  let y = pos.clientY + PREVIEW_OFFSET;
+  if (x + w > window.innerWidth - 8) {
+    x = pos.clientX - w - PREVIEW_OFFSET;
+  }
+  if (x < 8) x = 8;
+  if (y + maxH > window.innerHeight - 8) {
+    y = window.innerHeight - maxH - 8;
+  }
+  if (y < 8) y = 8;
+  return { x, y };
+}
 
 /**
  * @param {{ isLight: boolean, active: boolean }} props
@@ -126,26 +158,40 @@ export function CardsCatalog({ isLight, active }) {
   const narrow = useMediaNarrow();
   /** @type {['table' | 'grid-sm' | 'grid-md' | 'grid-lg', (v: 'table' | 'grid-sm' | 'grid-md' | 'grid-lg') => void]} */
   const [view, setView] = useState("table");
-  const [page, setPage] = useState(1);
+  const [gridPage, setGridPage] = useState(1);
+  const [tablePage, setTablePage] = useState(1);
   const [cards, setCards] = useState(/** @type {CatalogCard[]} */ ([]));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
-  /** @type {[{ url: string, left: number, top: number } | null, (v: { url: string, left: number, top: number } | null) => void]} */
+  /** @type {[{ url: string, x: number, y: number } | null, (v: { url: string, x: number, y: number } | null) => void]} */
   const [imagePreview, setImagePreview] = useState(null);
 
-  const pageSize = useMemo(() => gridPageSize(view, narrow), [view, narrow]);
+  const gridPageSizeVal = useMemo(() => gridPageSize(view, narrow), [view, narrow]);
   const totalGridPages = useMemo(() => {
-    if (view === "table" || pageSize <= 0 || !Number.isFinite(pageSize)) return 1;
-    return Math.max(1, Math.ceil(cards.length / pageSize));
-  }, [view, pageSize, cards.length]);
+    if (view === "table" || gridPageSizeVal <= 0 || !Number.isFinite(gridPageSizeVal)) return 1;
+    return Math.max(1, Math.ceil(cards.length / gridPageSizeVal));
+  }, [view, gridPageSizeVal, cards.length]);
+
+  const totalTablePages = useMemo(
+    () => Math.max(1, Math.ceil(cards.length / TABLE_PAGE_SIZE)),
+    [cards.length]
+  );
 
   useEffect(() => {
-    setPage(1);
+    setGridPage(1);
   }, [view, narrow]);
 
   useEffect(() => {
-    if (page > totalGridPages) setPage(totalGridPages);
-  }, [page, totalGridPages]);
+    if (view === "table") setTablePage(1);
+  }, [view]);
+
+  useEffect(() => {
+    if (tablePage > totalTablePages) setTablePage(totalTablePages);
+  }, [tablePage, totalTablePages]);
+
+  useEffect(() => {
+    if (gridPage > totalGridPages) setGridPage(totalGridPages);
+  }, [gridPage, totalGridPages]);
 
   const load = useCallback(async () => {
     if (!active) return;
@@ -178,10 +224,16 @@ export function CardsCatalog({ isLight, active }) {
   }, [active, load]);
 
   const pagedGrid = useMemo(() => {
-    if (view === "table" || !Number.isFinite(pageSize)) return cards;
-    const start = (page - 1) * pageSize;
-    return cards.slice(start, start + pageSize);
-  }, [cards, view, page, pageSize]);
+    if (view === "table" || !Number.isFinite(gridPageSizeVal)) return cards;
+    const start = (gridPage - 1) * gridPageSizeVal;
+    return cards.slice(start, start + gridPageSizeVal);
+  }, [cards, view, gridPage, gridPageSizeVal]);
+
+  const pagedTable = useMemo(() => {
+    if (view !== "table") return [];
+    const start = (tablePage - 1) * TABLE_PAGE_SIZE;
+    return cards.slice(start, start + TABLE_PAGE_SIZE);
+  }, [cards, view, tablePage]);
 
   const gridColClass = gridColsClass(view);
 
@@ -193,6 +245,8 @@ export function CardsCatalog({ isLight, active }) {
   const iconActive = isLight
     ? "border-[#b998e8]/55 bg-[#7b4cb8]/35 text-white shadow-inner"
     : "border-purple-400/45 bg-purple-950/50 text-white";
+
+  const paginatorBtn = `rounded-lg border px-3 py-1.5 text-[0.8125rem] font-medium ${iconIdle} border-white/25 disabled:opacity-40`;
 
   return (
     <div className="relative flex w-full flex-1 flex-col gap-4 px-1 py-2 sm:px-2">
@@ -249,11 +303,7 @@ export function CardsCatalog({ isLight, active }) {
         >
           <p className="font-medium">Could not load cards</p>
           <p className="mt-1 text-red-100/80">{error}</p>
-          <button
-            type="button"
-            className={`mt-3 rounded-lg border px-3 py-1.5 text-[0.8125rem] font-medium ${iconIdle} border-white/25`}
-            onClick={load}
-          >
+          <button type="button" className={`mt-3 ${paginatorBtn}`} onClick={load}>
             Retry
           </button>
         </div>
@@ -264,55 +314,87 @@ export function CardsCatalog({ isLight, active }) {
       ) : null}
 
       {!loading && view === "table" && !error ? (
-        <div className="overflow-x-auto rounded-xl border border-white/[0.12] bg-black/20">
-          <table className="w-full min-w-[28rem] border-collapse text-left text-[0.875rem] text-[#f4f0fa]">
-            <thead>
-              <tr className="border-b border-white/[0.12] bg-black/30">
-                <th className="px-4 py-3 font-semibold">Name</th>
-                <th className="px-4 py-3 font-semibold">Set</th>
-                <th className="px-4 py-3 font-semibold">Type</th>
-                <th className="whitespace-nowrap px-4 py-3 font-semibold">Pitch</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cards.map((c) => (
-                <tr
-                  key={c.id}
-                  className="cursor-default border-b border-white/[0.06] transition-colors hover:bg-white/[0.04]"
-                >
-                  <td
-                    className="relative max-w-[min(28rem,50vw)] px-4 py-2.5 font-medium"
-                    onMouseEnter={(e) => {
-                      if (!c.image_url) return;
-                      const r = e.currentTarget.getBoundingClientRect();
-                      const w = 200;
-                      let left = r.right + 12;
-                      if (left + w > window.innerWidth - 8) left = r.left - w - 12;
-                      setImagePreview({
-                        url: c.image_url,
-                        left: Math.max(8, left),
-                        top: Math.max(8, Math.min(r.top, window.innerHeight - 360)),
-                      });
-                    }}
-                    onMouseLeave={() => setImagePreview(null)}
-                  >
-                    <span className="line-clamp-2">{c.name}</span>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-2.5 text-[#f4f0fa]/90">
-                    {c.set_code} {c.set_num}
-                  </td>
-                  <td className="px-4 py-2.5 text-[#f4f0fa]/85">{cardTypeName(c.type) ?? c.type}</td>
-                  <td className="px-4 py-2.5">
-                    <PitchDot pitch={c.pitch} />
-                  </td>
+        <>
+          <div className="overflow-x-auto rounded-xl border border-white/[0.12] bg-black/20">
+            <table className="w-full min-w-[36rem] border-collapse text-left text-[0.875rem] text-[#f4f0fa]">
+              <thead>
+                <tr className="border-b border-white/[0.12] bg-black/30">
+                  <th className="px-4 py-3 font-semibold">Name</th>
+                  <th className="min-w-[10rem] px-4 py-3 font-semibold">Set</th>
+                  <th className="whitespace-nowrap px-4 py-3 font-semibold">Code</th>
+                  <th className="px-4 py-3 font-semibold">Type</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {cards.length === 0 ? (
-            <p className="px-4 py-8 text-center text-[#f4f0fa]/55">No cards in the database.</p>
+              </thead>
+              <tbody>
+                {pagedTable.map((c) => (
+                  <tr
+                    key={c.id}
+                    className="cursor-default border-b border-white/[0.06] transition-colors hover:bg-white/[0.04]"
+                  >
+                    <td
+                      className="relative max-w-[min(28rem,50vw)] px-4 py-2.5 font-medium"
+                      onMouseEnter={(e) => {
+                        if (!c.image_url) return;
+                        setImagePreview({
+                          url: c.image_url,
+                          ...clampPreviewPosition(e),
+                        });
+                      }}
+                      onMouseMove={(e) => {
+                        if (!c.image_url) return;
+                        setImagePreview({
+                          url: c.image_url,
+                          ...clampPreviewPosition(e),
+                        });
+                      }}
+                      onMouseLeave={() => setImagePreview(null)}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="line-clamp-2 min-w-0 flex-1">{c.name}</span>
+                        <PitchDot pitch={c.pitch} />
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-[#f4f0fa]/90">
+                      {c.set_name?.trim() ? c.set_name : "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2.5 font-mono text-[0.8125rem] text-[#f4f0fa]/85">
+                      {formatCollectorCode(c.set_code, c.set_num)}
+                    </td>
+                    <td className="px-4 py-2.5 text-[#f4f0fa]/85">
+                      {cardTypeName(c.type) ?? c.type}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {cards.length === 0 ? (
+              <p className="px-4 py-8 text-center text-[#f4f0fa]/55">No cards in the database.</p>
+            ) : null}
+          </div>
+          {cards.length > TABLE_PAGE_SIZE ? (
+            <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+              <button
+                type="button"
+                className={paginatorBtn}
+                disabled={tablePage <= 1}
+                onClick={() => setTablePage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </button>
+              <span className="text-[0.8125rem] text-[#f4f0fa]/70">
+                Page {tablePage} / {totalTablePages}
+              </span>
+              <button
+                type="button"
+                className={paginatorBtn}
+                disabled={tablePage >= totalTablePages}
+                onClick={() => setTablePage((p) => Math.min(totalTablePages, p + 1))}
+              >
+                Next
+              </button>
+            </div>
           ) : null}
-        </div>
+        </>
       ) : null}
 
       {!loading && view !== "table" && !error ? (
@@ -345,20 +427,20 @@ export function CardsCatalog({ isLight, active }) {
             <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
               <button
                 type="button"
-                className={`rounded-lg border px-3 py-1.5 text-[0.8125rem] font-medium ${iconIdle} border-white/25 disabled:opacity-40`}
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className={paginatorBtn}
+                disabled={gridPage <= 1}
+                onClick={() => setGridPage((p) => Math.max(1, p - 1))}
               >
                 Previous
               </button>
               <span className="text-[0.8125rem] text-[#f4f0fa]/70">
-                Page {page} / {totalGridPages}
+                Page {gridPage} / {totalGridPages}
               </span>
               <button
                 type="button"
-                className={`rounded-lg border px-3 py-1.5 text-[0.8125rem] font-medium ${iconIdle} border-white/25 disabled:opacity-40`}
-                disabled={page >= totalGridPages}
-                onClick={() => setPage((p) => Math.min(totalGridPages, p + 1))}
+                className={paginatorBtn}
+                disabled={gridPage >= totalGridPages}
+                onClick={() => setGridPage((p) => Math.min(totalGridPages, p + 1))}
               >
                 Next
               </button>
@@ -369,10 +451,15 @@ export function CardsCatalog({ isLight, active }) {
 
       {imagePreview ? (
         <div
-          className="pointer-events-none fixed z-[200] w-[200px] max-w-[min(200px,calc(100vw-24px))] overflow-hidden rounded-lg border border-white/25 bg-[#1a1524] shadow-2xl"
-          style={{ left: imagePreview.left, top: imagePreview.top }}
+          className="pointer-events-none fixed z-[200] overflow-hidden rounded-lg border border-white/25 bg-[#1a1524] shadow-2xl"
+          style={{
+            left: imagePreview.x,
+            top: imagePreview.y,
+            width: PREVIEW_WIDTH,
+            maxWidth: "min(320px, calc(100vw - 16px))",
+          }}
         >
-          <img src={imagePreview.url} alt="" className="h-auto w-full object-contain" />
+          <img src={imagePreview.url} alt="" className="h-auto w-full object-contain" draggable={false} />
         </div>
       ) : null}
     </div>
