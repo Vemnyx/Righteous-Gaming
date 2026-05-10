@@ -17,7 +17,7 @@ CREATE TABLE cards (
     cost smallint,
     power smallint,
     block smallint,
-    hero smallint,
+    heroes smallint[],
     life smallint,
     intellect smallint,
     keywords smallint[],
@@ -33,6 +33,7 @@ CREATE INDEX cards_type_idx ON cards (type);
 CREATE INDEX cards_subtypes_gin ON cards USING GIN (subtypes);
 CREATE INDEX cards_classes_gin ON cards USING GIN (classes);
 CREATE INDEX cards_talents_gin ON cards USING GIN (talents);
+CREATE INDEX cards_heroes_gin ON cards USING GIN (heroes);
 CREATE INDEX cards_pitch_idx ON cards (pitch);
 CREATE INDEX cards_cost_idx ON cards (cost);
 CREATE INDEX cards_power_idx ON cards (power);

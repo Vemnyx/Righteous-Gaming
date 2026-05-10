@@ -52,7 +52,7 @@ type createCardJSON struct {
 	Cost            *int16  `json:"cost"`
 	Power           *int16  `json:"power"`
 	Block           *int16  `json:"block"`
-	Hero            *int16  `json:"hero"`
+	Heroes          []int16 `json:"heroes"`
 	Life            *int16  `json:"life"`
 	Intellect       *int16  `json:"intellect"`
 	Keywords        []int16 `json:"keywords"`
@@ -80,7 +80,7 @@ func (j createCardJSON) toRepoInput() repository.CreateCardInput {
 		Cost:            j.Cost,
 		Power:           j.Power,
 		Block:           j.Block,
-		Hero:            j.Hero,
+		Heroes:          j.Heroes,
 		Life:            j.Life,
 		Intellect:       j.Intellect,
 		Keywords:        j.Keywords,
@@ -109,7 +109,7 @@ type cardJSON struct {
 	Cost            *int16  `json:"cost"`
 	Power           *int16  `json:"power"`
 	Block           *int16  `json:"block"`
-	Hero            *int16  `json:"hero"`
+	Heroes          []int16 `json:"heroes"`
 	Life            *int16  `json:"life"`
 	Intellect       *int16  `json:"intellect"`
 	Keywords        []int16 `json:"keywords"`
@@ -141,7 +141,7 @@ func cardToJSON(c *repository.Card) cardJSON {
 		Cost:            c.Cost,
 		Power:           c.Power,
 		Block:           c.Block,
-		Hero:            c.Hero,
+		Heroes:          c.Heroes,
 		Life:            c.Life,
 		Intellect:       c.Intellect,
 		Keywords:        c.Keywords,

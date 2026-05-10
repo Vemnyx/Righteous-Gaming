@@ -31,7 +31,7 @@ type Card struct {
 	Cost            *int16
 	Power           *int16
 	Block           *int16
-	Hero            *int16
+	Heroes          []int16
 	Life            *int16
 	Intellect       *int16
 	Keywords        []int16
@@ -60,7 +60,7 @@ type CreateCardInput struct {
 	Cost            *int16
 	Power           *int16
 	Block           *int16
-	Hero            *int16
+	Heroes          []int16
 	Life            *int16
 	Intellect       *int16
 	Keywords        []int16
@@ -90,7 +90,7 @@ func scanCard(row pgx.Row) (*Card, error) {
 		&c.Cost,
 		&c.Power,
 		&c.Block,
-		&c.Hero,
+		&c.Heroes,
 		&c.Life,
 		&c.Intellect,
 		&c.Keywords,
@@ -106,7 +106,7 @@ func scanCard(row pgx.Row) (*Card, error) {
 
 const cardSelectColumns = `
 id, set_id, name, card_identifier, image_url, functional_text, rarity, set_code, set_num, type,
-subtypes, classes, hybrid, talents, pitch, cost, power, block, hero, life, intellect,
+subtypes, classes, hybrid, talents, pitch, cost, power, block, heroes, life, intellect,
 keywords, formats, specializations, fusions`
 
 type cardQuerier interface {
@@ -116,7 +116,7 @@ type cardQuerier interface {
 const insertCardQuery = `
 INSERT INTO cards (
 	set_id, name, card_identifier, image_url, functional_text, rarity, set_code, set_num, type,
-	subtypes, classes, hybrid, talents, pitch, cost, power, block, hero, life, intellect,
+	subtypes, classes, hybrid, talents, pitch, cost, power, block, heroes, life, intellect,
 	keywords, formats, specializations, fusions
 )
 VALUES (
@@ -145,7 +145,7 @@ func insertCardReturning(ctx context.Context, q cardQuerier, in CreateCardInput)
 		in.Cost,
 		in.Power,
 		in.Block,
-		in.Hero,
+		in.Heroes,
 		in.Life,
 		in.Intellect,
 		in.Keywords,
@@ -247,7 +247,7 @@ func (r *Repository) CardsBySetID(ctx context.Context, setID int) ([]Card, error
 			&c.Cost,
 			&c.Power,
 			&c.Block,
-			&c.Hero,
+			&c.Heroes,
 			&c.Life,
 			&c.Intellect,
 			&c.Keywords,
