@@ -151,20 +151,23 @@ export function CardDetailPage({ isLight, identifier, active }) {
           </div>
 
           <section className={`min-w-0 flex-1 rounded-xl border bg-black/20 p-4 sm:p-5 ${panelBorder}`}>
-            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-[minmax(9rem,11rem)_1fr]">
-              <dt className={labelCls}>Name</dt>
-              <dd className={ddCls}>{card.name}</dd>
-
-              <dt className={labelCls}>Set</dt>
-              <dd className={ddCls}>
+            <header className="space-y-1">
+              <h2 className="m-0 text-xl font-semibold tracking-tight text-[#f4f0fa]">{card.name}</h2>
+              <p className={`m-0 text-[0.9rem] leading-snug ${muted}`}>
                 {(() => {
                   const setName = card.set_name?.trim();
                   const code = formatCollectorCode(card.set_code, card.set_num);
                   if (setName) return `${setName} - ${code}`;
                   return code;
                 })()}
-              </dd>
+              </p>
+            </header>
 
+            <dl
+              className={`mt-4 grid gap-x-6 gap-y-3 border-t pt-4 sm:grid-cols-[minmax(9rem,11rem)_1fr] ${
+                isLight ? "border-white/[0.12]" : "border-white/[0.18]"
+              }`}
+            >
               {card.rarity != null ? (
                 <>
                   <dt className={labelCls}>Rarity</dt>
@@ -214,16 +217,20 @@ export function CardDetailPage({ isLight, identifier, active }) {
                   </>
                 ) : null;
               })()}
-
-              {card.functional_text?.trim() ? (
-                <>
-                  <dt className={labelCls}>Text</dt>
-                  <dd className={`${ddCls} whitespace-pre-wrap leading-relaxed`}>
-                    {card.functional_text.trim()}
-                  </dd>
-                </>
-              ) : null}
             </dl>
+
+            {card.functional_text?.trim() ? (
+              <dl
+                className={`mt-4 grid gap-x-6 gap-y-3 border-t pt-4 sm:grid-cols-[minmax(9rem,11rem)_1fr] ${
+                  isLight ? "border-white/[0.12]" : "border-white/[0.18]"
+                }`}
+              >
+                <dt className={labelCls}>Text</dt>
+                <dd className={`${ddCls} whitespace-pre-wrap leading-relaxed`}>
+                  {card.functional_text.trim()}
+                </dd>
+              </dl>
+            ) : null}
           </section>
         </div>
       ) : null}

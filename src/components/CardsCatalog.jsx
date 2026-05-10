@@ -582,10 +582,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                   />
                 </div>
                 {gridImageModal.card_identifier && onOpenCardDetail ? (
-                  <div
-                    className="flex shrink-0 flex-col items-center gap-1.5"
-                    onClick={(e) => e.stopPropagation()}
-                  >
+                  <div className="flex shrink-0 justify-center" onClick={(e) => e.stopPropagation()}>
                     <a
                       href={`/resources/cards/${encodeURIComponent(gridImageModal.card_identifier)}`}
                       className="inline-flex items-center gap-2 rounded-lg border border-white/[0.28] bg-black/40 px-4 py-2.5 text-[0.875rem] font-medium text-[#c4a9ef] shadow-lg transition-colors hover:border-[#c4a9ef]/45 hover:bg-black/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55"
@@ -601,9 +598,6 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                       <EyeViewDetailsIcon />
                       View Card Details
                     </a>
-                    <span className="text-center text-[0.72rem] text-[#f4f0fa]/45">
-                      Opens the card details page
-                    </span>
                   </div>
                 ) : null}
               </div>

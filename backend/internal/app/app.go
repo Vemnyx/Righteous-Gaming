@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -19,6 +20,7 @@ type App struct {
 	Repo     *repository.Repository
 	Firebase *client.Firebase
 	Gmail    *client.Gmail
+	GCS      *client.GCS
 
 	closeLog func()
 }
@@ -81,11 +83,18 @@ func New(ctx context.Context) (*App, error) {
 		closeInfo()
 		return nil, fmt.Errorf("app: gmail: %w", err)
 	}
+	gcs, err := client.NewGCS(ctx)
+	if err != nil {
+		repo.Close()
+		closeInfo()
+		return nil, fmt.Errorf("app: gcs: %w", err)
+	}
 
 	a := &App{
 		Repo:     repo,
 		Firebase: fb,
 		Gmail:    gm,
+		GCS:      gcs,
 		closeLog: closeInfo,
 	}
 	log.Info("database connection established")
@@ -102,8 +111,21 @@ func (a *App) SendGmailHTML(ctx context.Context, to, subject, body string) error
 	return a.Gmail.SendHTMLEmail(ctx, to, subject, body)
 }
 
+// UploadToGCS uploads from r to gs://righteous-assets/objectPath using Application
+// Default Credentials (same GCP identity as Secret Manager when deployed).
+func (a *App) UploadToGCS(ctx context.Context, objectPath string, r io.Reader, contentType string) error {
+	if a.GCS == nil {
+		return fmt.Errorf("app: gcs client not initialized")
+	}
+	return a.GCS.Upload(ctx, objectPath, r, contentType)
+}
+
 // Close releases the database pool and closes the info log file.
 func (a *App) Close() {
+	if a.GCS != nil {
+		_ = a.GCS.Close()
+		a.GCS = nil
+	}
 	if a.Repo != nil {
 		a.Repo.Close()
 	}
