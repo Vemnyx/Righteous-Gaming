@@ -7,27 +7,33 @@ import "strconv"
 type CardType int16
 
 const (
-	CardTypeNonAttackAction CardType = 0
-	CardTypeAttackAction    CardType = 1
-	CardTypeAttackReaction  CardType = 2
-	CardTypeDefenseReaction CardType = 3
-	CardTypeEquipment       CardType = 4
-	CardTypeHero            CardType = 5
-	CardTypeInstant         CardType = 6
-	CardTypeMentor          CardType = 7
-	CardTypeResource        CardType = 8
-	CardTypeToken           CardType = 9
-	CardTypeWeapon          CardType = 10
+	CardTypeAction CardType = iota
+	CardTypeAttackReaction
+	CardTypeBlock
+	CardTypeCompanion
+	CardTypeDefenseReaction
+	CardTypeDemiHero
+	CardTypeEquipment
+	CardTypeHero
+	CardTypeInstant
+	CardTypeMacro
+	CardTypeMentor
+	CardTypeResource
+	CardTypeToken
+	CardTypeWeapon
 )
 
 var cardTypeNames = map[CardType]string{
-	CardTypeNonAttackAction: "Non-Attack Action",
-	CardTypeAttackAction:    "Attack Action",
+	CardTypeAction:          "Non-Attack Action",
 	CardTypeAttackReaction:  "Attack Reaction",
+	CardTypeBlock:           "Block",
+	CardTypeCompanion:       "Companion",
 	CardTypeDefenseReaction: "Defense Reaction",
+	CardTypeDemiHero:        "Demi-Hero",
 	CardTypeEquipment:       "Equipment",
 	CardTypeHero:            "Hero",
 	CardTypeInstant:         "Instant",
+	CardTypeMacro:           "Macro",
 	CardTypeMentor:          "Mentor",
 	CardTypeResource:        "Resource",
 	CardTypeToken:           "Token",
@@ -51,13 +57,16 @@ func (t CardType) String() string {
 // CardTypes returns every defined type in ascending ID order.
 func CardTypes() []CardType {
 	return []CardType{
-		CardTypeNonAttackAction,
-		CardTypeAttackAction,
+		CardTypeAction,
 		CardTypeAttackReaction,
+		CardTypeBlock,
+		CardTypeCompanion,
 		CardTypeDefenseReaction,
+		CardTypeDemiHero,
 		CardTypeEquipment,
 		CardTypeHero,
 		CardTypeInstant,
+		CardTypeMacro,
 		CardTypeMentor,
 		CardTypeResource,
 		CardTypeToken,

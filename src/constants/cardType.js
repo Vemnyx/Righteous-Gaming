@@ -3,28 +3,34 @@
  * @readonly
  */
 export const CardType = Object.freeze({
-  NonAttackAction: 0,
-  AttackAction: 1,
-  AttackReaction: 2,
-  DefenseReaction: 3,
-  Equipment: 4,
-  Hero: 5,
-  Instant: 6,
-  Mentor: 7,
-  Resource: 8,
-  Token: 9,
-  Weapon: 10,
+  Action: 0,
+  AttackReaction: 1,
+  Block: 2,
+  Companion: 3,
+  DefenseReaction: 4,
+  DemiHero: 5,
+  Equipment: 6,
+  Hero: 7,
+  Instant: 8,
+  Macro: 9,
+  Mentor: 10,
+  Resource: 11,
+  Token: 12,
+  Weapon: 13,
 });
 
-/** Ordered display names for each ID 0..10. */
+/** Ordered display names for each ID 0..13. */
 export const CARD_TYPE_NAMES = Object.freeze([
   "Non-Attack Action",
-  "Attack Action",
   "Attack Reaction",
+  "Block",
+  "Companion",
   "Defense Reaction",
+  "Demi-Hero",
   "Equipment",
   "Hero",
   "Instant",
+  "Macro",
   "Mentor",
   "Resource",
   "Token",

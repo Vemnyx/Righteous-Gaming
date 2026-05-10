@@ -7,69 +7,169 @@ import "strconv"
 type CardHero int16
 
 const (
-	CardHeroArakni          CardHero = 0
-	CardHeroAzalea          CardHero = 1
-	CardHeroBenji           CardHero = 2
-	CardHeroBoltyn          CardHero = 3
-	CardHeroBravo           CardHero = 4
-	CardHeroBriar           CardHero = 5
-	CardHeroChane           CardHero = 6
-	CardHeroDash            CardHero = 7
-	CardHeroDataDoll        CardHero = 8
-	CardHeroDorinthea       CardHero = 9
-	CardHeroEmperor         CardHero = 10
-	CardHeroGenisWotchuneed CardHero = 11
-	CardHeroIra             CardHero = 12
-	CardHeroIyslander       CardHero = 13
-	CardHeroKano            CardHero = 14
-	CardHeroKassai          CardHero = 15
-	CardHeroKatsu           CardHero = 16
-	CardHeroKavdaen         CardHero = 17
-	CardHeroKayo            CardHero = 18
-	CardHeroLevia           CardHero = 19
-	CardHeroLexi            CardHero = 20
-	CardHeroOldhim          CardHero = 21
-	CardHeroPrism           CardHero = 22
-	CardHeroRhinar          CardHero = 23
-	CardHeroRuudi           CardHero = 24
-	CardHeroShiyana         CardHero = 25
-	CardHeroTaylor          CardHero = 26
-	CardHeroValda           CardHero = 27
-	CardHeroViserai         CardHero = 28
-	CardHeroYorick          CardHero = 29
+	CardHeroArakni CardHero = iota
+	CardHeroAurora
+	CardHeroAurora2
+	CardHeroAzalea
+	CardHeroBenji
+	CardHeroBetsy
+	CardHeroBlaze
+	CardHeroBolfar
+	CardHeroBoltyn
+	CardHeroBravo
+	CardHeroBrevant
+	CardHeroBriar
+	CardHeroBrutus
+	CardHeroChane
+	CardHeroCindra
+	CardHeroCrackni
+	CardHeroCrix
+	CardHeroDash
+	CardHeroDataDoll
+	CardHeroDorinthea
+	CardHeroDromai
+	CardHeroEmperor
+	CardHeroEnigma
+	CardHeroFai
+	CardHeroFang
+	CardHeroFlorian
+	CardHeroFrankie
+	CardHeroGenis
+	CardHeroGravyBones
+	CardHeroHala
+	CardHeroIra
+	CardHeroIyslander
+	CardHeroJarl
+	CardHeroKano
+	CardHeroKassai
+	CardHeroKatsu
+	CardHeroKavdaen
+	CardHeroKayo
+	CardHeroKox
+	CardHeroLevia
+	CardHeroLexi
+	CardHeroLibrarian
+	CardHeroLyath
+	CardHeroMarlynn
+	CardHeroMaxx
+	CardHeroMelody
+	CardHeroNuu
+	CardHeroOldhim
+	CardHeroOlympia
+	CardHeroOscilio
+	CardHeroBroscilio
+	CardHeroPleiades
+	CardHeroPrism
+	CardHeroPuffin
+	CardHeroReya
+	CardHeroRhinar
+	CardHeroRiptide
+	CardHeroRKO
+	CardHeroRuudi
+	CardHeroShiyana
+	CardHeroSlippy
+	CardHeroSquizzy
+	CardHeroScurv
+	CardHeroStarvo
+	CardHeroTaipanis
+	CardHeroTaylor
+	CardHeroTeklovossen
+	CardHeroTerra
+	CardHeroTheryon
+	CardHeroTuffnut
+	CardHeroUzuri
+	CardHeroValda
+	CardHeroVerdance
+	CardHeroVictor
+	CardHeroVynnset
+	CardHeroViserai
+	CardHeroYorick
+	CardHeroYoji
+	CardHeroZen
+	CardHeroZyggy
 )
 
 var cardHeroNames = map[CardHero]string{
-	CardHeroArakni:          "Arakni",
-	CardHeroAzalea:          "Azalea",
-	CardHeroBenji:           "Benji",
-	CardHeroBoltyn:          "Boltyn",
-	CardHeroBravo:           "Bravo",
-	CardHeroBriar:           "Briar",
-	CardHeroChane:           "Chane",
-	CardHeroDash:            "Dash",
-	CardHeroDataDoll:        "Data Doll",
-	CardHeroDorinthea:       "Dorinthea",
-	CardHeroEmperor:         "Emperor",
-	CardHeroGenisWotchuneed: "Genis Wotchuneed",
-	CardHeroIra:             "Ira",
-	CardHeroIyslander:       "Iyslander",
-	CardHeroKano:            "Kano",
-	CardHeroKassai:          "Kassai",
-	CardHeroKatsu:           "Katsu",
-	CardHeroKavdaen:         "Kavdaen",
-	CardHeroKayo:            "Kayo",
-	CardHeroLevia:           "Levia",
-	CardHeroLexi:            "Lexi",
-	CardHeroOldhim:          "Oldhim",
-	CardHeroPrism:           "Prism",
-	CardHeroRhinar:          "Rhinar",
-	CardHeroRuudi:           "Ruu'di",
-	CardHeroShiyana:         "Shiyana",
-	CardHeroTaylor:          "Taylor",
-	CardHeroValda:           "Valda",
-	CardHeroViserai:         "Viserai",
-	CardHeroYorick:          "Yorick",
+	CardHeroArakni:      "Arakni",
+	CardHeroAurora:      "Aurora",
+	CardHeroAurora2:     "Aurora2",
+	CardHeroAzalea:      "Azalea",
+	CardHeroBenji:       "Benji",
+	CardHeroBetsy:       "Betsy",
+	CardHeroBlaze:       "Blaze",
+	CardHeroBolfar:      "Bolfar",
+	CardHeroBoltyn:      "Boltyn",
+	CardHeroBravo:       "Bravo",
+	CardHeroBrevant:     "Brevant",
+	CardHeroBriar:       "Briar",
+	CardHeroBrutus:      "Brutus",
+	CardHeroChane:       "Chane",
+	CardHeroCindra:      "Cindra",
+	CardHeroCrackni:     "Crackni",
+	CardHeroCrix:        "Crix",
+	CardHeroDash:        "Dash",
+	CardHeroDataDoll:    "Data Doll",
+	CardHeroDorinthea:   "Dorinthea",
+	CardHeroDromai:      "Dromai",
+	CardHeroEmperor:     "Emperor",
+	CardHeroEnigma:      "Enigma",
+	CardHeroFai:         "Fai",
+	CardHeroFang:        "Fang",
+	CardHeroFlorian:     "Florian",
+	CardHeroFrankie:     "Frankie",
+	CardHeroGenis:       "Genis",
+	CardHeroGravyBones:  "Gravy Bones",
+	CardHeroHala:        "Hala",
+	CardHeroIra:         "Ira",
+	CardHeroIyslander:   "Iyslander",
+	CardHeroJarl:        "Jarl",
+	CardHeroKano:        "Kano",
+	CardHeroKassai:      "Kassai",
+	CardHeroKatsu:       "Katsu",
+	CardHeroKavdaen:     "Kavdaen",
+	CardHeroKayo:        "Kayo",
+	CardHeroKox:         "Kox",
+	CardHeroLevia:       "Levia",
+	CardHeroLexi:        "Lexi",
+	CardHeroLibrarian:   "Librarian",
+	CardHeroLyath:       "Lyath",
+	CardHeroMarlynn:     "Marlynn",
+	CardHeroMaxx:        "Maxx",
+	CardHeroMelody:      "Melody",
+	CardHeroNuu:         "Nuu",
+	CardHeroOldhim:      "Oldhim",
+	CardHeroOlympia:     "Olympia",
+	CardHeroOscilio:     "Oscilio",
+	CardHeroBroscilio:   "Broscilio",
+	CardHeroPleiades:    "Pleiades",
+	CardHeroPrism:       "Prism",
+	CardHeroPuffin:      "Puffin",
+	CardHeroReya:        "Reya",
+	CardHeroRhinar:      "Rhinar",
+	CardHeroRiptide:     "Riptide",
+	CardHeroRKO:         "RKO",
+	CardHeroRuudi:       "Ruu'di",
+	CardHeroShiyana:     "Shiyana",
+	CardHeroSlippy:      "Slippy",
+	CardHeroSquizzy:     "Squizzy",
+	CardHeroScurv:       "Scurv",
+	CardHeroStarvo:      "Starvo",
+	CardHeroTaipanis:    "Taipanis",
+	CardHeroTaylor:      "Taylor",
+	CardHeroTeklovossen: "Teklovossen",
+	CardHeroTerra:       "Terra",
+	CardHeroTheryon:     "Theryon",
+	CardHeroTuffnut:     "Tuffnut",
+	CardHeroUzuri:       "Uzuri",
+	CardHeroValda:       "Valda",
+	CardHeroVerdance:    "Verdance",
+	CardHeroVictor:      "Victor",
+	CardHeroVynnset:     "Vynnset",
+	CardHeroViserai:     "Viserai",
+	CardHeroYorick:      "Yorick",
+	CardHeroYoji:        "Yoji",
+	CardHeroZen:         "Zen",
+	CardHeroZyggy:       "Zyggy",
 }
 
 // Valid reports whether h is a defined CardHero constant.
@@ -90,34 +190,84 @@ func (h CardHero) String() string {
 func CardHeroes() []CardHero {
 	return []CardHero{
 		CardHeroArakni,
+		CardHeroAurora,
+		CardHeroAurora2,
 		CardHeroAzalea,
 		CardHeroBenji,
+		CardHeroBetsy,
+		CardHeroBlaze,
+		CardHeroBolfar,
 		CardHeroBoltyn,
 		CardHeroBravo,
+		CardHeroBrevant,
 		CardHeroBriar,
+		CardHeroBrutus,
 		CardHeroChane,
+		CardHeroCindra,
+		CardHeroCrackni,
+		CardHeroCrix,
 		CardHeroDash,
 		CardHeroDataDoll,
 		CardHeroDorinthea,
+		CardHeroDromai,
 		CardHeroEmperor,
-		CardHeroGenisWotchuneed,
+		CardHeroEnigma,
+		CardHeroFai,
+		CardHeroFang,
+		CardHeroFlorian,
+		CardHeroFrankie,
+		CardHeroGenis,
+		CardHeroGravyBones,
+		CardHeroHala,
 		CardHeroIra,
 		CardHeroIyslander,
+		CardHeroJarl,
 		CardHeroKano,
 		CardHeroKassai,
 		CardHeroKatsu,
 		CardHeroKavdaen,
 		CardHeroKayo,
+		CardHeroKox,
 		CardHeroLevia,
 		CardHeroLexi,
+		CardHeroLibrarian,
+		CardHeroLyath,
+		CardHeroMarlynn,
+		CardHeroMaxx,
+		CardHeroMelody,
+		CardHeroNuu,
 		CardHeroOldhim,
+		CardHeroOlympia,
+		CardHeroOscilio,
+		CardHeroBroscilio,
+		CardHeroPleiades,
 		CardHeroPrism,
+		CardHeroPuffin,
+		CardHeroReya,
 		CardHeroRhinar,
+		CardHeroRiptide,
+		CardHeroRKO,
 		CardHeroRuudi,
 		CardHeroShiyana,
+		CardHeroSlippy,
+		CardHeroSquizzy,
+		CardHeroScurv,
+		CardHeroStarvo,
+		CardHeroTaipanis,
 		CardHeroTaylor,
+		CardHeroTeklovossen,
+		CardHeroTerra,
+		CardHeroTheryon,
+		CardHeroTuffnut,
+		CardHeroUzuri,
 		CardHeroValda,
+		CardHeroVerdance,
+		CardHeroVictor,
+		CardHeroVynnset,
 		CardHeroViserai,
 		CardHeroYorick,
+		CardHeroYoji,
+		CardHeroZen,
+		CardHeroZyggy,
 	}
 }

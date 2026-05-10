@@ -7,67 +7,167 @@ import "strconv"
 type CardKeyword int16
 
 const (
-	CardKeywordArcaneBarrier  CardKeyword = 0
-	CardKeywordBattleworn     CardKeyword = 1
-	CardKeywordBladeBreak     CardKeyword = 2
-	CardKeywordBloodDebt      CardKeyword = 3
-	CardKeywordBoost          CardKeyword = 4
-	CardKeywordChannel        CardKeyword = 5
-	CardKeywordCharge         CardKeyword = 6
-	CardKeywordCombo          CardKeyword = 7
-	CardKeywordCrush          CardKeyword = 8
-	CardKeywordDominate       CardKeyword = 9
-	CardKeywordEssence        CardKeyword = 10
-	CardKeywordFreeze         CardKeyword = 11
-	CardKeywordFusion         CardKeyword = 12
-	CardKeywordGoAgain        CardKeyword = 13
-	CardKeywordHeave          CardKeyword = 14
-	CardKeywordIntimidate     CardKeyword = 15
-	CardKeywordLegendary      CardKeyword = 16
-	CardKeywordMentor         CardKeyword = 17
-	CardKeywordNegate         CardKeyword = 18
-	CardKeywordOpt            CardKeyword = 19
-	CardKeywordPhantasm       CardKeyword = 20
-	CardKeywordReload         CardKeyword = 21
-	CardKeywordReprise        CardKeyword = 22
-	CardKeywordSpecialization CardKeyword = 23
-	CardKeywordSpectra        CardKeyword = 24
-	CardKeywordSpellvoid      CardKeyword = 25
-	CardKeywordTemper         CardKeyword = 26
-	CardKeywordThaw           CardKeyword = 27
-	CardKeywordUnfreeze       CardKeyword = 28
+	CardKeywordAmbush CardKeyword = iota
+	CardKeywordAmp
+	CardKeywordArcaneBarrier
+	CardKeywordArcaneShelter
+	CardKeywordAwaken
+	CardKeywordBattleworn
+	CardKeywordBeatChest
+	CardKeywordBladeBreak
+	CardKeywordBloodDebt
+	CardKeywordBoost
+	CardKeywordBond
+	CardKeywordChannel
+	CardKeywordCharge
+	CardKeywordClash
+	CardKeywordCloaked
+	CardKeywordCombo
+	CardKeywordContract
+	CardKeywordCrank
+	CardKeywordTheCrowdBoos
+	CardKeywordTheCrowdCheers
+	CardKeywordCrush
+	CardKeywordDecompose
+	CardKeywordDominate
+	CardKeywordEphemeral
+	CardKeywordEssence
+	CardKeywordEvoUpgrade
+	CardKeywordFlow
+	CardKeywordFreeze
+	CardKeywordFusion
+	CardKeywordGalvanize
+	CardKeywordGoAgain
+	CardKeywordGoFish
+	CardKeywordGuardwell
+	CardKeywordHeave
+	CardKeywordHeavy
+	CardKeywordHighTide
+	CardKeywordIntimidate
+	CardKeywordLegendary
+	CardKeywordMark
+	CardKeywordMaterial
+	CardKeywordMeld
+	CardKeywordModular
+	CardKeywordMirage
+	CardKeywordNegate
+	CardKeywordOpt
+	CardKeywordOverpower
+	CardKeywordPairs
+	CardKeywordPiercing
+	CardKeywordPhantasm
+	CardKeywordProtect
+	CardKeywordQuell
+	CardKeywordQuickstrike
+	CardKeywordReload
+	CardKeywordReprise
+	CardKeywordRetrieve
+	CardKeywordRuneGate
+	CardKeywordRupture
+	CardKeywordScrap
+	CardKeywordSharpen
+	CardKeywordSolflare
+	CardKeywordSpecialization
+	CardKeywordSpectra
+	CardKeywordSpellvoid
+	CardKeywordStarfall
+	CardKeywordSteal
+	CardKeywordStealth
+	CardKeywordSurge
+	CardKeywordSuspense
+	CardKeywordTemper
+	CardKeywordTower
+	CardKeywordTransform
+	CardKeywordTranscend
+	CardKeywordUnlimited
+	CardKeywordUniversal
+	CardKeywordUnfreeze
+	CardKeywordUnity
+	CardKeywordWager
+	CardKeywordWard
+	CardKeywordWateryGrave
 )
 
 var cardKeywordNames = map[CardKeyword]string{
+	CardKeywordAmbush:         "Ambush",
+	CardKeywordAmp:            "Amp",
 	CardKeywordArcaneBarrier:  "Arcane Barrier",
+	CardKeywordArcaneShelter:  "Arcane Shelter",
+	CardKeywordAwaken:         "Awaken",
 	CardKeywordBattleworn:     "Battleworn",
+	CardKeywordBeatChest:      "Beat Chest",
 	CardKeywordBladeBreak:     "Blade Break",
 	CardKeywordBloodDebt:      "Blood Debt",
 	CardKeywordBoost:          "Boost",
+	CardKeywordBond:           "Bond",
 	CardKeywordChannel:        "Channel",
 	CardKeywordCharge:         "Charge",
+	CardKeywordClash:          "Clash",
+	CardKeywordCloaked:        "Cloaked",
 	CardKeywordCombo:          "Combo",
+	CardKeywordContract:       "Contract",
+	CardKeywordCrank:          "Crank",
+	CardKeywordTheCrowdBoos:   "The Crowd Boos",
+	CardKeywordTheCrowdCheers: "The Crowd Cheers",
 	CardKeywordCrush:          "Crush",
+	CardKeywordDecompose:      "Decompose",
 	CardKeywordDominate:       "Dominate",
+	CardKeywordEphemeral:      "Ephemeral",
 	CardKeywordEssence:        "Essence",
+	CardKeywordEvoUpgrade:     "Evo Upgrade",
+	CardKeywordFlow:           "Flow",
 	CardKeywordFreeze:         "Freeze",
 	CardKeywordFusion:         "Fusion",
-	CardKeywordGoAgain:        "Go Again",
+	CardKeywordGalvanize:      "Galvanize",
+	CardKeywordGoAgain:        "Go again",
+	CardKeywordGoFish:         "Go Fish",
+	CardKeywordGuardwell:      "Guardwell",
 	CardKeywordHeave:          "Heave",
+	CardKeywordHeavy:          "Heavy",
+	CardKeywordHighTide:       "High Tide",
 	CardKeywordIntimidate:     "Intimidate",
 	CardKeywordLegendary:      "Legendary",
-	CardKeywordMentor:         "Mentor",
+	CardKeywordMark:           "Mark",
+	CardKeywordMaterial:       "Material",
+	CardKeywordMeld:           "Meld",
+	CardKeywordModular:        "Modular",
+	CardKeywordMirage:         "Mirage",
 	CardKeywordNegate:         "Negate",
 	CardKeywordOpt:            "Opt",
+	CardKeywordOverpower:      "Overpower",
+	CardKeywordPairs:          "Pairs",
+	CardKeywordPiercing:       "Piercing",
 	CardKeywordPhantasm:       "Phantasm",
+	CardKeywordProtect:        "Protect",
+	CardKeywordQuell:          "Quell",
+	CardKeywordQuickstrike:    "Quickstrike",
 	CardKeywordReload:         "Reload",
 	CardKeywordReprise:        "Reprise",
+	CardKeywordRetrieve:       "Retrieve",
+	CardKeywordRuneGate:       "Rune Gate",
+	CardKeywordRupture:        "Rupture",
+	CardKeywordScrap:          "Scrap",
+	CardKeywordSharpen:        "Sharpen",
+	CardKeywordSolflare:       "Solflare",
 	CardKeywordSpecialization: "Specialization",
 	CardKeywordSpectra:        "Spectra",
 	CardKeywordSpellvoid:      "Spellvoid",
+	CardKeywordStarfall:       "Starfall",
+	CardKeywordSteal:          "Steal",
+	CardKeywordStealth:        "Stealth",
+	CardKeywordSurge:          "Surge",
+	CardKeywordSuspense:       "Suspense",
 	CardKeywordTemper:         "Temper",
-	CardKeywordThaw:           "Thaw",
+	CardKeywordTower:          "Tower",
+	CardKeywordTransform:      "Transform",
+	CardKeywordTranscend:      "Transcend",
+	CardKeywordUnlimited:      "Unlimited",
+	CardKeywordUniversal:      "Universal",
 	CardKeywordUnfreeze:       "Unfreeze",
+	CardKeywordUnity:          "Unity",
+	CardKeywordWager:          "Wager",
+	CardKeywordWard:           "Ward",
+	CardKeywordWateryGrave:    "Watery Grave",
 }
 
 // Valid reports whether k is a defined CardKeyword constant.
@@ -87,34 +187,84 @@ func (k CardKeyword) String() string {
 // CardKeywords returns every defined keyword in ascending ID order.
 func CardKeywords() []CardKeyword {
 	return []CardKeyword{
+		CardKeywordAmbush,
+		CardKeywordAmp,
 		CardKeywordArcaneBarrier,
+		CardKeywordArcaneShelter,
+		CardKeywordAwaken,
 		CardKeywordBattleworn,
+		CardKeywordBeatChest,
 		CardKeywordBladeBreak,
 		CardKeywordBloodDebt,
 		CardKeywordBoost,
+		CardKeywordBond,
 		CardKeywordChannel,
 		CardKeywordCharge,
+		CardKeywordClash,
+		CardKeywordCloaked,
 		CardKeywordCombo,
+		CardKeywordContract,
+		CardKeywordCrank,
+		CardKeywordTheCrowdBoos,
+		CardKeywordTheCrowdCheers,
 		CardKeywordCrush,
+		CardKeywordDecompose,
 		CardKeywordDominate,
+		CardKeywordEphemeral,
 		CardKeywordEssence,
+		CardKeywordEvoUpgrade,
+		CardKeywordFlow,
 		CardKeywordFreeze,
 		CardKeywordFusion,
+		CardKeywordGalvanize,
 		CardKeywordGoAgain,
+		CardKeywordGoFish,
+		CardKeywordGuardwell,
 		CardKeywordHeave,
+		CardKeywordHeavy,
+		CardKeywordHighTide,
 		CardKeywordIntimidate,
 		CardKeywordLegendary,
-		CardKeywordMentor,
+		CardKeywordMark,
+		CardKeywordMaterial,
+		CardKeywordMeld,
+		CardKeywordModular,
+		CardKeywordMirage,
 		CardKeywordNegate,
 		CardKeywordOpt,
+		CardKeywordOverpower,
+		CardKeywordPairs,
+		CardKeywordPiercing,
 		CardKeywordPhantasm,
+		CardKeywordProtect,
+		CardKeywordQuell,
+		CardKeywordQuickstrike,
 		CardKeywordReload,
 		CardKeywordReprise,
+		CardKeywordRetrieve,
+		CardKeywordRuneGate,
+		CardKeywordRupture,
+		CardKeywordScrap,
+		CardKeywordSharpen,
+		CardKeywordSolflare,
 		CardKeywordSpecialization,
 		CardKeywordSpectra,
 		CardKeywordSpellvoid,
+		CardKeywordStarfall,
+		CardKeywordSteal,
+		CardKeywordStealth,
+		CardKeywordSurge,
+		CardKeywordSuspense,
 		CardKeywordTemper,
-		CardKeywordThaw,
+		CardKeywordTower,
+		CardKeywordTransform,
+		CardKeywordTranscend,
+		CardKeywordUnlimited,
+		CardKeywordUniversal,
 		CardKeywordUnfreeze,
+		CardKeywordUnity,
+		CardKeywordWager,
+		CardKeywordWard,
+		CardKeywordWateryGrave,
 	}
 }

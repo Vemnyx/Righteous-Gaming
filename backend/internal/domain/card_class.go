@@ -7,37 +7,45 @@ import "strconv"
 type CardClass int16
 
 const (
-	CardClassNotClassed    CardClass = 0
-	CardClassGeneric       CardClass = 1
-	CardClassAdjudicator   CardClass = 2
-	CardClassBard          CardClass = 3
-	CardClassBrute         CardClass = 4
-	CardClassGuardian      CardClass = 5
-	CardClassIllusionist   CardClass = 6
-	CardClassMechanologist CardClass = 7
-	CardClassMerchant      CardClass = 8
-	CardClassNinja         CardClass = 9
-	CardClassRanger        CardClass = 10
-	CardClassRuneblade     CardClass = 11
-	CardClassShapeshifter  CardClass = 12
-	CardClassWarrior       CardClass = 13
-	CardClassWizard        CardClass = 14
+	CardClassNotClassed CardClass = iota
+	CardClassGeneric
+	CardClassAdjudicator
+	CardClassAssassin
+	CardClassBard
+	CardClassBrute
+	CardClassGuardian
+	CardClassIllusionist
+	CardClassMechanologist
+	CardClassMerchant
+	CardClassNecromancer
+	CardClassNinja
+	CardClassPirate
+	CardClassRanger
+	CardClassRuneblade
+	CardClassShapeshifter
+	CardClassThief
+	CardClassWarrior
+	CardClassWizard
 )
 
 var cardClassNames = map[CardClass]string{
 	CardClassNotClassed:    "NotClassed",
 	CardClassGeneric:       "Generic",
 	CardClassAdjudicator:   "Adjudicator",
+	CardClassAssassin:      "Assassin",
 	CardClassBard:          "Bard",
 	CardClassBrute:         "Brute",
 	CardClassGuardian:      "Guardian",
 	CardClassIllusionist:   "Illusionist",
 	CardClassMechanologist: "Mechanologist",
 	CardClassMerchant:      "Merchant",
+	CardClassNecromancer:   "Necromancer",
 	CardClassNinja:         "Ninja",
+	CardClassPirate:        "Pirate",
 	CardClassRanger:        "Ranger",
 	CardClassRuneblade:     "Runeblade",
 	CardClassShapeshifter:  "Shapeshifter",
+	CardClassThief:         "Thief",
 	CardClassWarrior:       "Warrior",
 	CardClassWizard:        "Wizard",
 }
@@ -62,16 +70,20 @@ func CardClasses() []CardClass {
 		CardClassNotClassed,
 		CardClassGeneric,
 		CardClassAdjudicator,
+		CardClassAssassin,
 		CardClassBard,
 		CardClassBrute,
 		CardClassGuardian,
 		CardClassIllusionist,
 		CardClassMechanologist,
 		CardClassMerchant,
+		CardClassNecromancer,
 		CardClassNinja,
+		CardClassPirate,
 		CardClassRanger,
 		CardClassRuneblade,
 		CardClassShapeshifter,
+		CardClassThief,
 		CardClassWarrior,
 		CardClassWizard,
 	}

@@ -12,6 +12,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux := http.NewServeMux()
 	uh := &userHTTP{svc: userSvc, app: application}
 	mh := &mailHTTP{app: application}
+	ch := &catalogHTTP{app: application}
 
 	mux.HandleFunc("POST /api/users", uh.createUser)
 	mux.HandleFunc("POST /api/complete-registration", uh.completeRegistration)
@@ -20,6 +21,14 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("POST /api/admin/user/register", uh.adminRegisterUser)
 	mux.HandleFunc("GET /api/admin/users", uh.adminListUsers)
 	mux.HandleFunc("POST /api/send-email", mh.sendEmail)
+
+	mux.HandleFunc("GET /api/sets", ch.listSets)
+	mux.HandleFunc("GET /api/sets/{id}", ch.getSet)
+	mux.HandleFunc("POST /api/sets", ch.createSet)
+	mux.HandleFunc("GET /api/sets/{id}/cards", ch.listCardsBySet)
+	mux.HandleFunc("GET /api/cards/{id}", ch.getCard)
+	mux.HandleFunc("POST /api/cards", ch.createCard)
+	mux.HandleFunc("POST /api/cards/batch", ch.createCardsBatch)
 
 	return mux
 }
