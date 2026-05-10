@@ -265,3 +265,56 @@ func (r *Repository) CardsBySetID(ctx context.Context, setID int) ([]Card, error
 	}
 	return out, nil
 }
+
+// ListCards returns every card, ordered by set_code, set_num, id.
+func (r *Repository) ListCards(ctx context.Context) ([]Card, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	q := `SELECT ` + cardSelectColumns + ` FROM cards ORDER BY set_code ASC, set_num ASC, id ASC`
+	rows, err := r.pool.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list cards: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]Card, 0, 256)
+	for rows.Next() {
+		var c Card
+		err := rows.Scan(
+			&c.ID,
+			&c.SetID,
+			&c.Name,
+			&c.CardIdentifier,
+			&c.ImageURL,
+			&c.FunctionalText,
+			&c.Rarity,
+			&c.SetCode,
+			&c.SetNum,
+			&c.Type,
+			&c.Subtypes,
+			&c.Classes,
+			&c.Hybrid,
+			&c.Talents,
+			&c.Pitch,
+			&c.Cost,
+			&c.Power,
+			&c.Block,
+			&c.Heroes,
+			&c.Life,
+			&c.Intellect,
+			&c.Keywords,
+			&c.Formats,
+			&c.Specializations,
+			&c.Fusions,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("repository: list cards scan: %w", err)
+		}
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: list cards rows: %w", err)
+	}
+	return out, nil
+}

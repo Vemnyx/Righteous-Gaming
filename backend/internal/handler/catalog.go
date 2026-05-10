@@ -270,6 +270,24 @@ func (h *catalogHTTP) createSet(w http.ResponseWriter, r *http.Request) {
 	writeCatalogJSON(w, http.StatusCreated, setToJSON(s))
 }
 
+func (h *catalogHTTP) listCards(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	cards, err := h.app.Repo.ListCards(r.Context())
+	if err != nil {
+		log.Error("catalog list cards", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	out := make([]cardJSON, 0, len(cards))
+	for i := range cards {
+		out = append(out, cardToJSON(&cards[i]))
+	}
+	writeCatalogJSON(w, http.StatusOK, out)
+}
+
 func (h *catalogHTTP) listCardsBySet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

@@ -26,6 +26,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("GET /api/sets/{id}", ch.getSet)
 	mux.HandleFunc("POST /api/sets", ch.createSet)
 	mux.HandleFunc("GET /api/sets/{id}/cards", ch.listCardsBySet)
+	mux.HandleFunc("GET /api/cards", ch.listCards)
 	mux.HandleFunc("GET /api/cards/{id}", ch.getCard)
 	mux.HandleFunc("POST /api/cards", ch.createCard)
 	mux.HandleFunc("POST /api/cards/batch", ch.createCardsBatch)

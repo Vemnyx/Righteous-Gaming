@@ -2,6 +2,7 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { UsersAdminTable } from "../components/UsersAdminTable";
+import { CardsCatalog } from "../components/CardsCatalog";
 
 /** Persisted before opening Invite User so Back restores the dashboard URL (e.g. `/users`). */
 const SESSION_INVITE_RETURN_KEY = "rg-dashboard-return-url";
@@ -647,10 +648,19 @@ export default function Dashboard({ onNavigate }) {
                 }
               />
             ) : tab.id === RESOURCES_TAB_ID ? (
-              <div
-                className="flex min-h-[min(40vh,18rem)] flex-1 flex-col"
-                aria-label="Resources"
-              />
+              resourcesChild === "cards" ? (
+                <CardsCatalog
+                  isLight={isLight}
+                  active={activeTab === RESOURCES_TAB_ID && resourcesChild === "cards"}
+                />
+              ) : (
+                <div
+                  className="flex min-h-[min(40vh,18rem)] flex-1 flex-col items-center justify-center px-4 text-center"
+                  aria-label="Resources"
+                >
+                  <p className="text-[0.9rem] text-[#f4f0fa]/65">Coming soon.</p>
+                </div>
+              )
             ) : (
               <div className="relative flex flex-1 flex-col items-center justify-center px-4 py-8 text-center">
                 <span className={comingSoonGlow} aria-hidden />
