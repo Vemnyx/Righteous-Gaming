@@ -93,6 +93,24 @@ function TableIcon() {
   );
 }
 
+function EyeViewDetailsIcon() {
+  return (
+    <svg
+      className="size-5 shrink-0"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
 function GridDensityIcon({ level }) {
   const n = level === "sm" ? 2 : level === "md" ? 3 : 4;
   const cells = [];
@@ -131,7 +149,8 @@ function GridDensityIcon({ level }) {
  *   set_name?: string,
  *   type: number,
  *   pitch: number | null,
- *   image_url: string | null
+ *   image_url: string | null,
+ *   card_identifier: string | null
  * }} CatalogCard
  */
 
@@ -177,7 +196,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
   const [error, setError] = useState(/** @type {string | null} */ (null));
   /** @type {[{ url: string, x: number, y: number } | null, (v: { url: string, x: number, y: number } | null) => void]} */
   const [imagePreview, setImagePreview] = useState(null);
-  /** @type {[{ url: string, name: string } | null, (v: { url: string, name: string } | null) => void]} */
+  /** @type {[{ url: string, name: string, card_identifier: string | null } | null, (v: { url: string, name: string, card_identifier: string | null } | null) => void]} */
   const [gridImageModal, setGridImageModal] = useState(null);
 
   const gridPageSizeVal = useMemo(() => gridPageSize(view, narrow), [view, narrow]);
@@ -470,7 +489,11 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                     className={`flex aspect-[63/88] w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg border bg-black/30 p-0 text-left transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 ${gridThumbBorder}`}
                     aria-label={`Open full image: ${c.name}`}
                     onClick={() =>
-                      setGridImageModal({ url: c.image_url, name: c.name ?? "" })
+                      setGridImageModal({
+                        url: c.image_url,
+                        name: c.name ?? "",
+                        card_identifier: c.card_identifier ?? null,
+                      })
                     }
                   >
                     <img
@@ -549,13 +572,40 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
               aria-label={gridImageModal.name ? `Card: ${gridImageModal.name}` : "Card image"}
               onClick={() => setGridImageModal(null)}
             >
-              <div className="flex h-[85vh] w-full max-w-[min(100%,96vw)] items-center justify-center">
-                <img
-                  src={gridImageModal.url}
-                  alt={gridImageModal.name || "Card"}
-                  className="max-h-full max-w-full object-contain select-none"
-                  draggable={false}
-                />
+              <div className="flex h-[85vh] w-full max-w-[min(100%,96vw)] flex-col items-center justify-center gap-4">
+                <div className="flex min-h-0 w-full flex-1 items-center justify-center">
+                  <img
+                    src={gridImageModal.url}
+                    alt={gridImageModal.name || "Card"}
+                    className="max-h-full max-w-full object-contain select-none"
+                    draggable={false}
+                  />
+                </div>
+                {gridImageModal.card_identifier && onOpenCardDetail ? (
+                  <div
+                    className="flex shrink-0 flex-col items-center gap-1.5"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <a
+                      href={`/resources/cards/${encodeURIComponent(gridImageModal.card_identifier)}`}
+                      className="inline-flex items-center gap-2 rounded-lg border border-white/[0.28] bg-black/40 px-4 py-2.5 text-[0.875rem] font-medium text-[#c4a9ef] shadow-lg transition-colors hover:border-[#c4a9ef]/45 hover:bg-black/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55"
+                      aria-label="Open the card details page"
+                      title="Go to the full card details page"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const id = gridImageModal.card_identifier;
+                        setGridImageModal(null);
+                        onOpenCardDetail(id);
+                      }}
+                    >
+                      <EyeViewDetailsIcon />
+                      View Card Details
+                    </a>
+                    <span className="text-center text-[0.72rem] text-[#f4f0fa]/45">
+                      Opens the card details page
+                    </span>
+                  </div>
+                ) : null}
               </div>
             </div>,
             document.body,

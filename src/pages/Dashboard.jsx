@@ -490,11 +490,6 @@ export default function Dashboard({ onNavigate }) {
     pushDashboardUrl(RESOURCES_TAB_ID, "cards", id, null);
   }, []);
 
-  const closeCardDetail = useCallback(() => {
-    setResourcesCardIdentifier(null);
-    pushDashboardUrl(RESOURCES_TAB_ID, "cards", null, null);
-  }, []);
-
   useEffect(() => {
     function syncFromBrowser() {
       const resolved = resolveDashboardLocation(
@@ -941,7 +936,6 @@ export default function Dashboard({ onNavigate }) {
                     resourcesChild === "cards" &&
                     Boolean(resourcesCardIdentifier)
                   }
-                  onBackToCatalog={closeCardDetail}
                 />
               ) : resourcesChild === "cards" ? (
                 <CardsCatalog

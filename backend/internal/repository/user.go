@@ -13,12 +13,13 @@ var ErrUserNotFound = errors.New("repository: user not found")
 
 // User is a row from users.
 type User struct {
-	ID        int
-	Email     string
-	Username  *string
-	UID       string
-	Role      int
-	CreatedAt time.Time
+	ID           int
+	Email        string
+	Username     *string
+	UID          string
+	Role         int
+	CreatedAt    time.Time
+	RegisteredAt *time.Time
 }
 
 // CreateUserInput holds fields required to insert a user (id and created_at are set by the DB).
@@ -241,7 +242,7 @@ func (r *Repository) ListUsersPaged(ctx context.Context, limit, offset int) ([]U
 	}
 
 	const q = `
-SELECT id, email, username, COALESCE(uid, ''), role, created_at
+SELECT id, email, username, COALESCE(uid, ''), role, created_at, registered_at
 FROM users
 ORDER BY id ASC
 LIMIT $1 OFFSET $2`
@@ -254,7 +255,7 @@ LIMIT $1 OFFSET $2`
 	list := make([]User, 0, limit)
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt, &u.RegisteredAt); err != nil {
 			return nil, 0, fmt.Errorf("repository: list users paged scan: %w", err)
 		}
 		list = append(list, u)

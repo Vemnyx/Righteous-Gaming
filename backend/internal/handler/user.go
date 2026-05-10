@@ -55,12 +55,13 @@ type registrationLookupResponse struct {
 }
 
 type adminListedUserJSON struct {
-	ID        int       `json:"id"`
-	Email     string    `json:"email"`
-	Username  *string   `json:"username,omitempty"`
-	UID       string    `json:"uid"`
-	Role      int       `json:"role"`
-	CreatedAt time.Time `json:"created_at"`
+	ID           int        `json:"id"`
+	Email        string     `json:"email"`
+	Username     *string    `json:"username,omitempty"`
+	UID          string     `json:"uid"`
+	Role         int        `json:"role"`
+	InviteSentAt time.Time  `json:"invite_sent_at"`
+	RegisteredAt *time.Time `json:"registered_at,omitempty"`
 }
 
 type adminUsersListResponse struct {
@@ -113,12 +114,13 @@ func (h *userHTTP) adminListUsers(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		uname := row.Username
 		out = append(out, adminListedUserJSON{
-			ID:        row.ID,
-			Email:     row.Email,
-			Username:  uname,
-			UID:       row.UID,
-			Role:      row.Role,
-			CreatedAt: row.CreatedAt,
+			ID:           row.ID,
+			Email:        row.Email,
+			Username:     uname,
+			UID:          row.UID,
+			Role:         row.Role,
+			InviteSentAt: row.CreatedAt,
+			RegisteredAt: row.RegisteredAt,
 		})
 	}
 

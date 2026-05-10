@@ -46,9 +46,9 @@ function formatEnumList(arr, nameFn) {
  */
 
 /**
- * @param {{ isLight: boolean, identifier: string, active: boolean, onBackToCatalog: () => void }} props
+ * @param {{ isLight: boolean, identifier: string, active: boolean }} props
  */
-export function CardDetailPage({ isLight, identifier, active, onBackToCatalog }) {
+export function CardDetailPage({ isLight, identifier, active }) {
   const { user } = useAuth();
   const [card, setCard] = useState(/** @type {CatalogCardDetail | null} */ (null));
   const [loading, setLoading] = useState(false);
@@ -102,20 +102,6 @@ export function CardDetailPage({ isLight, identifier, active, onBackToCatalog })
 
   return (
     <div className="relative flex w-full flex-1 flex-col gap-5 px-1 py-2 sm:px-2">
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={onBackToCatalog}
-          className={`rounded-lg border px-3 py-1.5 text-[0.8125rem] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 ${
-            isLight
-              ? "border-white/25 bg-black/25 text-[#f4f0fa] hover:border-white/40 hover:bg-black/35"
-              : "border-white/[0.28] bg-black/20 text-[#f4f0fa] hover:border-white/40 hover:bg-black/30"
-          }`}
-        >
-          ← Back to catalog
-        </button>
-      </div>
-
       {loading ? <p className={`text-[0.9rem] ${muted}`}>Loading…</p> : null}
 
       {error ? (
@@ -145,19 +131,7 @@ export function CardDetailPage({ isLight, identifier, active, onBackToCatalog })
 
       {!loading && !error && card ? (
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10">
-          <div className="mx-auto flex w-full max-w-[min(100%,22rem)] shrink-0 flex-col gap-3 lg:mx-0 lg:w-[min(100%,22rem)]">
-            <header className="space-y-1 text-center lg:text-left">
-              <h2 className="m-0 text-xl font-semibold tracking-tight text-[#f4f0fa]">{card.name}</h2>
-              <p className={`m-0 text-[0.9rem] leading-snug ${muted}`}>
-                {(() => {
-                  const setName = card.set_name?.trim();
-                  const code = formatCollectorCode(card.set_code, card.set_num);
-                  if (setName) return `${setName} - ${code}`;
-                  return code;
-                })()}
-              </p>
-            </header>
-
+          <div className="mx-auto flex w-full max-w-[min(100%,22rem)] shrink-0 lg:mx-0 lg:w-[min(100%,22rem)]">
             <div
               className={`overflow-hidden rounded-xl border bg-black/25 ${panelBorder}`}
             >
@@ -177,10 +151,20 @@ export function CardDetailPage({ isLight, identifier, active, onBackToCatalog })
           </div>
 
           <section className={`min-w-0 flex-1 rounded-xl border bg-black/20 p-4 sm:p-5 ${panelBorder}`}>
-            <h3 className="m-0 mb-3 text-[0.7rem] font-semibold uppercase tracking-wider text-[#f4f0fa]/55">
-              Card data
-            </h3>
             <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-[minmax(9rem,11rem)_1fr]">
+              <dt className={labelCls}>Name</dt>
+              <dd className={ddCls}>{card.name}</dd>
+
+              <dt className={labelCls}>Set</dt>
+              <dd className={ddCls}>
+                {(() => {
+                  const setName = card.set_name?.trim();
+                  const code = formatCollectorCode(card.set_code, card.set_num);
+                  if (setName) return `${setName} - ${code}`;
+                  return code;
+                })()}
+              </dd>
+
               {card.rarity != null ? (
                 <>
                   <dt className={labelCls}>Rarity</dt>

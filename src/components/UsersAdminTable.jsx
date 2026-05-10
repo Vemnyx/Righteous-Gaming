@@ -9,6 +9,14 @@ function roleLabel(role) {
   return String(role);
 }
 
+/** @param {string | undefined | null} iso */
+function formatDateTime(iso) {
+  if (iso == null || iso === "") return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+}
+
 /**
  * @param {{ isLight: boolean, active: boolean, onInviteUser?: () => void }} props
  */
@@ -112,19 +120,20 @@ export function UsersAdminTable({ isLight, active, onInviteUser }) {
               <th className="px-3 py-2.5 font-semibold sm:px-4">Username</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">UID</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Role</th>
-              <th className="px-3 py-2.5 font-semibold sm:px-4">Created</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Invite Sent At</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Registered At</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-[#f4f0fa]/55">
+                <td colSpan={7} className="px-4 py-10 text-center text-[#f4f0fa]/55">
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-[#f4f0fa]/55">
+                <td colSpan={7} className="px-4 py-10 text-center text-[#f4f0fa]/55">
                   No users found.
                 </td>
               </tr>
@@ -149,12 +158,10 @@ export function UsersAdminTable({ isLight, active, onInviteUser }) {
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 sm:px-4">{roleLabel(row.role)}</td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-[0.75rem] text-[#f4f0fa]/75 sm:px-4">
-                    {row.created_at
-                      ? new Date(row.created_at).toLocaleString(undefined, {
-                          dateStyle: "short",
-                          timeStyle: "short",
-                        })
-                      : "—"}
+                    {formatDateTime(row.invite_sent_at)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-[0.75rem] text-[#f4f0fa]/75 sm:px-4">
+                    {formatDateTime(row.registered_at)}
                   </td>
                 </tr>
               ))
