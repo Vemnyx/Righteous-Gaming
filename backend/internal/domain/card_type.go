@@ -7,7 +7,8 @@ import "strconv"
 type CardType int16
 
 const (
-	CardTypeAction CardType = iota
+	CardTypeNonAttackAction CardType = iota
+	CardTypeAttackAction
 	CardTypeAttackReaction
 	CardTypeBlock
 	CardTypeCompanion
@@ -24,7 +25,8 @@ const (
 )
 
 var cardTypeNames = map[CardType]string{
-	CardTypeAction:          "Non-Attack Action",
+	CardTypeNonAttackAction: "Non-Attack Action",
+	CardTypeAttackAction:    "Attack Action",
 	CardTypeAttackReaction:  "Attack Reaction",
 	CardTypeBlock:           "Block",
 	CardTypeCompanion:       "Companion",
@@ -57,7 +59,8 @@ func (t CardType) String() string {
 // CardTypes returns every defined type in ascending ID order.
 func CardTypes() []CardType {
 	return []CardType{
-		CardTypeAction,
+		CardTypeNonAttackAction,
+		CardTypeAttackAction,
 		CardTypeAttackReaction,
 		CardTypeBlock,
 		CardTypeCompanion,

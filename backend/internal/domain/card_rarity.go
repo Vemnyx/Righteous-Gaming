@@ -7,22 +7,26 @@ import "strconv"
 type CardRarity int16
 
 const (
-	CardRarityToken     CardRarity = 0
-	CardRarityCommon    CardRarity = 1
-	CardRarityRare      CardRarity = 2
-	CardRaritySuperRare CardRarity = 3
-	CardRarityMajestic  CardRarity = 4
-	CardRarityLegendary CardRarity = 5
-	CardRarityFabled    CardRarity = 6
-	CardRarityPromo     CardRarity = 7
+	CardRarityBasic CardRarity = iota
+	CardRarityToken
+	CardRarityCommon
+	CardRarityRare
+	CardRaritySuperRare
+	CardRarityMajestic
+	CardRarityMarvel
+	CardRarityLegendary
+	CardRarityFabled
+	CardRarityPromo
 )
 
 var cardRarityNames = map[CardRarity]string{
+	CardRarityBasic:     "Basic",
 	CardRarityToken:     "Token",
 	CardRarityCommon:    "Common",
 	CardRarityRare:      "Rare",
 	CardRaritySuperRare: "Super Rare",
 	CardRarityMajestic:  "Majestic",
+	CardRarityMarvel:    "Marvel",
 	CardRarityLegendary: "Legendary",
 	CardRarityFabled:    "Fabled",
 	CardRarityPromo:     "Promo",
@@ -34,7 +38,7 @@ func (r CardRarity) Valid() bool {
 	return ok
 }
 
-// String returns the wire/display name ("Token", "Super Rare", …) or "CardRarity("+decimal+")" if unknown.
+// String returns the wire/display name or "CardRarity("+decimal+")" if unknown.
 func (r CardRarity) String() string {
 	if name, ok := cardRarityNames[r]; ok {
 		return name
@@ -45,11 +49,13 @@ func (r CardRarity) String() string {
 // CardRarities returns every defined rarity constant in ascending ID order.
 func CardRarities() []CardRarity {
 	return []CardRarity{
+		CardRarityBasic,
 		CardRarityToken,
 		CardRarityCommon,
 		CardRarityRare,
 		CardRaritySuperRare,
 		CardRarityMajestic,
+		CardRarityMarvel,
 		CardRarityLegendary,
 		CardRarityFabled,
 		CardRarityPromo,

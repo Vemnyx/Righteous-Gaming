@@ -1,0 +1,1384 @@
+[
+  {
+    "cardIdentifier": "glide-through-starlight-yellow",
+    "name": "Glide Through Starlight",
+    "rarity": "Common",
+    "types": [
+      "Action"
+    ],
+    "subtypes": [
+      "Attack"
+    ],
+    "classes": [
+      "NotClassed"
+    ],
+    "talents": [
+      "Lightning"
+    ],
+    "keywords": [],
+    "legalHeroes": [
+      "Aurora",
+      "Aurora2",
+      "Briar",
+      "Broscilio",
+      "Lexi",
+      "Oscilio",
+      "Starvo",
+      "Zyggy"
+    ],
+    "defaultImage": "OMN170",
+    "functionalText": "**Instant** - {r}, discard this: Prevent the next 1 damage that would be dealt to you this turn. If you prevent damage this way, create a Lightning Flow token.",
+    "setIdentifiers": [
+      "OMN170"
+    ],
+    "pitch": 2,
+    "cost": 1,
+    "power": 4,
+    "defense": 2,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "glide-through-starlight-blue",
+    "name": "Glide Through Starlight",
+    "rarity": "Common",
+    "types": [
+      "Action"
+    ],
+    "subtypes": [
+      "Attack"
+    ],
+    "classes": [
+      "NotClassed"
+    ],
+    "talents": [
+      "Lightning"
+    ],
+    "keywords": [],
+    "legalHeroes": [
+      "Aurora",
+      "Aurora2",
+      "Briar",
+      "Broscilio",
+      "Lexi",
+      "Oscilio",
+      "Starvo",
+      "Zyggy"
+    ],
+    "defaultImage": "OMN171",
+    "functionalText": "**Instant** - {r}, discard this: Prevent the next 1 damage that would be dealt to you this turn. If you prevent damage this way, create a Lightning Flow token.",
+    "setIdentifiers": [
+      "OMN171"
+    ],
+    "pitch": 3,
+    "cost": 1,
+    "power": 3,
+    "defense": 2,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "gloves-of-astral-sanctuary",
+    "name": "Gloves of Astral Sanctuary",
+    "rarity": "Common",
+    "types": [
+      "Equipment"
+    ],
+    "subtypes": [
+      "Arms"
+    ],
+    "classes": [
+      "Generic"
+    ],
+    "talents": [],
+    "keywords": [],
+    "legalHeroes": [
+      "Arakni",
+      "Aurora",
+      "Aurora2",
+      "Azalea",
+      "Benji",
+      "Betsy",
+      "Blaze",
+      "Bolfar",
+      "Boltyn",
+      "Bravo",
+      "Brevant",
+      "Briar",
+      "Broscilio",
+      "Brutus",
+      "Chane",
+      "Cindra",
+      "Crackni",
+      "Crix",
+      "Dash",
+      "DataDoll",
+      "Dorinthea",
+      "Dromai",
+      "Emperor",
+      "Enigma",
+      "Fai",
+      "Fang",
+      "Florian",
+      "Frankie",
+      "Genis",
+      "GravyBones",
+      "Hala",
+      "Ira",
+      "Iyslander",
+      "Jarl",
+      "Kano",
+      "Kassai",
+      "Katsu",
+      "Kavdaen",
+      "Kayo",
+      "Kox",
+      "Levia",
+      "Lexi",
+      "Librarian",
+      "Lyath",
+      "Marlynn",
+      "Maxx",
+      "Melody",
+      "Nuu",
+      "Oldhim",
+      "Olympia",
+      "Oscilio",
+      "Pleiades",
+      "Prism",
+      "Puffin",
+      "RKO",
+      "Reya",
+      "Rhinar",
+      "Riptide",
+      "Ruudi",
+      "Scurv",
+      "Shiyana",
+      "Slippy",
+      "Squizzy",
+      "Starvo",
+      "Taipanis",
+      "Taylor",
+      "Teklovossen",
+      "Terra",
+      "Theryon",
+      "Tuffnut",
+      "Uzuri",
+      "Valda",
+      "Verdance",
+      "Victor",
+      "Viserai",
+      "Vynnset",
+      "Yoji",
+      "Yorick",
+      "Zen",
+      "Zyggy"
+    ],
+    "defaultImage": "OMN211",
+    "functionalText": "**Instant** - {t} your hero, destroy this: Prevent the next 1 damage that would be dealt to you this turn.",
+    "setIdentifiers": [
+      "LGS454",
+      "OMN211"
+    ],
+    "pitch": null,
+    "cost": null,
+    "power": null,
+    "defense": 0,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "helm-of-astral-sanctuary",
+    "name": "Helm of Astral Sanctuary",
+    "rarity": "Common",
+    "types": [
+      "Equipment"
+    ],
+    "subtypes": [
+      "Head"
+    ],
+    "classes": [
+      "Generic"
+    ],
+    "talents": [],
+    "keywords": [],
+    "legalHeroes": [
+      "Arakni",
+      "Aurora",
+      "Aurora2",
+      "Azalea",
+      "Benji",
+      "Betsy",
+      "Blaze",
+      "Bolfar",
+      "Boltyn",
+      "Bravo",
+      "Brevant",
+      "Briar",
+      "Broscilio",
+      "Brutus",
+      "Chane",
+      "Cindra",
+      "Crackni",
+      "Crix",
+      "Dash",
+      "DataDoll",
+      "Dorinthea",
+      "Dromai",
+      "Emperor",
+      "Enigma",
+      "Fai",
+      "Fang",
+      "Florian",
+      "Frankie",
+      "Genis",
+      "GravyBones",
+      "Hala",
+      "Ira",
+      "Iyslander",
+      "Jarl",
+      "Kano",
+      "Kassai",
+      "Katsu",
+      "Kavdaen",
+      "Kayo",
+      "Kox",
+      "Levia",
+      "Lexi",
+      "Librarian",
+      "Lyath",
+      "Marlynn",
+      "Maxx",
+      "Melody",
+      "Nuu",
+      "Oldhim",
+      "Olympia",
+      "Oscilio",
+      "Pleiades",
+      "Prism",
+      "Puffin",
+      "RKO",
+      "Reya",
+      "Rhinar",
+      "Riptide",
+      "Ruudi",
+      "Scurv",
+      "Shiyana",
+      "Slippy",
+      "Squizzy",
+      "Starvo",
+      "Taipanis",
+      "Taylor",
+      "Teklovossen",
+      "Terra",
+      "Theryon",
+      "Tuffnut",
+      "Uzuri",
+      "Valda",
+      "Verdance",
+      "Victor",
+      "Viserai",
+      "Vynnset",
+      "Yoji",
+      "Yorick",
+      "Zen",
+      "Zyggy"
+    ],
+    "defaultImage": "OMN209",
+    "functionalText": "**Instant** - {t} your hero, destroy this: Prevent the next 1 damage that would be dealt to you this turn.",
+    "setIdentifiers": [
+      "LGS452",
+      "OMN209"
+    ],
+    "pitch": null,
+    "cost": null,
+    "power": null,
+    "defense": 0,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "lightning-flow",
+    "name": "Lightning Flow",
+    "rarity": "Basic",
+    "types": [
+      "Token"
+    ],
+    "subtypes": [
+      "Aura"
+    ],
+    "classes": [
+      "NotClassed"
+    ],
+    "talents": [
+      "Elemental"
+    ],
+    "keywords": [],
+    "legalHeroes": [
+      "Aurora",
+      "Aurora2",
+      "Briar",
+      "Broscilio",
+      "Florian",
+      "Iyslander",
+      "Jarl",
+      "Lexi",
+      "Oldhim",
+      "Oscilio",
+      "Shiyana",
+      "Starvo",
+      "Terra",
+      "Verdance",
+      "Yorick",
+      "Zyggy"
+    ],
+    "defaultImage": "OMN203",
+    "functionalText": null,
+    "setIdentifiers": [
+      "OMN203"
+    ],
+    "pitch": null,
+    "cost": null,
+    "power": null,
+    "defense": null,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "lionclaw-maul",
+    "name": "Lionclaw Maul",
+    "rarity": "Majestic",
+    "types": [
+      "Weapon"
+    ],
+    "subtypes": [
+      "OneHanded",
+      "Axe",
+      "Hammer"
+    ],
+    "classes": [
+      "Guardian"
+    ],
+    "talents": [
+      "Reviled"
+    ],
+    "keywords": [
+      "TheCrowdBoos"
+    ],
+    "legalHeroes": [
+      "Lyath"
+    ],
+    "defaultImage": "OMN247",
+    "functionalText": "**Action** - {r}{r}, {t}: **Attack**\n\nIf this has {p} greater than its base, it gets +1{p}.\n\nWhen this hits a hero, **the crowd boos** you.",
+    "setIdentifiers": [
+      "OMN247"
+    ],
+    "pitch": null,
+    "cost": null,
+    "power": 1,
+    "defense": null,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "mercurial-skies-red",
+    "name": "Mercurial Skies",
+    "rarity": "Rare",
+    "types": [
+      "Action"
+    ],
+    "subtypes": [
+      "NonAttack"
+    ],
+    "classes": [
+      "Runeblade"
+    ],
+    "talents": [
+      "Lightning"
+    ],
+    "keywords": [
+      "GoAgain"
+    ],
+    "legalHeroes": [
+      "Aurora",
+      "Aurora2",
+      "Briar"
+    ],
+    "defaultImage": "OMN059",
+    "functionalText": "The next Runeblade or Lightning attack action card you play this turn gets **go again** and \"The first time this deals damage to a hero, you may destroy a Lightning Flow you control. If you do, deal 3 arcane damage to them.\"\n\n**Go again**",
+    "setIdentifiers": [
+      "OMN059"
+    ],
+    "pitch": 1,
+    "cost": 0,
+    "power": null,
+    "defense": 2,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "mercurial-skies-yellow",
+    "name": "Mercurial Skies",
+    "rarity": "Rare",
+    "types": [
+      "Action"
+    ],
+    "subtypes": [
+      "NonAttack"
+    ],
+    "classes": [
+      "Runeblade"
+    ],
+    "talents": [
+      "Lightning"
+    ],
+    "keywords": [
+      "GoAgain"
+    ],
+    "legalHeroes": [
+      "Aurora",
+      "Aurora2",
+      "Briar"
+    ],
+    "defaultImage": "OMN060",
+    "functionalText": "The next Runeblade or Lightning attack action card you play this turn gets **go again** and \"The first time this deals damage to a hero, you may destroy a Lightning Flow you control. If you do, deal 2 arcane damage to them.\"\n\n**Go again**",
+    "setIdentifiers": [
+      "OMN060"
+    ],
+    "pitch": 2,
+    "cost": 0,
+    "power": null,
+    "defense": 2,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "mercurial-skies-blue",
+    "name": "Mercurial Skies",
+    "rarity": "Rare",
+    "types": [
+      "Action"
+    ],
+    "subtypes": [
+      "NonAttack"
+    ],
+    "classes": [
+      "Runeblade"
+    ],
+    "talents": [
+      "Lightning"
+    ],
+    "keywords": [
+      "GoAgain"
+    ],
+    "legalHeroes": [
+      "Aurora",
+      "Aurora2",
+      "Briar"
+    ],
+    "defaultImage": "OMN061",
+    "functionalText": "The next Runeblade or Lightning attack action card you play this turn gets **go again** and \"The first time this deals damage to a hero, you may destroy a Lightning Flow you control. If you do, deal 1 arcane damage to them.\"\n\n**Go again**",
+    "setIdentifiers": [
+      "OMN061"
+    ],
+    "pitch": 3,
+    "cost": 0,
+    "power": null,
+    "defense": 2,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "meteoric-rise-red",
+    "name": "Meteoric Rise",
+    "rarity": "Rare",
+    "types": [
+      "Action"
+    ],
+    "subtypes": [
+      "Attack"
+    ],
+    "classes": [
+      "NotClassed"
+    ],
+    "talents": [
+      "Lightning"
+    ],
+    "keywords": [],
+    "legalHeroes": [
+      "Aurora",
+      "Aurora2",
+      "Briar",
+      "Broscilio",
+      "Lexi",
+      "Oscilio",
+      "Starvo",
+      "Zyggy"
+    ],
+    "defaultImage": "OMN153",
+    "functionalText": "**Twice per Turn Instant** - {r}: This gets +1{p}.\n\nWhen this hits, create a Lightning Flow token.",
+    "setIdentifiers": [
+      "FAB472",
+      "OMN153"
+    ],
+    "pitch": 1,
+    "cost": 1,
+    "power": 5,
+    "defense": 2,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "nebula-duality-red",
+    "name": "Nebula Duality",
+    "rarity": "Common",
+    "types": [
+      "Action"
+    ],
+    "subtypes": [
+      "NonAttack"
+    ],
+    "classes": [
+      "Wizard"
+    ],
+    "talents": [
+      "Lightning"
+    ],
+    "keywords": [],
+    "legalHeroes": [
+      "Broscilio",
+      "Oscilio"
+    ],
+    "defaultImage": "OMN121",
+    "functionalText": "Deal 3 arcane damage to any target.\n\n**Instant** - {r}, discard this: Deal 1 arcane damage to target hero. Create a Lightning Flow token.",
+    "setIdentifiers": [
+      "FAB465",
+      "OMN121"
+    ],
+    "pitch": 1,
+    "cost": 0,
+    "power": null,
+    "defense": 3,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "nebula-duality-yellow",
+    "name": "Nebula Duality",
+    "rarity": "Common",
+    "types": [
+      "Action"
+    ],
+    "subtypes": [
+      "NonAttack"
+    ],
+    "classes": [
+      "Wizard"
+    ],
+    "talents": [
+      "Lightning"
+    ],
+    "keywords": [],
+    "legalHeroes": [
+      "Broscilio",
+      "Oscilio"
+    ],
+    "defaultImage": "OMN122",
+    "functionalText": "Deal 2 arcane damage to any target.\n\n**Instant** - {r}, discard this: Deal 1 arcane damage to target hero. Create a Lightning Flow token.",
+    "setIdentifiers": [
+      "OMN122"
+    ],
+    "pitch": 2,
+    "cost": 0,
+    "power": null,
+    "defense": 3,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "nebula-duality-blue",
+    "name": "Nebula Duality",
+    "rarity": "Common",
+    "types": [
+      "Action"
+    ],
+    "subtypes": [
+      "NonAttack"
+    ],
+    "classes": [
+      "Wizard"
+    ],
+    "talents": [
+      "Lightning"
+    ],
+    "keywords": [],
+    "legalHeroes": [
+      "Broscilio",
+      "Oscilio"
+    ],
+    "defaultImage": "OMN123",
+    "functionalText": "Deal 1 arcane damage to any target.\n\n**Instant** - {r}, discard this: Deal 1 arcane damage to target hero. Create a Lightning Flow token.",
+    "setIdentifiers": [
+      "OMN123"
+    ],
+    "pitch": 3,
+    "cost": 0,
+    "power": null,
+    "defense": 3,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "omens-of-arcana",
+    "name": "Omens of Arcana",
+    "rarity": "Basic",
+    "types": [
+      "Macro"
+    ],
+    "subtypes": [],
+    "classes": [
+      "NotClassed"
+    ],
+    "talents": [],
+    "keywords": [
+      "Spellvoid"
+    ],
+    "legalHeroes": [
+      "Aurora",
+      "Oscilio",
+      "Zyggy"
+    ],
+    "defaultImage": "OMN227",
+    "functionalText": "Each hero starts the game with a Lightning Flow token.\n\nLightning Flow tokens get **spellvoid 1**",
+    "setIdentifiers": [
+      "FAB467",
+      "OMN227"
+    ],
+    "pitch": null,
+    "cost": null,
+    "power": null,
+    "defense": null,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Draft",
+      "Open",
+      "Sealed"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "ominous-aggression-red",
+    "name": "Ominous Aggression",
+    "rarity": "Rare",
+    "types": [
+      "Instant"
+    ],
+    "subtypes": [],
+    "classes": [
+      "Generic"
+    ],
+    "talents": [],
+    "keywords": [],
+    "legalHeroes": [
+      "Arakni",
+      "Aurora",
+      "Aurora2",
+      "Azalea",
+      "Benji",
+      "Betsy",
+      "Blaze",
+      "Bolfar",
+      "Boltyn",
+      "Bravo",
+      "Brevant",
+      "Briar",
+      "Broscilio",
+      "Brutus",
+      "Chane",
+      "Cindra",
+      "Crackni",
+      "Crix",
+      "Dash",
+      "DataDoll",
+      "Dorinthea",
+      "Dromai",
+      "Emperor",
+      "Enigma",
+      "Fai",
+      "Fang",
+      "Florian",
+      "Frankie",
+      "Genis",
+      "GravyBones",
+      "Hala",
+      "Ira",
+      "Iyslander",
+      "Jarl",
+      "Kano",
+      "Kassai",
+      "Katsu",
+      "Kavdaen",
+      "Kayo",
+      "Kox",
+      "Levia",
+      "Lexi",
+      "Librarian",
+      "Lyath",
+      "Marlynn",
+      "Maxx",
+      "Melody",
+      "Nuu",
+      "Oldhim",
+      "Olympia",
+      "Oscilio",
+      "Pleiades",
+      "Prism",
+      "Puffin",
+      "RKO",
+      "Reya",
+      "Rhinar",
+      "Riptide",
+      "Ruudi",
+      "Scurv",
+      "Shiyana",
+      "Slippy",
+      "Squizzy",
+      "Starvo",
+      "Taipanis",
+      "Taylor",
+      "Teklovossen",
+      "Terra",
+      "Theryon",
+      "Tuffnut",
+      "Uzuri",
+      "Valda",
+      "Verdance",
+      "Victor",
+      "Viserai",
+      "Vynnset",
+      "Yoji",
+      "Yorick",
+      "Zen",
+      "Zyggy"
+    ],
+    "defaultImage": "OMN216",
+    "functionalText": "Target attack action card gets +2{p}. If an aura you control was destroyed this turn, instead the card gets +4{p}.",
+    "setIdentifiers": [
+      "OMN216"
+    ],
+    "pitch": 1,
+    "cost": 2,
+    "power": null,
+    "defense": null,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "ominous-excavation-blue",
+    "name": "Ominous Excavation",
+    "rarity": "Rare",
+    "types": [
+      "Instant"
+    ],
+    "subtypes": [],
+    "classes": [
+      "Generic"
+    ],
+    "talents": [],
+    "keywords": [],
+    "legalHeroes": [
+      "Arakni",
+      "Aurora",
+      "Aurora2",
+      "Azalea",
+      "Benji",
+      "Betsy",
+      "Blaze",
+      "Bolfar",
+      "Boltyn",
+      "Bravo",
+      "Brevant",
+      "Briar",
+      "Broscilio",
+      "Brutus",
+      "Chane",
+      "Cindra",
+      "Crackni",
+      "Crix",
+      "Dash",
+      "DataDoll",
+      "Dorinthea",
+      "Dromai",
+      "Enigma",
+      "Fai",
+      "Fang",
+      "Florian",
+      "Frankie",
+      "Genis",
+      "GravyBones",
+      "Hala",
+      "Ira",
+      "Iyslander",
+      "Jarl",
+      "Kano",
+      "Kassai",
+      "Katsu",
+      "Kavdaen",
+      "Kayo",
+      "Kox",
+      "Levia",
+      "Lexi",
+      "Librarian",
+      "Lyath",
+      "Marlynn",
+      "Maxx",
+      "Melody",
+      "Nuu",
+      "Oldhim",
+      "Olympia",
+      "Oscilio",
+      "Pleiades",
+      "Prism",
+      "Puffin",
+      "RKO",
+      "Reya",
+      "Rhinar",
+      "Riptide",
+      "Ruudi",
+      "Scurv",
+      "Shiyana",
+      "Slippy",
+      "Squizzy",
+      "Starvo",
+      "Taipanis",
+      "Taylor",
+      "Teklovossen",
+      "Terra",
+      "Theryon",
+      "Tuffnut",
+      "Uzuri",
+      "Valda",
+      "Verdance",
+      "Victor",
+      "Viserai",
+      "Vynnset",
+      "Yoji",
+      "Yorick",
+      "Zen",
+      "Zyggy"
+    ],
+    "defaultImage": "OMN217",
+    "functionalText": "You may shuffle an instant card from your graveyard into your deck.\n\nIf an aura you control was destroyed this turn, create a Ponder token.",
+    "setIdentifiers": [
+      "OMN217"
+    ],
+    "pitch": 3,
+    "cost": 0,
+    "power": null,
+    "defense": null,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "oscilio-forked-continuum",
+    "name": "Oscilio, Forked Continuum",
+    "rarity": "Basic",
+    "types": [
+      "Hero"
+    ],
+    "subtypes": [],
+    "classes": [
+      "Wizard"
+    ],
+    "talents": [
+      "Lightning"
+    ],
+    "keywords": [],
+    "legalHeroes": [
+      "Broscilio"
+    ],
+    "defaultImage": "OMN094",
+    "functionalText": "**Instant** - {r}, {t}, destroy a Lightning Flow you control: Discard a card and create a Ponder token. If an instant is discard this way, you may play it this turn.",
+    "setIdentifiers": [
+      "OMN094"
+    ],
+    "pitch": null,
+    "cost": null,
+    "power": null,
+    "defense": null,
+    "life": 38,
+    "intellect": 4,
+    "formats": [
+      "ClassicConstructed",
+      "GoldenAge",
+      "LivingLegend",
+      "Open"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "oscilio-scion-of-the-third-age",
+    "name": "Oscilio, Scion of the Third Age",
+    "rarity": "Basic",
+    "types": [
+      "Hero"
+    ],
+    "subtypes": [
+      "Young"
+    ],
+    "classes": [
+      "Wizard"
+    ],
+    "talents": [
+      "Lightning"
+    ],
+    "keywords": [],
+    "legalHeroes": [
+      "Broscilio"
+    ],
+    "defaultImage": "OMN095",
+    "functionalText": "**Instant** - {r}, {t}, destroy a Lightning Flow you control: Discard a card and create a Ponder token. If an instant is discard this way, you may play it this turn.",
+    "setIdentifiers": [
+      "OMN095"
+    ],
+    "pitch": null,
+    "cost": null,
+    "power": null,
+    "defense": null,
+    "life": 19,
+    "intellect": 4,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "Draft",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "pile-driver",
+    "name": "Pile Driver",
+    "rarity": "Majestic",
+    "types": [
+      "Weapon"
+    ],
+    "subtypes": [
+      "TwoHanded",
+      "Log"
+    ],
+    "classes": [
+      "Guardian"
+    ],
+    "talents": [],
+    "keywords": [
+      "Specialization",
+      "Wager"
+    ],
+    "legalHeroes": [
+      "Betsy",
+      "Shiyana"
+    ],
+    "defaultImage": "OMN230",
+    "functionalText": "**Betsy Specialization**\n\n**Action** - {r}{r}{r}{r}, {t}: **Attack**\n\nWhen this attacks, you may **wager** a Gold token with the defending hero.",
+    "setIdentifiers": [
+      "OMN230"
+    ],
+    "pitch": null,
+    "cost": null,
+    "power": 6,
+    "defense": null,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [
+      "Betsy"
+    ],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "prophetic-quickstep-yellow",
+    "name": "Prophetic Quickstep",
+    "rarity": "Rare",
+    "types": [
+      "Action"
+    ],
+    "subtypes": [
+      "Attack"
+    ],
+    "classes": [
+      "Runeblade"
+    ],
+    "talents": [
+      "Lightning"
+    ],
+    "keywords": [
+      "Quickstrike"
+    ],
+    "legalHeroes": [
+      "Aurora",
+      "Aurora2",
+      "Briar"
+    ],
+    "defaultImage": "OMN055",
+    "functionalText": "**Quickstrike** - If this has go again, it gets +1{p} and \"When this attacks a hero, deal 1 arcane damage to them.\"\n\nThe first time this deals damage to a hero, create a Ponder token.",
+    "setIdentifiers": [
+      "OMN055"
+    ],
+    "pitch": 2,
+    "cost": 1,
+    "power": 3,
+    "defense": 3,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "pulsing-cardia-red",
+    "name": "Pulsing Cardia",
+    "rarity": "Common",
+    "types": [
+      "Action"
+    ],
+    "subtypes": [
+      "Attack"
+    ],
+    "classes": [
+      "Illusionist"
+    ],
+    "talents": [
+      "Lightning"
+    ],
+    "keywords": [],
+    "legalHeroes": [
+      "Zyggy"
+    ],
+    "defaultImage": "OMN021",
+    "functionalText": "Whenever this fragments, gain {r}.\n\n**Fragment**",
+    "setIdentifiers": [
+      "OMN021"
+    ],
+    "pitch": 1,
+    "cost": 0,
+    "power": 5,
+    "defense": 3,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  },
+  {
+    "cardIdentifier": "pulsing-cardia-yellow",
+    "name": "Pulsing Cardia",
+    "rarity": "Common",
+    "types": [
+      "Action"
+    ],
+    "subtypes": [
+      "Attack"
+    ],
+    "classes": [
+      "Illusionist"
+    ],
+    "talents": [
+      "Lightning"
+    ],
+    "keywords": [],
+    "legalHeroes": [
+      "Zyggy"
+    ],
+    "defaultImage": "OMN022",
+    "functionalText": "Whenever this fragments, gain {r}.\n\n**Fragment**",
+    "setIdentifiers": [
+      "OMN022"
+    ],
+    "pitch": 2,
+    "cost": 0,
+    "power": 5,
+    "defense": 3,
+    "life": null,
+    "intellect": null,
+    "formats": [
+      "Blitz",
+      "Clash",
+      "ClassicConstructed",
+      "Draft",
+      "GoldenAge",
+      "LivingLegend",
+      "Open",
+      "Sealed",
+      "SilverAge",
+      "UltimatePitFight"
+    ],
+    "hybrid": false,
+    "specializations": [],
+    "fusions": []
+  }
+]

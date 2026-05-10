@@ -3,24 +3,32 @@
  * @readonly
  */
 export const CardTalent = Object.freeze({
-  Draconic: 0,
-  Earth: 1,
-  Elemental: 2,
-  Ice: 3,
-  Light: 4,
-  Lightning: 5,
-  Royal: 6,
-  Shadow: 7,
+  Chaos: 0,
+  Draconic: 1,
+  Earth: 2,
+  Elemental: 3,
+  Ice: 4,
+  Light: 5,
+  Lightning: 6,
+  Mystic: 7,
+  Revered: 8,
+  Reviled: 9,
+  Royal: 10,
+  Shadow: 11,
 });
 
-/** Ordered names for each ID 0..7. */
+/** Ordered names for each ID 0..n. */
 export const CARD_TALENT_NAMES = Object.freeze([
+  "Chaos",
   "Draconic",
   "Earth",
   "Elemental",
   "Ice",
   "Light",
   "Lightning",
+  "Mystic",
+  "Revered",
+  "Reviled",
   "Royal",
   "Shadow",
 ]);

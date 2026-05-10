@@ -17,7 +17,7 @@ set to card.functionalText
 
 4. rarity
 
-use card.Rarity. If it is set to Basic then set it to the common enum. otherwise use the appropriate enums
+use card.Rarity mapped to rarity smallints (Basic, Token, Common, Rare, Super Rare / SuperRare, Majestic, Marvel, Legendary, Fabled, Promo).
 
 5. set_code
 

@@ -7,25 +7,33 @@ import "strconv"
 type CardTalent int16
 
 const (
-	CardTalentDraconic  CardTalent = 0
-	CardTalentEarth     CardTalent = 1
-	CardTalentElemental CardTalent = 2
-	CardTalentIce       CardTalent = 3
-	CardTalentLight     CardTalent = 4
-	CardTalentLightning CardTalent = 5
-	CardTalentRoyal     CardTalent = 6
-	CardTalentShadow    CardTalent = 7
+	CardTalentChaos      CardTalent = 0
+	CardTalentDraconic   CardTalent = 1
+	CardTalentEarth      CardTalent = 2
+	CardTalentElemental  CardTalent = 3
+	CardTalentIce        CardTalent = 4
+	CardTalentLight      CardTalent = 5
+	CardTalentLightning  CardTalent = 6
+	CardTalentMystic     CardTalent = 7
+	CardTalentRevered    CardTalent = 8
+	CardTalentReviled    CardTalent = 9
+	CardTalentRoyal      CardTalent = 10
+	CardTalentShadow     CardTalent = 11
 )
 
 var cardTalentNames = map[CardTalent]string{
-	CardTalentDraconic:  "Draconic",
-	CardTalentEarth:     "Earth",
-	CardTalentElemental: "Elemental",
-	CardTalentIce:       "Ice",
-	CardTalentLight:     "Light",
-	CardTalentLightning: "Lightning",
-	CardTalentRoyal:     "Royal",
-	CardTalentShadow:    "Shadow",
+	CardTalentChaos:      "Chaos",
+	CardTalentDraconic:   "Draconic",
+	CardTalentEarth:      "Earth",
+	CardTalentElemental:  "Elemental",
+	CardTalentIce:        "Ice",
+	CardTalentLight:      "Light",
+	CardTalentLightning:  "Lightning",
+	CardTalentMystic:     "Mystic",
+	CardTalentRevered:    "Revered",
+	CardTalentReviled:    "Reviled",
+	CardTalentRoyal:      "Royal",
+	CardTalentShadow:     "Shadow",
 }
 
 // Valid reports whether t is a defined CardTalent constant.
@@ -45,12 +53,16 @@ func (t CardTalent) String() string {
 // CardTalents returns every defined talent in ascending ID order.
 func CardTalents() []CardTalent {
 	return []CardTalent{
+		CardTalentChaos,
 		CardTalentDraconic,
 		CardTalentEarth,
 		CardTalentElemental,
 		CardTalentIce,
 		CardTalentLight,
 		CardTalentLightning,
+		CardTalentMystic,
+		CardTalentRevered,
+		CardTalentReviled,
 		CardTalentRoyal,
 		CardTalentShadow,
 	}

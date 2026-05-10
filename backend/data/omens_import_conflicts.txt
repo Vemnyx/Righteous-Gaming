@@ -1,0 +1,30 @@
+Known conflicts when mapping Omens cards (cardmappingrules.txt vs current enums / schema)
+
+1) Type line "Attack Action" (rule 7)
+   Mapper uses CardType Attack Action (smallint 1) for Action + Subtype.Attack; Non-Attack Action is id 0 for other Action rows.
+
+2) Playable formats (rule 20)
+   Source data lists FAB formats (Blitz, Clash, Open, Ultimate Pit Fight, Draft, Sealed, …).
+   CardFormat enum only has: Limited(0), SilverAge(1), GoldenAge(2), ClassicConstruction(3), LivingLegend(4).
+   Mapper maps: Draft+Sealed->Limited(0); ClassicConstructed->ClassicConstruction(3); GoldenAge->(2); LivingLegend->(4); SilverAge->(1).
+   Blitz, Clash, Open, UltimatePitFight are DROPPED (no id). Expect incomplete format coverage vs source.
+
+3) Rarity ids 0..9
+   CardRarity includes Basic(0)…Promo(9), including Marvel(6). Re-import or migrate DB if you previously used the old 0..7 scale.
+
+4) Talent "Reviled"
+   CardTalent.Reviled = 9. Mapper accepts "Reviled" and lowercase alias "reviled".
+
+5) Keyword vs fusion
+   Keyword.Fusion exists (card keyword id 28). Card "fusions" column uses CardFusion Earth/Ice/Lightning only. Source data had no Fusions arrays on these cards — fusions left null/[].
+
+6) set_code length
+   Migration uses varchar(3). Value "OMN" fits.
+
+7) Pile Driver specializations: source uses Hero.Betsy — mapped to hero enum id (specializations smallint[]).
+
+8) Hybrid
+   Only "Third Eye of the Sphinx" -> hybrid true per rules.
+
+9) Syntax in pasted TS
+   Lines like `young: true` without a preceding comma after `}` are invalid TS; source JSON below is hand-normalized.
