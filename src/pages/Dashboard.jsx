@@ -5,10 +5,14 @@ import { UsersAdminTable } from "../components/UsersAdminTable";
 import { CardsCatalog } from "../components/CardsCatalog";
 import { CardDetailPage } from "../components/CardDetailPage";
 
-/** Persisted before opening Invite User so Back restores the dashboard URL (e.g. `/users`). */
+/** Persisted before opening Invite User so Back restores the dashboard URL (e.g. `/admin/users`). */
 const SESSION_INVITE_RETURN_KEY = "rg-dashboard-return-url";
 
 const RESOURCES_TAB_ID = "resources";
+const ADMIN_TAB_ID = "admin";
+
+/** Default Admin sub-path when opening the Admin tab from the UI (not from the address bar). */
+const DEFAULT_ADMIN_SEGMENT = "users";
 
 /** Default Resources sub-path when opening the Resources tab from the UI (not from the address bar). */
 const DEFAULT_RESOURCES_SEGMENT = "cards";
@@ -22,12 +26,20 @@ const RESOURCE_SUB_LINKS = [
   { segment: "card-ranker", label: "Card Ranker", path: "/resources/card-ranker" },
 ];
 
+/** @type {ResourceSubLink[]} */
+const ADMIN_SUB_LINKS = [{ segment: "users", label: "Users", path: "/admin/users" }];
+
 /**
  * @param {string} tabId
  * @param {string | null} resourcesChild — segment after `/resources/`, e.g. `cards`
  * @param {string | null} [resourcesCardIdentifier] — Fab `card_identifier` for `/resources/cards/:id`
+ * @param {string | null} [adminChild] — segment after `/admin/`, e.g. `users`
  */
-function buildDashboardPathname(tabId, resourcesChild, resourcesCardIdentifier) {
+function buildDashboardPathname(tabId, resourcesChild, resourcesCardIdentifier, adminChild) {
+  if (tabId === ADMIN_TAB_ID) {
+    const seg = adminChild === "users" ? "users" : DEFAULT_ADMIN_SEGMENT;
+    return `/admin/${seg}`;
+  }
   if (tabId === RESOURCES_TAB_ID) {
     const seg =
       resourcesChild === "cards" || resourcesChild === "card-ranker"
@@ -45,10 +57,10 @@ function buildDashboardPathname(tabId, resourcesChild, resourcesCardIdentifier) 
   return `/${tabId}`;
 }
 
-function replaceDashboardUrl(tabId, resourcesChild, resourcesCardIdentifier) {
+function replaceDashboardUrl(tabId, resourcesChild, resourcesCardIdentifier, adminChild) {
   try {
     const u = new URL(window.location.href);
-    u.pathname = buildDashboardPathname(tabId, resourcesChild, resourcesCardIdentifier);
+    u.pathname = buildDashboardPathname(tabId, resourcesChild, resourcesCardIdentifier, adminChild);
     u.search = "";
     const next = `${u.pathname}${u.search}${u.hash}`;
     const cur = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -58,10 +70,10 @@ function replaceDashboardUrl(tabId, resourcesChild, resourcesCardIdentifier) {
   }
 }
 
-function pushDashboardUrl(tabId, resourcesChild, resourcesCardIdentifier) {
+function pushDashboardUrl(tabId, resourcesChild, resourcesCardIdentifier, adminChild) {
   try {
     const u = new URL(window.location.href);
-    u.pathname = buildDashboardPathname(tabId, resourcesChild, resourcesCardIdentifier);
+    u.pathname = buildDashboardPathname(tabId, resourcesChild, resourcesCardIdentifier, adminChild);
     u.search = "";
     const next = `${u.pathname}${u.search}${u.hash}`;
     const cur = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -73,7 +85,7 @@ function pushDashboardUrl(tabId, resourcesChild, resourcesCardIdentifier) {
 
 /**
  * @param {string} pathname
- * @returns {{ kind: "empty" } | { kind: "invalid" } | { kind: "ok", tabId: string, resourcesChild: string | null, resourcesCardIdentifier: string | null }}
+ * @returns {{ kind: "empty" } | { kind: "invalid" } | { kind: "ok", tabId: string, resourcesChild: string | null, resourcesCardIdentifier: string | null, adminChild: string | null }}
  */
 function parseDashboardPathname(pathname) {
   const parts = pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
@@ -90,6 +102,7 @@ function parseDashboardPathname(pathname) {
           tabId: RESOURCES_TAB_ID,
           resourcesChild: "cards",
           resourcesCardIdentifier: null,
+          adminChild: null,
         };
       }
       return {
@@ -97,6 +110,7 @@ function parseDashboardPathname(pathname) {
         tabId: RESOURCES_TAB_ID,
         resourcesChild: "cards",
         resourcesCardIdentifier: decodeURIComponent(c),
+        adminChild: null,
       };
     }
     if (b === "card-ranker") {
@@ -106,9 +120,44 @@ function parseDashboardPathname(pathname) {
         tabId: RESOURCES_TAB_ID,
         resourcesChild: "card-ranker",
         resourcesCardIdentifier: null,
+        adminChild: null,
       };
     }
     return { kind: "invalid" };
+  }
+
+  if (a === "admin") {
+    if (rest.length > 0) return { kind: "invalid" };
+    if (b === undefined) {
+      return {
+        kind: "ok",
+        tabId: ADMIN_TAB_ID,
+        resourcesChild: null,
+        resourcesCardIdentifier: null,
+        adminChild: "users",
+      };
+    }
+    if (b === "users" && c === undefined) {
+      return {
+        kind: "ok",
+        tabId: ADMIN_TAB_ID,
+        resourcesChild: null,
+        resourcesCardIdentifier: null,
+        adminChild: "users",
+      };
+    }
+    return { kind: "invalid" };
+  }
+
+  /** Legacy dashboard URL before Admin submenu (`/users` → `/admin/users`). */
+  if (a === "users" && b === undefined && c === undefined && rest.length === 0) {
+    return {
+      kind: "ok",
+      tabId: ADMIN_TAB_ID,
+      resourcesChild: null,
+      resourcesCardIdentifier: null,
+      adminChild: "users",
+    };
   }
 
   if (b !== undefined || c !== undefined) return { kind: "invalid" };
@@ -118,6 +167,7 @@ function parseDashboardPathname(pathname) {
     tabId: a,
     resourcesChild: null,
     resourcesCardIdentifier: null,
+    adminChild: null,
   };
 }
 
@@ -125,51 +175,76 @@ function parseDashboardPathname(pathname) {
  * @param {string} pathname
  * @param {string} search
  * @param {{ id: string }[]} tabsAllowed
- * @returns {{ tabId: string, resourcesChild: string | null, resourcesCardIdentifier: string | null }}
+ * @returns {{ tabId: string, resourcesChild: string | null, resourcesCardIdentifier: string | null, adminChild: string | null }}
  */
 function resolveDashboardLocation(pathname, search, tabsAllowed) {
   const parsed = parseDashboardPathname(pathname);
 
   if (parsed.kind === "invalid") {
-    return { tabId: FALLBACK_TAB_ID, resourcesChild: null, resourcesCardIdentifier: null };
+    return {
+      tabId: FALLBACK_TAB_ID,
+      resourcesChild: null,
+      resourcesCardIdentifier: null,
+      adminChild: null,
+    };
   }
 
   if (parsed.kind === "empty") {
     try {
       const raw = new URLSearchParams(search).get("tab");
-      if (raw === RESOURCES_TAB_ID) {
-        return { tabId: FALLBACK_TAB_ID, resourcesChild: null, resourcesCardIdentifier: null };
+      if (raw === RESOURCES_TAB_ID || raw === ADMIN_TAB_ID) {
+        return {
+          tabId: FALLBACK_TAB_ID,
+          resourcesChild: null,
+          resourcesCardIdentifier: null,
+          adminChild: null,
+        };
       }
       if (raw && tabsAllowed.some((t) => t.id === raw)) {
-        return { tabId: raw, resourcesChild: null, resourcesCardIdentifier: null };
+        return {
+          tabId: raw,
+          resourcesChild: null,
+          resourcesCardIdentifier: null,
+          adminChild: null,
+        };
       }
     } catch {
       /* ignore */
     }
-    return { tabId: FALLBACK_TAB_ID, resourcesChild: null, resourcesCardIdentifier: null };
+    return {
+      tabId: FALLBACK_TAB_ID,
+      resourcesChild: null,
+      resourcesCardIdentifier: null,
+      adminChild: null,
+    };
   }
 
-  let { tabId, resourcesChild, resourcesCardIdentifier } = parsed;
+  let { tabId, resourcesChild, resourcesCardIdentifier, adminChild } = parsed;
 
   if (!tabsAllowed.some((t) => t.id === tabId)) {
-    return { tabId: FALLBACK_TAB_ID, resourcesChild: null, resourcesCardIdentifier: null };
+    return {
+      tabId: FALLBACK_TAB_ID,
+      resourcesChild: null,
+      resourcesCardIdentifier: null,
+      adminChild: null,
+    };
   }
 
-  return { tabId, resourcesChild, resourcesCardIdentifier };
+  return { tabId, resourcesChild, resourcesCardIdentifier, adminChild };
 }
 
 /** Matches backend/domain: RoleAdmin = 0, RoleMember = 1 */
 const ROLE_ADMIN = 0;
 
 /**
- * Users tab requires admin (`role === 0`). Omit `requiresAdmin` for member-visible tabs.
+ * Admin tab requires admin (`role === 0`). Omit `requiresAdmin` for member-visible tabs.
  * @typedef {{ id: string, label: string, requiresAdmin?: boolean }} DashboardTabSpec
  */
 const ALL_TABS = [
   { id: "announcements", label: "Announcements" },
   { id: "data", label: "Data" },
   { id: "resources", label: "Resources" },
-  { id: "users", label: "Users", requiresAdmin: true },
+  { id: ADMIN_TAB_ID, label: "Admin", requiresAdmin: true },
 ];
 
 const MD_UP = "(min-width: 768px)";
@@ -338,9 +413,13 @@ export default function Dashboard({ onNavigate }) {
   const [resourcesCardIdentifier, setResourcesCardIdentifier] = useState(
     /** @type {string | null} */ (null),
   );
+  /** When `activeTab === admin`, which sub-route is shown (`/admin/...`). */
+  const [adminChild, setAdminChild] = useState(/** @type {string | null} */ (null));
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileResourcesOpen, setMobileResourcesOpen] = useState(false);
+  const [mobileAdminOpen, setMobileAdminOpen] = useState(false);
   const [resourcesHovered, setResourcesHovered] = useState(false);
+  const [adminHovered, setAdminHovered] = useState(false);
 
   const tabs = useMemo(() => {
     const isAdmin = Number(sessionProfile?.role) === ROLE_ADMIN;
@@ -355,17 +434,33 @@ export default function Dashboard({ onNavigate }) {
     return hit?.label ?? "Resources";
   }, [activeTab, resourcesChild]);
 
+  const adminTabLabel = useMemo(() => {
+    if (activeTab !== ADMIN_TAB_ID) {
+      return ALL_TABS.find((t) => t.id === ADMIN_TAB_ID)?.label ?? "Admin";
+    }
+    const hit = ADMIN_SUB_LINKS.find((l) => l.segment === adminChild);
+    return hit?.label ?? "Admin";
+  }, [activeTab, adminChild]);
+
   const handleTabNavigate = useCallback((tabId) => {
     setActiveTab(tabId);
     if (tabId === RESOURCES_TAB_ID) {
       setResourcesChild(DEFAULT_RESOURCES_SEGMENT);
       setResourcesCardIdentifier(null);
-      replaceDashboardUrl(RESOURCES_TAB_ID, DEFAULT_RESOURCES_SEGMENT, null);
+      setAdminChild(null);
+      replaceDashboardUrl(RESOURCES_TAB_ID, DEFAULT_RESOURCES_SEGMENT, null, null);
+    } else if (tabId === ADMIN_TAB_ID) {
+      setAdminChild(DEFAULT_ADMIN_SEGMENT);
+      setResourcesChild(null);
+      setResourcesCardIdentifier(null);
+      replaceDashboardUrl(ADMIN_TAB_ID, null, null, DEFAULT_ADMIN_SEGMENT);
     } else {
       setResourcesChild(null);
       setResourcesCardIdentifier(null);
-      replaceDashboardUrl(tabId, null, null);
+      setAdminChild(null);
+      replaceDashboardUrl(tabId, null, null, null);
       setMobileResourcesOpen(false);
+      setMobileAdminOpen(false);
     }
   }, []);
 
@@ -373,7 +468,16 @@ export default function Dashboard({ onNavigate }) {
     setActiveTab(RESOURCES_TAB_ID);
     setResourcesChild(segment);
     setResourcesCardIdentifier(null);
-    replaceDashboardUrl(RESOURCES_TAB_ID, segment, null);
+    setAdminChild(null);
+    replaceDashboardUrl(RESOURCES_TAB_ID, segment, null, null);
+  }, []);
+
+  const goAdminSub = useCallback((segment) => {
+    setActiveTab(ADMIN_TAB_ID);
+    setAdminChild(segment);
+    setResourcesChild(null);
+    setResourcesCardIdentifier(null);
+    replaceDashboardUrl(ADMIN_TAB_ID, null, null, segment);
   }, []);
 
   const openCardDetail = useCallback((identifier) => {
@@ -382,12 +486,13 @@ export default function Dashboard({ onNavigate }) {
     setActiveTab(RESOURCES_TAB_ID);
     setResourcesChild("cards");
     setResourcesCardIdentifier(id);
-    pushDashboardUrl(RESOURCES_TAB_ID, "cards", id);
+    setAdminChild(null);
+    pushDashboardUrl(RESOURCES_TAB_ID, "cards", id, null);
   }, []);
 
   const closeCardDetail = useCallback(() => {
     setResourcesCardIdentifier(null);
-    pushDashboardUrl(RESOURCES_TAB_ID, "cards", null);
+    pushDashboardUrl(RESOURCES_TAB_ID, "cards", null, null);
   }, []);
 
   useEffect(() => {
@@ -401,15 +506,19 @@ export default function Dashboard({ onNavigate }) {
       const nextChild = nextTab === RESOURCES_TAB_ID ? resolved.resourcesChild : null;
       const nextCardId =
         nextTab === RESOURCES_TAB_ID ? resolved.resourcesCardIdentifier : null;
+      const nextAdminChild = nextTab === ADMIN_TAB_ID ? resolved.adminChild : null;
       setActiveTab(nextTab);
       setResourcesChild(nextChild);
       setResourcesCardIdentifier(nextCardId);
+      setAdminChild(nextAdminChild);
       replaceDashboardUrl(
         nextTab,
         nextTab === RESOURCES_TAB_ID ? nextChild : null,
         nextTab === RESOURCES_TAB_ID ? nextCardId : null,
+        nextTab === ADMIN_TAB_ID ? nextAdminChild : null,
       );
       setMobileResourcesOpen(false);
+      setMobileAdminOpen(false);
     }
 
     syncFromBrowser();
@@ -443,10 +552,11 @@ export default function Dashboard({ onNavigate }) {
     return () => mq.removeEventListener("change", closeMobileIfDesktop);
   }, []);
 
-  /** Fresh Resources submenu each time the drawer opens; on /resources/* routes keep children collapsed. */
+  /** Fresh Resources / Admin submenu each time the drawer opens; on sub-routes keep children collapsed. */
   useEffect(() => {
     if (mobileNavOpen) {
       setMobileResourcesOpen(false);
+      setMobileAdminOpen(false);
     }
   }, [mobileNavOpen]);
 
@@ -504,25 +614,50 @@ export default function Dashboard({ onNavigate }) {
             </div>
             <Tabs.List className={desktopTabListShared} aria-label="Dashboard sections">
               {tabs.map((tab) => {
-                const subLinks = tab.id === RESOURCES_TAB_ID ? RESOURCE_SUB_LINKS : [];
-                const showDesktopSubmenu = subLinks.length > 1;
+                const subLinks =
+                  tab.id === RESOURCES_TAB_ID
+                    ? RESOURCE_SUB_LINKS
+                    : tab.id === ADMIN_TAB_ID
+                      ? ADMIN_SUB_LINKS
+                      : [];
+                const showDesktopSubmenu =
+                  (tab.id === RESOURCES_TAB_ID && RESOURCE_SUB_LINKS.length > 1) ||
+                  (tab.id === ADMIN_TAB_ID && ADMIN_SUB_LINKS.length >= 1);
+                const desktopHovered =
+                  tab.id === RESOURCES_TAB_ID
+                    ? resourcesHovered
+                    : tab.id === ADMIN_TAB_ID
+                      ? adminHovered
+                      : false;
                 const triggerLabel =
-                  tab.id === RESOURCES_TAB_ID ? resourcesTabLabel : tab.label;
+                  tab.id === RESOURCES_TAB_ID
+                    ? resourcesTabLabel
+                    : tab.id === ADMIN_TAB_ID
+                      ? adminTabLabel
+                      : tab.label;
 
                 return (
                   <div
                     key={tab.id}
                     className={desktopTabSlot}
                     onMouseEnter={
-                      showDesktopSubmenu ? () => setResourcesHovered(true) : undefined
+                      showDesktopSubmenu && tab.id === RESOURCES_TAB_ID
+                        ? () => setResourcesHovered(true)
+                        : showDesktopSubmenu && tab.id === ADMIN_TAB_ID
+                          ? () => setAdminHovered(true)
+                          : undefined
                     }
                     onMouseLeave={
-                      showDesktopSubmenu ? () => setResourcesHovered(false) : undefined
+                      showDesktopSubmenu && tab.id === RESOURCES_TAB_ID
+                        ? () => setResourcesHovered(false)
+                        : showDesktopSubmenu && tab.id === ADMIN_TAB_ID
+                          ? () => setAdminHovered(false)
+                          : undefined
                     }
                   >
                     <Tabs.Trigger
                       className={`${isLight ? desktopTriggerLight : desktopTriggerDark}${
-                        showDesktopSubmenu && resourcesHovered
+                        showDesktopSubmenu && desktopHovered
                           ? " relative z-[32] rounded-b-none md:rounded-b-none"
                           : ""
                       }`}
@@ -530,16 +665,20 @@ export default function Dashboard({ onNavigate }) {
                     >
                       {triggerLabel}
                     </Tabs.Trigger>
-                    {showDesktopSubmenu && resourcesHovered ? (
+                    {showDesktopSubmenu && desktopHovered ? (
                       <div
                         className={isLight ? resourcesMenuLight : resourcesMenuDark}
                         role="menu"
-                        aria-label="Resources pages"
+                        aria-label={
+                          tab.id === RESOURCES_TAB_ID ? "Resources pages" : "Admin pages"
+                        }
                       >
-                        {RESOURCE_SUB_LINKS.map((link) => {
+                        {subLinks.map((link) => {
                           const subActive =
-                            activeTab === RESOURCES_TAB_ID &&
-                            resourcesChild === link.segment;
+                            tab.id === RESOURCES_TAB_ID
+                              ? activeTab === RESOURCES_TAB_ID &&
+                                resourcesChild === link.segment
+                              : activeTab === ADMIN_TAB_ID && adminChild === link.segment;
                           return (
                             <button
                               key={link.segment}
@@ -553,7 +692,11 @@ export default function Dashboard({ onNavigate }) {
                                   : "border border-transparent"
                               }`}
                               data-state={subActive ? "active" : "inactive"}
-                              onClick={() => goResourcesSub(link.segment)}
+                              onClick={() =>
+                                tab.id === RESOURCES_TAB_ID
+                                  ? goResourcesSub(link.segment)
+                                  : goAdminSub(link.segment)
+                              }
                             >
                               {link.label}
                             </button>
@@ -603,23 +746,25 @@ export default function Dashboard({ onNavigate }) {
               aria-labelledby="dashboard-menu-button"
             >
               {tabs.map((tab) => {
-                const subLinks = tab.id === RESOURCES_TAB_ID ? RESOURCE_SUB_LINKS : [];
-                const showMobileSubmenu = subLinks.length > 1;
                 const selected = activeTab === tab.id;
                 const rowLabel =
-                  tab.id === RESOURCES_TAB_ID ? resourcesTabLabel : tab.label;
+                  tab.id === RESOURCES_TAB_ID
+                    ? resourcesTabLabel
+                    : tab.id === ADMIN_TAB_ID
+                      ? adminTabLabel
+                      : tab.label;
                 const rowClass = `${mobileNavRowMin} ${mobileNavItemSurface(selected, isLight)}`;
 
-                if (showMobileSubmenu) {
-                  let subIdleClass =
-                    "ml-3 flex min-h-11 w-full items-center rounded-lg border border-transparent px-[1.125rem] py-3 text-left text-[0.9rem] font-semibold outline-none transition-colors ";
-                  subIdleClass += isLight
-                    ? "bg-black/20 text-[#f4f0fa]/90 hover:border-[#b998e8]/35 hover:bg-white/[0.08] focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/60"
-                    : "bg-black/20 text-[#f4f0fa]/88 hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-purple-500/65";
-                  const subActiveClass = isLight
-                    ? "border border-[rgba(152,117,207,0.75)] bg-gradient-to-b from-[#7b4cb8]/90 to-[#5a2f8f]/90 text-white shadow-[0_2px_12px_rgb(103_61_154/0.35)] focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/70"
-                    : "border border-[rgba(142,90,200,0.55)] bg-gradient-to-br from-[rgba(80,40,120,0.45)] to-[rgba(40,20,70,0.55)] text-white focus-visible:ring-2 focus-visible:ring-purple-500/65";
+                let subIdleClass =
+                  "ml-3 flex min-h-11 w-full items-center rounded-lg border border-transparent px-[1.125rem] py-3 text-left text-[0.9rem] font-semibold outline-none transition-colors ";
+                subIdleClass += isLight
+                  ? "bg-black/20 text-[#f4f0fa]/90 hover:border-[#b998e8]/35 hover:bg-white/[0.08] focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/60"
+                  : "bg-black/20 text-[#f4f0fa]/88 hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-purple-500/65";
+                const subActiveClass = isLight
+                  ? "border border-[rgba(152,117,207,0.75)] bg-gradient-to-b from-[#7b4cb8]/90 to-[#5a2f8f]/90 text-white shadow-[0_2px_12px_rgb(103_61_154/0.35)] focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/70"
+                  : "border border-[rgba(142,90,200,0.55)] bg-gradient-to-br from-[rgba(80,40,120,0.45)] to-[rgba(40,20,70,0.55)] text-white focus-visible:ring-2 focus-visible:ring-purple-500/65";
 
+                if (tab.id === RESOURCES_TAB_ID && RESOURCE_SUB_LINKS.length > 1) {
                   return (
                     <div key={tab.id} className="flex flex-col gap-1">
                       <button
@@ -655,6 +800,55 @@ export default function Dashboard({ onNavigate }) {
                                 aria-current={subSel ? "page" : undefined}
                                 onClick={() => {
                                   goResourcesSub(link.segment);
+                                  setMobileNavOpen(false);
+                                }}
+                              >
+                                {link.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                }
+
+                if (tab.id === ADMIN_TAB_ID && ADMIN_SUB_LINKS.length >= 1) {
+                  return (
+                    <div key={tab.id} className="flex flex-col gap-1">
+                      <button
+                        type="button"
+                        className={rowClass}
+                        aria-current={selected ? "page" : undefined}
+                        aria-expanded={mobileAdminOpen}
+                        onClick={() => {
+                          setMobileAdminOpen((o) => !o);
+                        }}
+                      >
+                        {rowLabel}
+                      </button>
+                      {mobileAdminOpen ? (
+                        <div
+                          className={`flex flex-col gap-1 border-l pl-2 ${
+                            isLight ? "border-[rgba(80,65,110,0.35)]" : "border-white/[0.22]"
+                          }`}
+                          role="group"
+                          aria-label="Admin pages"
+                        >
+                          {ADMIN_SUB_LINKS.map((link) => {
+                            const subSel = adminChild === link.segment;
+                            return (
+                              <button
+                                key={link.segment}
+                                type="button"
+                                className={
+                                  subSel
+                                    ? `ml-3 flex min-h-11 w-full items-center rounded-lg px-[1.125rem] py-3 text-left text-[0.9rem] font-semibold outline-none transition-colors ${subActiveClass}`
+                                    : subIdleClass
+                                }
+                                aria-current={subSel ? "page" : undefined}
+                                onClick={() => {
+                                  goAdminSub(link.segment);
                                   setMobileNavOpen(false);
                                 }}
                               >
@@ -708,10 +902,11 @@ export default function Dashboard({ onNavigate }) {
                 : "border-white/[0.26] bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.06]"
             }`}
           >
-            {tab.id === "users" ? (
+            {tab.id === ADMIN_TAB_ID ? (
+              adminChild === "users" ? (
               <UsersAdminTable
                 isLight={isLight}
-                active={activeTab === tab.id}
+                active={activeTab === ADMIN_TAB_ID && adminChild === "users"}
                 onInviteUser={
                   onNavigate
                     ? () => {
@@ -728,6 +923,14 @@ export default function Dashboard({ onNavigate }) {
                     : undefined
                 }
               />
+              ) : (
+                <div
+                  className="flex min-h-[min(40vh,18rem)] flex-1 flex-col items-center justify-center px-4 text-center"
+                  aria-label="Admin"
+                >
+                  <p className="text-[0.9rem] text-[#f4f0fa]/65">Choose a page from the Admin menu.</p>
+                </div>
+              )
             ) : tab.id === RESOURCES_TAB_ID ? (
               resourcesChild === "cards" && resourcesCardIdentifier ? (
                 <CardDetailPage

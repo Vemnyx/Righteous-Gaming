@@ -2,9 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { cardClassName } from "../constants/cardClass";
 import { cardFormatName } from "../constants/cardFormat";
-import { cardFusionName } from "../constants/cardFusion";
-import { cardHeroName } from "../constants/cardHero";
-import { cardKeywordName } from "../constants/cardKeyword";
 import { cardRarityName } from "../constants/cardRarity";
 import { cardSubtypeToken } from "../constants/cardSubtype";
 import { cardTalentName } from "../constants/cardTalent";
@@ -20,11 +17,12 @@ function formatCollectorCode(setCode, setNum) {
 /**
  * @param {number[] | undefined} arr
  * @param {(id: number) => string | undefined} nameFn
+ * @returns {string | null}
  */
-function joinEnumIds(arr, nameFn) {
-  if (!arr?.length) return "—";
+function formatEnumList(arr, nameFn) {
+  if (!arr?.length) return null;
   const parts = arr.map((id) => nameFn(id)).filter(Boolean);
-  return parts.length ? parts.join(", ") : "—";
+  return parts.length ? parts.join(", ") : null;
 }
 
 /**
@@ -42,19 +40,8 @@ function joinEnumIds(arr, nameFn) {
  *   type: number,
  *   subtypes: number[],
  *   classes: number[],
- *   hybrid: boolean,
  *   talents: number[],
- *   pitch: number | null,
- *   cost: number | null,
- *   power: number | null,
- *   block: number | null,
- *   heroes: number[],
- *   life: number | null,
- *   intellect: number | null,
- *   keywords: number[],
  *   formats: number[],
- *   specializations: number[],
- *   fusions: number[],
  * }} CatalogCardDetail
  */
 
@@ -158,117 +145,102 @@ export function CardDetailPage({ isLight, identifier, active, onBackToCatalog })
 
       {!loading && !error && card ? (
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10">
-          <div
-            className={`mx-auto flex w-full max-w-[min(100%,22rem)] shrink-0 flex-col overflow-hidden rounded-xl border bg-black/25 lg:mx-0 lg:w-[min(100%,22rem)] ${panelBorder}`}
-          >
-            {card.image_url ? (
-              <img
-                src={card.image_url}
-                alt={card.name || ""}
-                className="h-auto w-full object-contain"
-                draggable={false}
-              />
-            ) : (
-              <div className="flex aspect-[63/88] items-center justify-center px-4 py-12 text-center text-[0.875rem] text-[#f4f0fa]/55">
-                No image available
-              </div>
-            )}
-          </div>
-
-          <div className="min-w-0 flex-1 space-y-5">
-            <header className="space-y-1">
+          <div className="mx-auto flex w-full max-w-[min(100%,22rem)] shrink-0 flex-col gap-3 lg:mx-0 lg:w-[min(100%,22rem)]">
+            <header className="space-y-1 text-center lg:text-left">
               <h2 className="m-0 text-xl font-semibold tracking-tight text-[#f4f0fa]">{card.name}</h2>
-              {card.card_identifier ? (
-                <p className={`m-0 font-mono text-[0.8125rem] ${muted}`}>{card.card_identifier}</p>
-              ) : null}
+              <p className={`m-0 text-[0.9rem] leading-snug ${muted}`}>
+                {(() => {
+                  const setName = card.set_name?.trim();
+                  const code = formatCollectorCode(card.set_code, card.set_num);
+                  if (setName) return `${setName} - ${code}`;
+                  return code;
+                })()}
+              </p>
             </header>
 
-            <section className={`rounded-xl border bg-black/20 p-4 sm:p-5 ${panelBorder}`}>
-              <h3 className="m-0 mb-3 text-[0.7rem] font-semibold uppercase tracking-wider text-[#f4f0fa]/55">
-                Card data
-              </h3>
-              <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-[minmax(9rem,11rem)_1fr]">
-                <dt className={labelCls}>Set</dt>
-                <dd className={ddCls}>{card.set_name?.trim() ? card.set_name : "—"}</dd>
-
-                <dt className={labelCls}>Collector code</dt>
-                <dd className={`font-mono ${ddCls}`}>
-                  {formatCollectorCode(card.set_code, card.set_num)}
-                </dd>
-
-                <dt className={labelCls}>Set code / #</dt>
-                <dd className={`font-mono ${ddCls}`}>
-                  {card.set_code} · {card.set_num}
-                </dd>
-
-                <dt className={labelCls}>Type</dt>
-                <dd className={ddCls}>{cardTypeName(card.type) ?? card.type}</dd>
-
-                <dt className={labelCls}>Rarity</dt>
-                <dd className={ddCls}>
-                  {card.rarity != null ? cardRarityName(card.rarity) ?? card.rarity : "—"}
-                </dd>
-
-                <dt className={labelCls}>Pitch</dt>
-                <dd className={ddCls}>{card.pitch != null ? String(card.pitch) : "—"}</dd>
-
-                <dt className={labelCls}>Cost</dt>
-                <dd className={ddCls}>{card.cost != null ? String(card.cost) : "—"}</dd>
-
-                <dt className={labelCls}>Power</dt>
-                <dd className={ddCls}>{card.power != null ? String(card.power) : "—"}</dd>
-
-                <dt className={labelCls}>Defense</dt>
-                <dd className={ddCls}>{card.block != null ? String(card.block) : "—"}</dd>
-
-                <dt className={labelCls}>Life</dt>
-                <dd className={ddCls}>{card.life != null ? String(card.life) : "—"}</dd>
-
-                <dt className={labelCls}>Intellect</dt>
-                <dd className={ddCls}>{card.intellect != null ? String(card.intellect) : "—"}</dd>
-
-                <dt className={labelCls}>Hybrid</dt>
-                <dd className={ddCls}>{card.hybrid ? "Yes" : "No"}</dd>
-
-                <dt className={labelCls}>Subtypes</dt>
-                <dd className={ddCls}>
-                  {joinEnumIds(card.subtypes, (id) => cardSubtypeToken(id) ?? undefined)}
-                </dd>
-
-                <dt className={labelCls}>Classes</dt>
-                <dd className={ddCls}>{joinEnumIds(card.classes, cardClassName)}</dd>
-
-                <dt className={labelCls}>Talents</dt>
-                <dd className={ddCls}>{joinEnumIds(card.talents, cardTalentName)}</dd>
-
-                <dt className={labelCls}>Heroes</dt>
-                <dd className={ddCls}>{joinEnumIds(card.heroes, cardHeroName)}</dd>
-
-                <dt className={labelCls}>Keywords</dt>
-                <dd className={ddCls}>{joinEnumIds(card.keywords, cardKeywordName)}</dd>
-
-                <dt className={labelCls}>Formats</dt>
-                <dd className={ddCls}>{joinEnumIds(card.formats, cardFormatName)}</dd>
-
-                <dt className={labelCls}>Specializations</dt>
-                <dd className={ddCls}>{joinEnumIds(card.specializations, cardHeroName)}</dd>
-
-                <dt className={labelCls}>Fusions</dt>
-                <dd className={ddCls}>{joinEnumIds(card.fusions, cardFusionName)}</dd>
-              </dl>
-            </section>
-
-            {card.functional_text?.trim() ? (
-              <section className={`rounded-xl border bg-black/20 p-4 sm:p-5 ${panelBorder}`}>
-                <h3 className="m-0 mb-2 text-[0.7rem] font-semibold uppercase tracking-wider text-[#f4f0fa]/55">
-                  Functional text
-                </h3>
-                <p className={`m-0 whitespace-pre-wrap text-[0.875rem] leading-relaxed text-[#f4f0fa]/90`}>
-                  {card.functional_text.trim()}
-                </p>
-              </section>
-            ) : null}
+            <div
+              className={`overflow-hidden rounded-xl border bg-black/25 ${panelBorder}`}
+            >
+              {card.image_url ? (
+                <img
+                  src={card.image_url}
+                  alt={card.name || ""}
+                  className="h-auto w-full object-contain"
+                  draggable={false}
+                />
+              ) : (
+                <div className="flex aspect-[63/88] items-center justify-center px-4 py-12 text-center text-[0.875rem] text-[#f4f0fa]/55">
+                  No image available
+                </div>
+              )}
+            </div>
           </div>
+
+          <section className={`min-w-0 flex-1 rounded-xl border bg-black/20 p-4 sm:p-5 ${panelBorder}`}>
+            <h3 className="m-0 mb-3 text-[0.7rem] font-semibold uppercase tracking-wider text-[#f4f0fa]/55">
+              Card data
+            </h3>
+            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-[minmax(9rem,11rem)_1fr]">
+              {card.rarity != null ? (
+                <>
+                  <dt className={labelCls}>Rarity</dt>
+                  <dd className={ddCls}>{cardRarityName(card.rarity) ?? card.rarity}</dd>
+                </>
+              ) : null}
+
+              <dt className={labelCls}>Type</dt>
+              <dd className={ddCls}>{cardTypeName(card.type) ?? card.type}</dd>
+
+              {(() => {
+                const v = formatEnumList(card.subtypes, (id) => cardSubtypeToken(id) ?? undefined);
+                return v ? (
+                  <>
+                    <dt className={labelCls}>Subtypes</dt>
+                    <dd className={ddCls}>{v}</dd>
+                  </>
+                ) : null;
+              })()}
+
+              {(() => {
+                const v = formatEnumList(card.classes, cardClassName);
+                return v ? (
+                  <>
+                    <dt className={labelCls}>Classes</dt>
+                    <dd className={ddCls}>{v}</dd>
+                  </>
+                ) : null;
+              })()}
+
+              {(() => {
+                const v = formatEnumList(card.talents, cardTalentName);
+                return v ? (
+                  <>
+                    <dt className={labelCls}>Talents</dt>
+                    <dd className={ddCls}>{v}</dd>
+                  </>
+                ) : null;
+              })()}
+
+              {(() => {
+                const v = formatEnumList(card.formats, cardFormatName);
+                return v ? (
+                  <>
+                    <dt className={labelCls}>Formats Legal In</dt>
+                    <dd className={ddCls}>{v}</dd>
+                  </>
+                ) : null;
+              })()}
+
+              {card.functional_text?.trim() ? (
+                <>
+                  <dt className={labelCls}>Text</dt>
+                  <dd className={`${ddCls} whitespace-pre-wrap leading-relaxed`}>
+                    {card.functional_text.trim()}
+                  </dd>
+                </>
+              ) : null}
+            </dl>
+          </section>
         </div>
       ) : null}
     </div>
