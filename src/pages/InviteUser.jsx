@@ -11,7 +11,7 @@ const SESSION_INVITE_RETURN_KEY = "rg-dashboard-return-url";
 const THEME_STORAGE_KEY = "rg-dashboard-theme";
 
 /** @param {{ onNavigate: (path: string) => void }} p */
-function navigateBackToDashboard(onNavigate, fallbackPath = "/welcome") {
+function navigateBackToDashboard(onNavigate, fallbackPath = "/announcements") {
   try {
     const saved = sessionStorage.getItem(SESSION_INVITE_RETURN_KEY);
     sessionStorage.removeItem(SESSION_INVITE_RETURN_KEY);

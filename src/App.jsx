@@ -48,7 +48,7 @@ function AppGate() {
     if (path === "/register") {
       return (
         <Register
-          onSuccess={() => navigate("/welcome?tab=announcements")}
+          onSuccess={() => navigate("/announcements")}
           onBackToLogin={() => navigate("/")}
         />
       );
