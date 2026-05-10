@@ -153,13 +153,33 @@ const navRailDark =
 const navRailLight =
   "box-border flex min-h-[2.875rem] min-w-0 flex-1 items-center gap-1 overflow-visible rounded-lg border border-white/[0.12] bg-[rgba(42,37,54,0.9)] p-1 backdrop-blur-sm sm:min-h-12 md:min-h-0 md:items-stretch";
 
-/* ~30% taller bar vs min-h-9; ~50% wider hit area vs px-3. Equal-width tabs on desktop: flex-1 + basis-0 */
+/** Every top-level tab occupies one equal flex column; triggers fill width (`w-full`) so short labels don’t shrink the cell. */
+const desktopTabSlot =
+  "relative z-20 flex min-h-12 min-w-0 flex-1 basis-0 flex-col items-stretch justify-center self-stretch";
+
+/* ~30% taller bar vs min-h-9; ~50% wider hit area vs px-3. Equal-width tabs on desktop: flex-1 + basis-0 + w-full */
 const desktopTriggerDark =
-  "inline-flex min-h-12 min-w-0 basis-0 cursor-pointer select-none items-center justify-center rounded-md border border-transparent px-[1.125rem] py-2.5 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-purple-300/45 hover:text-white focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.92)] data-[state=active]:border-[rgba(142,90,200,0.75)] data-[state=active]:bg-gradient-to-br data-[state=active]:from-[rgba(80,40,120,0.55)] data-[state=active]:to-[rgba(40,20,70,0.65)] data-[state=active]:text-white data-[state=active]:shadow-[0_3px_16px_rgba(90,40,140,0.22)] md:flex-1 md:whitespace-normal md:text-center md:leading-snug md:break-words";
+  "flex min-h-12 w-full min-w-0 basis-0 cursor-pointer select-none items-center justify-center rounded-md border border-transparent px-[1.125rem] py-2.5 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-purple-300/45 hover:text-white focus-visible:ring-2 focus-visible:ring-purple-500/65 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(16,8,28,0.92)] data-[state=active]:border-[rgba(142,90,200,0.75)] data-[state=active]:bg-gradient-to-br data-[state=active]:from-[rgba(80,40,120,0.55)] data-[state=active]:to-[rgba(40,20,70,0.65)] data-[state=active]:text-white data-[state=active]:shadow-[0_3px_16px_rgba(90,40,140,0.22)] md:flex-1 md:whitespace-normal md:text-center md:leading-snug md:break-words";
 
 /* Active/hover purples track Login gradient: from-[#7b4cb8] to-[#5a2f8f] */
 const desktopTriggerLight =
-  "inline-flex min-h-12 min-w-0 basis-0 cursor-pointer select-none items-center justify-center rounded-md border border-transparent px-[1.125rem] py-2.5 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-[#b998e8]/55 hover:text-white focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(42,37,54,0.92)] data-[state=active]:border-[rgba(152,117,207,0.9)] data-[state=active]:bg-gradient-to-b data-[state=active]:from-[#7b4cb8] data-[state=active]:to-[#5a2f8f] data-[state=active]:text-white data-[state=active]:shadow-[0_4px_18px_rgb(103_61_154/0.42)] md:flex-1 md:whitespace-normal md:text-center md:leading-snug md:break-words";
+  "flex min-h-12 w-full min-w-0 basis-0 cursor-pointer select-none items-center justify-center rounded-md border border-transparent px-[1.125rem] py-2.5 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]/85 outline-none transition-colors hover:border-[#b998e8]/55 hover:text-white focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[rgba(42,37,54,0.92)] data-[state=active]:border-[rgba(152,117,207,0.9)] data-[state=active]:bg-gradient-to-b data-[state=active]:from-[#7b4cb8] data-[state=active]:to-[#5a2f8f] data-[state=active]:text-white data-[state=active]:shadow-[0_4px_18px_rgb(103_61_154/0.42)] md:flex-1 md:whitespace-normal md:text-center md:leading-snug md:break-words";
+
+/** Single-option tabs use the same rail row height as expandable tabs. */
+const mobileNavRowMin =
+  "flex min-h-[3.25rem] w-full items-center rounded-lg px-[1.125rem] py-3.5 text-left text-[0.95rem] font-semibold outline-none transition-colors";
+
+/** @param {boolean} selected */
+function mobileNavItemSurface(selected, isLight) {
+  if (selected) {
+    return isLight
+      ? "border border-[rgba(152,117,207,0.9)] bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] text-white shadow-[0_4px_18px_rgb(103_61_154/0.42)] focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/70"
+      : "border border-[rgba(142,90,200,0.75)] bg-gradient-to-br from-[rgba(80,40,120,0.55)] to-[rgba(40,20,70,0.65)] text-white shadow-[0_3px_16px_rgba(90,40,140,0.22)] focus-visible:ring-2 focus-visible:ring-purple-500/65";
+  }
+  return isLight
+    ? "border border-transparent bg-black/25 text-[#f4f0fa]/88 hover:border-[#b998e8]/35 hover:bg-white/[0.08] focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/60"
+    : "border border-transparent bg-black/25 text-[#f4f0fa]/88 hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-purple-500/65";
+}
 
 /** Logo sits inside `navRail*`. Mobile: no right divider (tabs hidden); logo centered in rail. */
 const logoInRail =
@@ -307,11 +327,7 @@ export default function Dashboard({ onNavigate }) {
       setActiveTab(nextTab);
       setResourcesChild(nextChild);
       replaceDashboardUrl(nextTab, nextTab === RESOURCES_TAB_ID ? nextChild : null);
-      if (nextTab !== RESOURCES_TAB_ID) {
-        setMobileResourcesOpen(false);
-      } else {
-        setMobileResourcesOpen(true);
-      }
+      setMobileResourcesOpen(false);
     }
 
     syncFromBrowser();
@@ -344,6 +360,13 @@ export default function Dashboard({ onNavigate }) {
     mq.addEventListener("change", closeMobileIfDesktop);
     return () => mq.removeEventListener("change", closeMobileIfDesktop);
   }, []);
+
+  /** Fresh Resources submenu each time the drawer opens; on /resources/* routes keep children collapsed. */
+  useEffect(() => {
+    if (mobileNavOpen) {
+      setMobileResourcesOpen(false);
+    }
+  }, [mobileNavOpen]);
 
   const isLight = theme === "light";
 
@@ -394,21 +417,30 @@ export default function Dashboard({ onNavigate }) {
               />
             </div>
             <Tabs.List className={desktopTabListShared} aria-label="Dashboard sections">
-              {tabs.map((tab) =>
-                tab.id === RESOURCES_TAB_ID ? (
+              {tabs.map((tab) => {
+                const subLinks = tab.id === RESOURCES_TAB_ID ? RESOURCE_SUB_LINKS : [];
+                const showDesktopSubmenu = subLinks.length > 1;
+                const triggerLabel =
+                  tab.id === RESOURCES_TAB_ID ? resourcesTabLabel : tab.label;
+
+                return (
                   <div
                     key={tab.id}
-                    className="relative z-20 flex min-h-12 min-w-0 flex-1 basis-0 flex-col items-stretch self-stretch"
-                    onMouseEnter={() => setResourcesHovered(true)}
-                    onMouseLeave={() => setResourcesHovered(false)}
+                    className={desktopTabSlot}
+                    onMouseEnter={
+                      showDesktopSubmenu ? () => setResourcesHovered(true) : undefined
+                    }
+                    onMouseLeave={
+                      showDesktopSubmenu ? () => setResourcesHovered(false) : undefined
+                    }
                   >
                     <Tabs.Trigger
                       className={isLight ? desktopTriggerLight : desktopTriggerDark}
                       value={tab.id}
                     >
-                      {resourcesTabLabel}
+                      {triggerLabel}
                     </Tabs.Trigger>
-                    {resourcesHovered ? (
+                    {showDesktopSubmenu && resourcesHovered ? (
                       <div
                         className={isLight ? resourcesMenuLight : resourcesMenuDark}
                         role="menu"
@@ -416,7 +448,8 @@ export default function Dashboard({ onNavigate }) {
                       >
                         {RESOURCE_SUB_LINKS.map((link) => {
                           const subActive =
-                            activeTab === RESOURCES_TAB_ID && resourcesChild === link.segment;
+                            activeTab === RESOURCES_TAB_ID &&
+                            resourcesChild === link.segment;
                           return (
                             <button
                               key={link.segment}
@@ -439,16 +472,8 @@ export default function Dashboard({ onNavigate }) {
                       </div>
                     ) : null}
                   </div>
-                ) : (
-                  <Tabs.Trigger
-                    key={tab.id}
-                    className={isLight ? desktopTriggerLight : desktopTriggerDark}
-                    value={tab.id}
-                  >
-                    {tab.label}
-                  </Tabs.Trigger>
-                ),
-              )}
+                );
+              })}
             </Tabs.List>
           </div>
 
@@ -488,21 +513,16 @@ export default function Dashboard({ onNavigate }) {
               aria-labelledby="dashboard-menu-button"
             >
               {tabs.map((tab) => {
-                if (tab.id === RESOURCES_TAB_ID) {
-                  const selected = activeTab === RESOURCES_TAB_ID;
-                  let itemClass =
-                    "rounded-lg px-[1.125rem] py-3.5 text-left text-[0.95rem] font-semibold outline-none transition-colors ";
-                  if (selected) {
-                    itemClass += isLight
-                      ? "border border-[rgba(152,117,207,0.9)] bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] text-white shadow-[0_4px_18px_rgb(103_61_154/0.42)] focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/70"
-                      : "border border-[rgba(142,90,200,0.75)] bg-gradient-to-br from-[rgba(80,40,120,0.55)] to-[rgba(40,20,70,0.65)] text-white shadow-[0_3px_16px_rgba(90,40,140,0.22)] focus-visible:ring-2 focus-visible:ring-purple-500/65";
-                  } else {
-                    itemClass += isLight
-                      ? "border border-transparent bg-black/25 text-[#f4f0fa]/88 hover:border-[#b998e8]/35 hover:bg-white/[0.08] focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/60"
-                      : "border border-transparent bg-black/25 text-[#f4f0fa]/88 hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-purple-500/65";
-                  }
+                const subLinks = tab.id === RESOURCES_TAB_ID ? RESOURCE_SUB_LINKS : [];
+                const showMobileSubmenu = subLinks.length > 1;
+                const selected = activeTab === tab.id;
+                const rowLabel =
+                  tab.id === RESOURCES_TAB_ID ? resourcesTabLabel : tab.label;
+                const rowClass = `${mobileNavRowMin} ${mobileNavItemSurface(selected, isLight)}`;
+
+                if (showMobileSubmenu) {
                   let subIdleClass =
-                    "ml-3 rounded-lg border border-transparent px-[1.125rem] py-3 text-left text-[0.9rem] font-semibold outline-none transition-colors ";
+                    "ml-3 flex min-h-11 w-full items-center rounded-lg border border-transparent px-[1.125rem] py-3 text-left text-[0.9rem] font-semibold outline-none transition-colors ";
                   subIdleClass += isLight
                     ? "bg-black/20 text-[#f4f0fa]/90 hover:border-[#b998e8]/35 hover:bg-white/[0.08] focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/60"
                     : "bg-black/20 text-[#f4f0fa]/88 hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-purple-500/65";
@@ -514,21 +534,14 @@ export default function Dashboard({ onNavigate }) {
                     <div key={tab.id} className="flex flex-col gap-1">
                       <button
                         type="button"
-                        className={itemClass}
+                        className={rowClass}
                         aria-current={selected ? "page" : undefined}
                         aria-expanded={mobileResourcesOpen}
                         onClick={() => {
-                          if (activeTab !== RESOURCES_TAB_ID) {
-                            setActiveTab(RESOURCES_TAB_ID);
-                            setResourcesChild(DEFAULT_RESOURCES_SEGMENT);
-                            replaceDashboardUrl(RESOURCES_TAB_ID, DEFAULT_RESOURCES_SEGMENT);
-                            setMobileResourcesOpen(true);
-                          } else {
-                            setMobileResourcesOpen((o) => !o);
-                          }
+                          setMobileResourcesOpen((o) => !o);
                         }}
                       >
-                        {resourcesTabLabel}
+                        {rowLabel}
                       </button>
                       {mobileResourcesOpen ? (
                         <div
@@ -546,7 +559,7 @@ export default function Dashboard({ onNavigate }) {
                                 type="button"
                                 className={
                                   subSel
-                                    ? `ml-3 rounded-lg px-[1.125rem] py-3 text-left text-[0.9rem] font-semibold outline-none transition-colors ${subActiveClass}`
+                                    ? `ml-3 flex min-h-11 w-full items-center rounded-lg px-[1.125rem] py-3 text-left text-[0.9rem] font-semibold outline-none transition-colors ${subActiveClass}`
                                     : subIdleClass
                                 }
                                 aria-current={subSel ? "page" : undefined}
@@ -565,23 +578,11 @@ export default function Dashboard({ onNavigate }) {
                   );
                 }
 
-                const selected = activeTab === tab.id;
-                let itemClass =
-                  "rounded-lg px-[1.125rem] py-3.5 text-left text-[0.95rem] font-semibold outline-none transition-colors ";
-                if (selected) {
-                  itemClass += isLight
-                    ? "border border-[rgba(152,117,207,0.9)] bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] text-white shadow-[0_4px_18px_rgb(103_61_154/0.42)] focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/70"
-                    : "border border-[rgba(142,90,200,0.75)] bg-gradient-to-br from-[rgba(80,40,120,0.55)] to-[rgba(40,20,70,0.65)] text-white shadow-[0_3px_16px_rgba(90,40,140,0.22)] focus-visible:ring-2 focus-visible:ring-purple-500/65";
-                } else {
-                  itemClass += isLight
-                    ? "border border-transparent bg-black/25 text-[#f4f0fa]/88 hover:border-[#b998e8]/35 hover:bg-white/[0.08] focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/60"
-                    : "border border-transparent bg-black/25 text-[#f4f0fa]/88 hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-purple-500/65";
-                }
                 return (
                   <button
                     key={tab.id}
                     type="button"
-                    className={itemClass}
+                    className={rowClass}
                     aria-current={selected ? "page" : undefined}
                     onClick={() => {
                       handleTabNavigate(tab.id);
