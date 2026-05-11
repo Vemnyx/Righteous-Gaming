@@ -37,7 +37,7 @@ function matchRankerCatalogSet(list) {
 function cardJumpOptionLabel(entry) {
   const name = String(entry.card.name ?? "").trim() || `Card ${entry.card.id}`;
   const dot = pitchDot(entry.card);
-  return dot ? `${name} ${dot}` : name;
+  return dot ? `${name}  ${dot}` : name;
 }
 
 /** @param {RankerCard} card */
@@ -501,6 +501,25 @@ export function CardRanker({ isLight, active }) {
   const showRankCompleteMessage =
     !rankLoading && rankStats.total > 0 && rankStats.unranked === 0;
 
+  const cardJumpGroups = useMemo(() => {
+    /** @type {{ idx: number, entry: QueueEntry, label: string }[]} */
+    const pending = [];
+    /** @type {{ idx: number, entry: QueueEntry, label: string }[]} */
+    const ranked = [];
+    for (let i = 0; i < queue.length; i++) {
+      const entry = queue[i];
+      if (!entry) continue;
+      const label = cardJumpOptionLabel(entry);
+      const row = { idx: i, entry, label };
+      if (entry.kind === "pending") pending.push(row);
+      else ranked.push(row);
+    }
+    const byLabel = (a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
+    pending.sort(byLabel);
+    ranked.sort(byLabel);
+    return { pending, ranked };
+  }, [queue]);
+
   return (
     <div className="relative flex min-h-0 w-full min-h-[min(52vh,28rem)] flex-1 flex-col overflow-hidden rounded-2xl text-left">
       {setBgUrl ? (
@@ -561,22 +580,18 @@ export function CardRanker({ isLight, active }) {
                       disabled={rankLoading || queue.length === 0}
                     >
                       <optgroup label="Unranked">
-                        {queue.map((entry, i) =>
-                          entry.kind === "pending" ? (
-                            <option key={`jump-${entry.card.id}-p-${i}`} value={String(i)}>
-                              {cardJumpOptionLabel(entry)}
-                            </option>
-                          ) : null,
-                        )}
+                        {cardJumpGroups.pending.map(({ idx, entry, label }) => (
+                          <option key={`jump-${entry.card.id}-p-${idx}`} value={String(idx)}>
+                            {label}
+                          </option>
+                        ))}
                       </optgroup>
                       <optgroup label="Ranked">
-                        {queue.map((entry, i) =>
-                          entry.kind === "ranked" ? (
-                            <option key={`jump-${entry.card.id}-r-${i}`} value={String(i)}>
-                              {cardJumpOptionLabel(entry)}
-                            </option>
-                          ) : null,
-                        )}
+                        {cardJumpGroups.ranked.map(({ idx, entry, label }) => (
+                          <option key={`jump-${entry.card.id}-r-${idx}`} value={String(idx)}>
+                            {label}
+                          </option>
+                        ))}
                       </optgroup>
                     </select>
                     <div className="flex w-full max-w-md justify-center gap-2.5 sm:gap-3" role="group" aria-label="Star rating 1 to 5">
@@ -666,7 +681,7 @@ export function CardRanker({ isLight, active }) {
                             Avg Team Ranking -{" "}
                             {teamRankings.averageRank != null ? `${teamRankings.averageRank.toFixed(2)}★` : "—"}
                           </p>
-                          <div className="max-h-[14rem] min-h-[5rem] overflow-y-auto overscroll-contain rounded-md border border-white/[0.12] bg-black/30 px-2 py-1">
+                          <div className="max-h-[14rem] min-h-[5rem] overflow-y-auto overscroll-contain rounded-md border border-white/[0.12] bg-black/30 px-2 py-1 [scrollbar-gutter:stable]">
                             {teamRankings.rows.length === 0 ? (
                               <p className="m-0 py-2 text-center text-[0.85rem] text-[#f4f0fa]/65">No team ratings yet.</p>
                             ) : (
