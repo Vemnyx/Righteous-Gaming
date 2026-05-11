@@ -3,9 +3,11 @@
  * @param {() => Promise<string>} getIdToken
  * @param {string} objectPath
  * @param {File} file
+ * @param {{ cacheBust?: boolean }} [options] — when `cacheBust` is true (default), appends `?v=` / `&v=` so browsers fetch a fresh object after re-uploads to the same path.
  * @returns {Promise<string>} public_url
  */
-export async function uploadPublicAsset(getIdToken, objectPath, file) {
+export async function uploadPublicAsset(getIdToken, objectPath, file, options = {}) {
+  const { cacheBust = true } = options;
   const token = await getIdToken();
   const fd = new FormData();
   fd.append("path", objectPath);
@@ -23,7 +25,12 @@ export async function uploadPublicAsset(getIdToken, objectPath, file) {
   if (typeof data.public_url !== "string") {
     throw new Error("Invalid upload response");
   }
-  return data.public_url;
+  let url = data.public_url;
+  if (cacheBust) {
+    const sep = url.includes("?") ? "&" : "?";
+    url = `${url}${sep}v=${Date.now()}`;
+  }
+  return url;
 }
 
 /** @param {string} filename */

@@ -5,7 +5,7 @@ import { AnnouncementExpandedLayout } from "./AnnouncementExpandedLayout";
 import { AnnouncementRichTextEditor } from "./AnnouncementRichTextEditor";
 import { AnnouncementRightMedia } from "./AnnouncementRightMedia";
 import { TextInputModal } from "./TextInputModal";
-import { uploadPublicAsset, extFromFilename } from "../utils/uploadPublicAsset";
+import { uploadPublicAsset } from "../utils/uploadPublicAsset";
 import {
   youtubeThumbnailDefault,
   youtubeVideoIdFromInput,
@@ -169,14 +169,14 @@ export function AnnouncementsAdmin({
       if (!f?.type?.startsWith("image/")) return;
       setSaveError(null);
       try {
-        const ext = extFromFilename(f.name);
         const base =
           announcementForm === "new"
             ? `announcements/drafts/${draftFolder}`
             : announcementForm != null && typeof announcementForm === "number"
               ? `announcements/${announcementForm}`
               : `announcements/drafts/${draftFolder}`;
-        const path = `${base}/cover.${ext}`;
+        /** Single object key per announcement so re-uploads overwrite in GCS (not `cover.png` vs `cover.jpg`). */
+        const path = `${base}/cover`;
         const url = await uploadPublicAsset(getIdToken, path, f);
         setImageUrl(url);
       } catch (err) {
@@ -509,7 +509,7 @@ export function AnnouncementsAdmin({
                       onClick={() => setPreviewOpen(false)}
                     />
                     <div
-                      className={`relative z-[1] flex w-[min(100%,80vw)] max-h-[min(92vh,900px)] flex-col overflow-hidden rounded-2xl ${previewModalShell}`}
+                      className={`relative z-[1] flex w-[min(100%,85vw)] max-h-[min(92vh,900px)] flex-col overflow-hidden rounded-2xl ${previewModalShell}`}
                     >
                       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
                         <AnnouncementExpandedLayout
