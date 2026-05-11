@@ -462,26 +462,51 @@ export function CardRanker({ isLight, active }) {
       } catch {
         /* ignore */
       }
-      if (rankLoading || queue.length <= 1) return;
-      const dx = s.x - s.x0;
-      const dy = s.y - s.y0;
-      const minDist = 52;
-      const mostlyHorizontal = Math.abs(dy) <= Math.abs(dx) * 0.72;
-      if (Math.abs(dx) < minDist || !mostlyHorizontal) {
+      if (rankLoading || queue.length <= 1) {
         setCardDragActive(false);
         setCardDragX(0);
         return;
       }
-      completeSwipe(dx);
+      const dx = s.x - s.x0;
+      const dy = s.y - s.y0;
+      const minDist = 52;
+      const mostlyHorizontal = Math.abs(dy) <= Math.abs(dx) * 0.72;
+      if (Math.abs(dx) >= minDist && mostlyHorizontal) {
+        completeSwipe(dx);
+        return;
+      }
+      setCardDragActive(false);
+      setCardDragX(0);
     },
     [rankLoading, queue.length, completeSwipe],
   );
 
-  const onCardSwipePointerCancel = useCallback(() => {
+  const onCardSwipeLostPointerCapture = useCallback(() => {
+    // Some touch stacks end gestures via capture loss; commit swipe from tracked
+    // coordinates if one is still active, otherwise just clear visuals.
+    const s = cardSwipeRef.current;
+    if (!s.active) {
+      setCardDragActive(false);
+      setCardDragX(0);
+      return;
+    }
+    s.active = false;
+    if (rankLoading || queue.length <= 1) {
+      setCardDragActive(false);
+      setCardDragX(0);
+      return;
+    }
+    const dx = s.x - s.x0;
+    const dy = s.y - s.y0;
+    const minDist = 52;
+    const mostlyHorizontal = Math.abs(dy) <= Math.abs(dx) * 0.72;
+    if (Math.abs(dx) >= minDist && mostlyHorizontal) {
+      completeSwipe(dx);
+      return;
+    }
     setCardDragActive(false);
     setCardDragX(0);
-    cardSwipeRef.current.active = false;
-  }, []);
+  }, [rankLoading, queue.length, completeSwipe]);
 
   useEffect(() => {
     if (!active || !user || queue.length === 0) return undefined;
@@ -619,7 +644,7 @@ export function CardRanker({ isLight, active }) {
         <>
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 z-0 rounded-2xl bg-center bg-no-repeat"
+            className="pointer-events-none absolute inset-0 z-0 hidden rounded-2xl bg-center bg-no-repeat sm:block"
             style={{
               backgroundImage: `url(${JSON.stringify(setBgUrl)})`,
               backgroundSize: "100% 100%",
@@ -627,7 +652,7 @@ export function CardRanker({ isLight, active }) {
           />
           <div
             aria-hidden
-            className={`pointer-events-none absolute inset-0 z-0 rounded-2xl ${bgScrim}`}
+            className={`pointer-events-none absolute inset-0 z-0 hidden rounded-2xl sm:block ${bgScrim}`}
           />
         </>
       ) : null}
@@ -651,7 +676,7 @@ export function CardRanker({ isLight, active }) {
                     type="button"
                     onClick={goPrev}
                     disabled={cardIndex <= 0 || rankLoading}
-                    className={arrowNavCls}
+                    className={`${arrowNavCls} hidden sm:flex`}
                     aria-label="Previous card"
                   >
                     <span aria-hidden>←</span>
@@ -721,8 +746,8 @@ export function CardRanker({ isLight, active }) {
                       onPointerDown={onCardSwipePointerDown}
                       onPointerMove={onCardSwipePointerMove}
                       onPointerUp={onCardSwipePointerUpOrCancel}
-                      onPointerCancel={onCardSwipePointerCancel}
-                      onLostPointerCapture={resetCardSwipe}
+                      onPointerCancel={onCardSwipePointerUpOrCancel}
+                      onLostPointerCapture={onCardSwipeLostPointerCapture}
                       role="presentation"
                       aria-label="Swipe left or right on the card to change cards"
                     >
@@ -744,7 +769,7 @@ export function CardRanker({ isLight, active }) {
                     type="button"
                     onClick={goNext}
                     disabled={cardIndex >= queue.length - 1 || rankLoading}
-                    className={arrowNavCls}
+                    className={`${arrowNavCls} hidden sm:flex`}
                     aria-label="Next card"
                   >
                     <span aria-hidden>→</span>
