@@ -8,14 +8,14 @@ import { CardFormat } from "../constants/cardFormat";
 
 /**
  * @typedef {{ kind: 'pending', card: RankerCard }} PendingEntry
- * @typedef {{ kind: 'ranked', card: RankerCard, rank: number, notes: string | null }} RankedEntry
- * @typedef {PendingEntry | RankedEntry} QueueEntry
+ * @typedef {{ kind: 'rated', card: RankerCard, rating: number, notes: string | null }} RatedEntry
+ * @typedef {PendingEntry | RatedEntry} QueueEntry
  */
 
 /**
- * @typedef {{ user_name: string, rank: number, notes?: string | null }} TeamRankingRow
- * @typedef {{ averageRank: number | null, rows: TeamRankingRow[] }} TeamRankingsState
- * @typedef {Record<number, TeamRankingsState>} TeamRankingsByCard
+ * @typedef {{ user_name: string, rating: number, notes?: string | null }} TeamRatingRow
+ * @typedef {{ averageRating: number | null, rows: TeamRatingRow[] }} TeamRatingsState
+ * @typedef {Record<number, TeamRatingsState>} TeamRatingsByCard
  */
 
 function notesFromServer(/** @type {string | null | undefined} */ n) {
@@ -71,7 +71,7 @@ export function CardRanker({ isLight, active }) {
   const [cardDragX, setCardDragX] = useState(0);
   const [cardDragActive, setCardDragActive] = useState(false);
 
-  const [teamRankingsByCard, setTeamRankingsByCard] = useState(/** @type {TeamRankingsByCard} */ ({}));
+  const [teamRatingsByCard, setTeamRatingsByCard] = useState(/** @type {TeamRatingsByCard} */ ({}));
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamLoadError, setTeamLoadError] = useState(/** @type {string | null} */ (null));
 
@@ -131,14 +131,14 @@ export function CardRanker({ isLight, active }) {
       });
       const headers = { Authorization: `Bearer ${token}` };
       const [resRanked, resPending] = await Promise.all([
-        fetch(`/api/me/card-rankings?${qs}`, { headers }),
-        fetch(`/api/me/cards-to-rank?${qs}`, { headers }),
+        fetch(`/api/me/card-ratings?${qs}`, { headers }),
+        fetch(`/api/me/cards-to-rate?${qs}`, { headers }),
       ]);
       if (!resRanked.ok) throw new Error(await resRanked.text());
       if (!resPending.ok) throw new Error(await resPending.text());
-      const rankedData = await resRanked.json();
+      const ratedData = await resRanked.json();
       const pendingData = await resPending.json();
-      const rankedRows = Array.isArray(rankedData.rankings) ? rankedData.rankings : [];
+      const ratedRows = Array.isArray(ratedData.ratings) ? ratedData.ratings : [];
       const pendingCards = Array.isArray(pendingData.cards) ? pendingData.cards : [];
 
       /** @type {QueueEntry[]} */
@@ -146,12 +146,12 @@ export function CardRanker({ isLight, active }) {
       for (const c of pendingCards) {
         if (c && typeof c.id === "number") next.push({ kind: "pending", card: /** @type {RankerCard} */ (c) });
       }
-      for (const r of rankedRows) {
-        if (r && r.card && typeof r.card.id === "number" && typeof r.rank === "number") {
+      for (const r of ratedRows) {
+        if (r && r.card && typeof r.card.id === "number" && typeof r.rating === "number") {
           next.push({
-            kind: "ranked",
+            kind: "rated",
             card: /** @type {RankerCard} */ (r.card),
-            rank: Number(r.rank),
+            rating: Number(r.rating),
             notes: r.notes != null ? String(r.notes) : null,
           });
         }
@@ -159,7 +159,7 @@ export function CardRanker({ isLight, active }) {
       setQueue(next);
       setCardIndex(0);
     } catch (e) {
-      setRankError(e instanceof Error ? e.message : "Failed to load rankings");
+      setRankError(e instanceof Error ? e.message : "Failed to load ratings");
       setQueue([]);
       setCardIndex(0);
     } finally {
@@ -192,8 +192,8 @@ export function CardRanker({ isLight, active }) {
       setDraftNotes("");
       return;
     }
-    if (current.kind === "ranked") {
-      setDraftRank(current.rank);
+    if (current.kind === "rated") {
+      setDraftRank(current.rating);
       setDraftNotes(notesFromServer(current.notes));
     } else {
       setDraftRank(null);
@@ -203,7 +203,7 @@ export function CardRanker({ isLight, active }) {
 
   useEffect(() => {
     if (!active || !user || !rankerSet || queue.length === 0) {
-      setTeamRankingsByCard({});
+      setTeamRatingsByCard({});
       setTeamLoadError(null);
       setTeamLoading(false);
       return undefined;
@@ -218,34 +218,34 @@ export function CardRanker({ isLight, active }) {
           set_id: String(rankerSet.id),
           format: String(RANKER_FORMAT_ID),
         });
-        const res = await fetch(`/api/me/card-team-rankings-batch?${qs}`, {
+        const res = await fetch(`/api/me/card-team-ratings-batch?${qs}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         if (cancelled) return;
         const cards = Array.isArray(data.cards) ? data.cards : [];
-        /** @type {TeamRankingsByCard} */
+        /** @type {TeamRatingsByCard} */
         const byCard = {};
         for (const c of cards) {
           if (!c || typeof c.card_id !== "number") continue;
-          const rawRows = Array.isArray(c.rankings) ? c.rankings : [];
+          const rawRows = Array.isArray(c.ratings) ? c.ratings : [];
           const rows = rawRows
-            .filter((r) => r && typeof r.user_name === "string" && typeof r.rank === "number")
+            .filter((r) => r && typeof r.user_name === "string" && typeof r.rating === "number")
             .map((r) => ({
               user_name: String(r.user_name),
-              rank: Number(r.rank),
+              rating: Number(r.rating),
               notes: r.notes != null ? String(r.notes) : null,
             }));
-          const averageRank =
-            typeof c.average_rank === "number" && Number.isFinite(c.average_rank) ? c.average_rank : null;
-          byCard[c.card_id] = { averageRank, rows };
+          const averageRating =
+            typeof c.average_rating === "number" && Number.isFinite(c.average_rating) ? c.average_rating : null;
+          byCard[c.card_id] = { averageRating, rows };
         }
-        setTeamRankingsByCard(byCard);
+        setTeamRatingsByCard(byCard);
       } catch (e) {
         if (!cancelled) {
-          setTeamRankingsByCard({});
-          setTeamLoadError(e instanceof Error ? e.message : "Failed to load team rankings");
+          setTeamRatingsByCard({});
+          setTeamLoadError(e instanceof Error ? e.message : "Failed to load team ratings");
         }
       } finally {
         if (!cancelled) setTeamLoading(false);
@@ -303,8 +303,8 @@ export function CardRanker({ isLight, active }) {
       const token = await user.getIdToken();
       if (!rankerSet) return;
       const setId = rankerSet.id;
-      const rankVal = current.kind === "ranked" ? current.rank : draftRank;
-      if (rankVal == null || rankVal < 1 || rankVal > 5) {
+      const ratingVal = current.kind === "rated" ? current.rating : draftRank;
+      if (ratingVal == null || ratingVal < 1 || ratingVal > 5) {
         setSaveError("Choose a star rating (1–5).");
         setSubmitting(false);
         return;
@@ -314,10 +314,10 @@ export function CardRanker({ isLight, active }) {
         set_id: setId,
         card_id: current.card.id,
         format: RANKER_FORMAT_ID,
-        rank: rankVal,
+        rating: ratingVal,
         notes: notesTrim === "" ? null : notesTrim,
       };
-      const res = await fetch("/api/me/card-rankings", {
+      const res = await fetch("/api/me/card-ratings", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -338,9 +338,9 @@ export function CardRanker({ isLight, active }) {
         if (!entry) return prev;
         const notesVal = notesTrim === "" ? null : notesTrim;
         next[cardIndex] = {
-          kind: "ranked",
+          kind: "rated",
           card: entry.card,
-          rank: rankVal,
+          rating: ratingVal,
           notes: notesVal,
         };
         return next;
@@ -611,7 +611,7 @@ export function CardRanker({ isLight, active }) {
     return { pending, ranked };
   }, [queue]);
 
-  const currentTeamRankings = current ? (teamRankingsByCard[current.card.id] ?? null) : null;
+  const currentTeamRatings = current ? (teamRatingsByCard[current.card.id] ?? null) : null;
 
   return (
     <div className="relative flex min-h-0 w-full min-h-[min(52vh,28rem)] flex-1 flex-col overflow-hidden rounded-2xl text-left">
@@ -638,7 +638,7 @@ export function CardRanker({ isLight, active }) {
         {setsLoading ? <p className="text-[0.9rem] text-[#f4f0fa]/80">Loading card set…</p> : null}
 
         {!configured || !user ? (
-          <p className="text-[0.9rem] text-[#f4f0fa]/75">Sign in to rank cards for this set and format.</p>
+          <p className="text-[0.9rem] text-[#f4f0fa]/75">Sign in to rate cards for this set and format.</p>
         ) : rankerSet ? (
           <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row lg:items-stretch lg:gap-6">
             <div className="relative flex min-h-[min(18rem,40vh)] min-w-0 flex-1 flex-col items-stretch justify-center lg:basis-0">
@@ -689,8 +689,8 @@ export function CardRanker({ isLight, active }) {
                     </select>
                     <div className="flex w-full max-w-md justify-center gap-2.5 sm:gap-3" role="group" aria-label="Star rating 1 to 5">
                       {[1, 2, 3, 4, 5].map((n) => {
-                        const locked = current.kind === "ranked";
-                        const cap = locked ? current.rank : draftRank;
+                        const locked = current.kind === "rated";
+                        const cap = locked ? current.rating : draftRank;
                         const filled = cap != null && cap >= 1 && cap <= 5 && n <= cap;
                         const isExact = cap === n;
                         const starClass = locked
@@ -757,36 +757,36 @@ export function CardRanker({ isLight, active }) {
                 {rankLoading ? <p className="text-[0.9rem] text-[#f4f0fa]/80">Loading cards…</p> : null}
                 <div className={teamPanelCls} aria-live="polite">
                   {!current ? (
-                    <p className="m-0 text-[0.88rem] leading-snug text-[#f4f0fa]/65">Team rankings will appear here for the current card.</p>
+                    <p className="m-0 text-[0.88rem] leading-snug text-[#f4f0fa]/65">Team ratings will appear here for the current card.</p>
                   ) : current.kind === "pending" ? (
                     <p className="m-0 text-[0.98rem] font-semibold leading-snug text-[#f4f0fa]/88">
-                      Team rankings are hidden until you submit your ranking for this card.
+                      Team ratings are hidden until you submit your rating for this card.
                     </p>
                   ) : (
                     <>
-                      {teamLoading ? <p className="m-0 text-[0.88rem] text-[#f4f0fa]/75">Loading team rankings…</p> : null}
+                      {teamLoading ? <p className="m-0 text-[0.88rem] text-[#f4f0fa]/75">Loading team ratings…</p> : null}
                       {teamLoadError ? (
                         <p className="m-0 rounded-md border border-red-400/35 bg-red-950/35 px-2 py-1.5 text-[0.82rem] text-red-100">
                           {teamLoadError}
                         </p>
                       ) : null}
-                      {!teamLoading && !teamLoadError && currentTeamRankings ? (
+                      {!teamLoading && !teamLoadError && currentTeamRatings ? (
                         <>
                           <p className="m-0 text-[0.92rem] font-semibold leading-snug text-[#f4f0fa]">
-                            Avg Team Ranking -{" "}
-                            {currentTeamRankings.averageRank != null ? `${currentTeamRankings.averageRank.toFixed(2)}★` : "—"}
+                            Avg Team Rating -{" "}
+                            {currentTeamRatings.averageRating != null ? `${currentTeamRatings.averageRating.toFixed(2)}★` : "—"}
                           </p>
                           <div className="max-h-[14rem] min-h-[5rem] overflow-y-auto overscroll-contain rounded-md border border-white/[0.12] bg-black/30 px-2 py-1 [scrollbar-gutter:stable]">
-                            {currentTeamRankings.rows.length === 0 ? (
+                            {currentTeamRatings.rows.length === 0 ? (
                               <p className="m-0 py-2 text-center text-[0.85rem] text-[#f4f0fa]/65">No team ratings yet.</p>
                             ) : (
-                              currentTeamRankings.rows.map((row, idx) => (
+                              currentTeamRatings.rows.map((row, idx) => (
                                 <div
                                   key={`${row.user_name}-${idx}`}
                                   className="border-b border-white/[0.08] py-2.5 last:border-b-0"
                                 >
                                   <p className="m-0 text-[0.875rem] font-semibold text-[#f4f0fa]">
-                                    {row.user_name} - {row.rank}/5 ★
+                                    {row.user_name} - {row.rating}/5 ★
                                   </p>
                                   {row.notes != null && String(row.notes).trim() !== "" ? (
                                     <p className="m-0 mt-3 whitespace-pre-wrap text-[0.8rem] leading-snug text-[#f4f0fa]/72">
@@ -807,15 +807,15 @@ export function CardRanker({ isLight, active }) {
                 {!rankLoading ? (
                   <div className="flex flex-col gap-1">
                     <p className="m-0 text-[0.9rem] leading-snug text-[#f4f0fa]/88">
-                      Total cards available for ranking: {rankStats.total}
+                      Total cards available for rating: {rankStats.total}
                     </p>
                     {showRankCompleteMessage ? (
                       <p className="m-0 text-[0.9rem] leading-snug text-[#f4f0fa]/92">
-                        No more cards left to rank, come back later!
+                        No more cards left to rate, come back later!
                       </p>
                     ) : (
                       <p className="m-0 text-[0.9rem] leading-snug text-[#f4f0fa]/88">
-                        Unranked cards remaining: {rankStats.unranked}
+                        Unrated cards remaining: {rankStats.unranked}
                       </p>
                     )}
                   </div>
@@ -833,7 +833,7 @@ export function CardRanker({ isLight, active }) {
                   />
                 </label>
                 <button type="button" className={btnPrimary} disabled={!canSubmit} onClick={() => void submitRanking()}>
-                  {submitting ? "Saving…" : current?.kind === "ranked" ? "Save notes" : "Submit ranking"}
+                  {submitting ? "Saving…" : current?.kind === "rated" ? "Save notes" : "Submit rating"}
                 </button>
                 {saveError ? (
                   <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">

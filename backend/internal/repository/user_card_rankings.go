@@ -8,54 +8,54 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// UserCardRanking is a row from user_card_rankings.
-type UserCardRanking struct {
+// UserCardRating is a row from user_card_ratings.
+type UserCardRating struct {
 	UserID int
 	SetID  int
 	CardID int
 	Format int16
-	Rank   int16
+	Rating int16
 	Notes  *string
 }
 
-// UserCardRankingWithCard is a ranking row joined to its card (and set name on the card).
-type UserCardRankingWithCard struct {
-	UserCardRanking
+// UserCardRatingWithCard is a rating row joined to its card (and set name on the card).
+type UserCardRatingWithCard struct {
+	UserCardRating
 	Card Card
 }
 
-// ListUserCardRankingsWithCards returns ranked rows with full card rows for the user, set, and format.
-// Basic-rarity cards are omitted (they are not part of the ranking experience).
+// ListUserCardRatingsWithCards returns rated rows with full card rows for the user, set, and format.
+// Basic-rarity cards are omitted (they are not part of the rating experience).
 // For Limited format (0), legendary (7) and fabled (8) rarities are omitted — see domain.CardRarity / CardFormat.
-func (r *Repository) ListUserCardRankingsWithCards(ctx context.Context, userID, setID int, format int16) ([]UserCardRankingWithCard, error) {
+func (r *Repository) ListUserCardRatingsWithCards(ctx context.Context, userID, setID int, format int16) ([]UserCardRatingWithCard, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	q := `
-SELECT r.user_id, r.set_id, r.card_id, r.format, r.rank, r.notes,
+SELECT r.user_id, r.set_id, r.card_id, r.format, r.rating, r.notes,
 ` + cardSelectColumnsFromC + `, s.name AS set_name
-FROM user_card_rankings r
+FROM user_card_ratings r
 INNER JOIN cards c ON c.id = r.card_id
 INNER JOIN sets s ON s.id = c.set_id
 WHERE r.user_id = $1 AND r.set_id = $2 AND r.format = $3
   AND (c.rarity IS NULL OR c.rarity <> 0)
   AND ($3::smallint <> 0 OR c.rarity IS NULL OR c.rarity NOT IN (7, 8))
-ORDER BY r.rank ASC, r.card_id ASC`
+ORDER BY r.rating ASC, r.card_id ASC`
 	rows, err := r.pool.Query(ctx, q, userID, setID, format)
 	if err != nil {
-		return nil, fmt.Errorf("repository: list user card rankings with cards: %w", err)
+		return nil, fmt.Errorf("repository: list user card ratings with cards: %w", err)
 	}
 	defer rows.Close()
 
-	out := make([]UserCardRankingWithCard, 0, 64)
+	out := make([]UserCardRatingWithCard, 0, 64)
 	for rows.Next() {
-		var row UserCardRankingWithCard
+		var row UserCardRatingWithCard
 		err := rows.Scan(
 			&row.UserID,
 			&row.SetID,
 			&row.CardID,
 			&row.Format,
-			&row.Rank,
+			&row.Rating,
 			&row.Notes,
 			&row.Card.ID,
 			&row.Card.SetID,
@@ -85,76 +85,76 @@ ORDER BY r.rank ASC, r.card_id ASC`
 			&row.Card.SetName,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("repository: list user card rankings with cards scan: %w", err)
+			return nil, fmt.Errorf("repository: list user card ratings with cards scan: %w", err)
 		}
 		out = append(out, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("repository: list user card rankings with cards rows: %w", err)
+		return nil, fmt.Errorf("repository: list user card ratings with cards rows: %w", err)
 	}
 	return out, nil
 }
 
-// ErrUserCardRankingNotFound is returned when no ranking row matches.
-var ErrUserCardRankingNotFound = errors.New("repository: user card ranking not found")
+// ErrUserCardRatingNotFound is returned when no rating row matches.
+var ErrUserCardRatingNotFound = errors.New("repository: user card rating not found")
 
-// GetUserCardRanking returns one ranking row or ErrUserCardRankingNotFound.
-func (r *Repository) GetUserCardRanking(ctx context.Context, userID, setID, cardID int, format int16) (*UserCardRanking, error) {
+// GetUserCardRating returns one rating row or ErrUserCardRatingNotFound.
+func (r *Repository) GetUserCardRating(ctx context.Context, userID, setID, cardID int, format int16) (*UserCardRating, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-SELECT user_id, set_id, card_id, format, rank, notes
-FROM user_card_rankings
+SELECT user_id, set_id, card_id, format, rating, notes
+FROM user_card_ratings
 WHERE user_id = $1 AND set_id = $2 AND card_id = $3 AND format = $4`
 	dbRow := r.pool.QueryRow(ctx, q, userID, setID, cardID, format)
-	var ranking UserCardRanking
-	err := dbRow.Scan(&ranking.UserID, &ranking.SetID, &ranking.CardID, &ranking.Format, &ranking.Rank, &ranking.Notes)
+	var rating UserCardRating
+	err := dbRow.Scan(&rating.UserID, &rating.SetID, &rating.CardID, &rating.Format, &rating.Rating, &rating.Notes)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrUserCardRankingNotFound
+			return nil, ErrUserCardRatingNotFound
 		}
-		return nil, fmt.Errorf("repository: get user card ranking: %w", err)
+		return nil, fmt.Errorf("repository: get user card rating: %w", err)
 	}
-	return &ranking, nil
+	return &rating, nil
 }
 
-// InsertUserCardRanking inserts a new ranking row.
-func (r *Repository) InsertUserCardRanking(ctx context.Context, userID, setID, cardID int, format int16, rank int16, notes *string) error {
+// InsertUserCardRating inserts a new rating row.
+func (r *Repository) InsertUserCardRating(ctx context.Context, userID, setID, cardID int, format int16, rating int16, notes *string) error {
 	if r.pool == nil {
 		return fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-INSERT INTO user_card_rankings (user_id, set_id, card_id, format, rank, notes)
+INSERT INTO user_card_ratings (user_id, set_id, card_id, format, rating, notes)
 VALUES ($1, $2, $3, $4, $5, $6)`
-	_, err := r.pool.Exec(ctx, q, userID, setID, cardID, format, rank, notes)
+	_, err := r.pool.Exec(ctx, q, userID, setID, cardID, format, rating, notes)
 	if err != nil {
-		return fmt.Errorf("repository: insert user card ranking: %w", err)
+		return fmt.Errorf("repository: insert user card rating: %w", err)
 	}
 	return nil
 }
 
-// UpdateUserCardRankingNotes updates only the notes column for an existing row.
-func (r *Repository) UpdateUserCardRankingNotes(ctx context.Context, userID, setID, cardID int, format int16, notes *string) error {
+// UpdateUserCardRatingNotes updates only the notes column for an existing row.
+func (r *Repository) UpdateUserCardRatingNotes(ctx context.Context, userID, setID, cardID int, format int16, notes *string) error {
 	if r.pool == nil {
 		return fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-UPDATE user_card_rankings
+UPDATE user_card_ratings
 SET notes = $5
 WHERE user_id = $1 AND set_id = $2 AND card_id = $3 AND format = $4`
 	tag, err := r.pool.Exec(ctx, q, userID, setID, cardID, format, notes)
 	if err != nil {
-		return fmt.Errorf("repository: update user card ranking notes: %w", err)
+		return fmt.Errorf("repository: update user card rating notes: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrUserCardRankingNotFound
+		return ErrUserCardRatingNotFound
 	}
 	return nil
 }
 
 // ListUnrankedCardsForUserSetFormat returns cards in the set that include the format in their
-// formats array and have no user_card_rankings row for this user, set, and format.
+// formats array and have no user_card_ratings row for this user, set, and format.
 // Basic-rarity cards (rarity = 0, domain.CardRarityBasic) are omitted.
 // For Limited format (0), legendary (7) and fabled (8) are omitted.
 func (r *Repository) ListUnrankedCardsForUserSetFormat(ctx context.Context, userID, setID int, format int16) ([]Card, error) {
@@ -167,7 +167,7 @@ WHERE c.set_id = $1
   AND (c.rarity IS NULL OR c.rarity <> 0)
   AND ($2::smallint <> 0 OR c.rarity IS NULL OR c.rarity NOT IN (7, 8))
   AND NOT EXISTS (
-    SELECT 1 FROM user_card_rankings r
+    SELECT 1 FROM user_card_ratings r
     WHERE r.user_id = $3 AND r.set_id = $1 AND r.format = $2 AND r.card_id = c.id
   )
 ORDER BY c.set_num ASC, c.id ASC`
@@ -191,47 +191,47 @@ ORDER BY c.set_num ASC, c.id ASC`
 	return out, nil
 }
 
-// CardTeamRankingRow is one user's ranking for a card in a set+format (for team aggregate UI).
-type CardTeamRankingRow struct {
+// CardTeamRatingRow is one user's rating for a card in a set+format (for team aggregate UI).
+type CardTeamRatingRow struct {
 	UserID   int
 	CardID   int
 	Username *string
 	Email    string
-	Rank     int16
+	Rating   int16
 	Notes    *string
 }
 
-// ListCardTeamRankings returns all users' rankings for one card/set/format, ordered for display.
-// When len(rows) > 0, avg is the arithmetic mean of rank; otherwise avg is nil.
-func (r *Repository) ListCardTeamRankings(ctx context.Context, setID, cardID int, format int16) ([]CardTeamRankingRow, *float64, error) {
+// ListCardTeamRatings returns all users' ratings for one card/set/format, ordered for display.
+// When len(rows) > 0, avg is the arithmetic mean of rating; otherwise avg is nil.
+func (r *Repository) ListCardTeamRatings(ctx context.Context, setID, cardID int, format int16) ([]CardTeamRatingRow, *float64, error) {
 	if r.pool == nil {
 		return nil, nil, fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-SELECT r.user_id, u.username, u.email, r.rank, r.notes
-FROM user_card_rankings r
+SELECT r.user_id, u.username, u.email, r.rating, r.notes
+FROM user_card_ratings r
 INNER JOIN users u ON u.id = r.user_id
 WHERE r.set_id = $1 AND r.card_id = $2 AND r.format = $3
 ORDER BY COALESCE(NULLIF(TRIM(u.username), ''), u.email) ASC, r.user_id ASC`
 	rows, err := r.pool.Query(ctx, q, setID, cardID, format)
 	if err != nil {
-		return nil, nil, fmt.Errorf("repository: list card team rankings: %w", err)
+		return nil, nil, fmt.Errorf("repository: list card team ratings: %w", err)
 	}
 	defer rows.Close()
 
-	out := make([]CardTeamRankingRow, 0, 32)
+	out := make([]CardTeamRatingRow, 0, 32)
 	var sum float64
 	for rows.Next() {
-		var row CardTeamRankingRow
-		if err := rows.Scan(&row.UserID, &row.Username, &row.Email, &row.Rank, &row.Notes); err != nil {
-			return nil, nil, fmt.Errorf("repository: list card team rankings scan: %w", err)
+		var row CardTeamRatingRow
+		if err := rows.Scan(&row.UserID, &row.Username, &row.Email, &row.Rating, &row.Notes); err != nil {
+			return nil, nil, fmt.Errorf("repository: list card team ratings scan: %w", err)
 		}
 		row.CardID = cardID
 		out = append(out, row)
-		sum += float64(row.Rank)
+		sum += float64(row.Rating)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("repository: list card team rankings rows: %w", err)
+		return nil, nil, fmt.Errorf("repository: list card team ratings rows: %w", err)
 	}
 	var avg *float64
 	if len(out) > 0 {
@@ -241,33 +241,33 @@ ORDER BY COALESCE(NULLIF(TRIM(u.username), ''), u.email) ASC, r.user_id ASC`
 	return out, avg, nil
 }
 
-// ListCardTeamRankingsForSetFormat returns all users' rankings for every card in a set+format.
-func (r *Repository) ListCardTeamRankingsForSetFormat(ctx context.Context, setID int, format int16) ([]CardTeamRankingRow, error) {
+// ListCardTeamRatingsForSetFormat returns all users' ratings for every card in a set+format.
+func (r *Repository) ListCardTeamRatingsForSetFormat(ctx context.Context, setID int, format int16) ([]CardTeamRatingRow, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-SELECT r.user_id, r.card_id, u.username, u.email, r.rank, r.notes
-FROM user_card_rankings r
+SELECT r.user_id, r.card_id, u.username, u.email, r.rating, r.notes
+FROM user_card_ratings r
 INNER JOIN users u ON u.id = r.user_id
 WHERE r.set_id = $1 AND r.format = $2
 ORDER BY r.card_id ASC, COALESCE(NULLIF(TRIM(u.username), ''), u.email) ASC, r.user_id ASC`
 	rows, err := r.pool.Query(ctx, q, setID, format)
 	if err != nil {
-		return nil, fmt.Errorf("repository: list card team rankings for set format: %w", err)
+		return nil, fmt.Errorf("repository: list card team ratings for set format: %w", err)
 	}
 	defer rows.Close()
 
-	out := make([]CardTeamRankingRow, 0, 128)
+	out := make([]CardTeamRatingRow, 0, 128)
 	for rows.Next() {
-		var row CardTeamRankingRow
-		if err := rows.Scan(&row.UserID, &row.CardID, &row.Username, &row.Email, &row.Rank, &row.Notes); err != nil {
-			return nil, fmt.Errorf("repository: list card team rankings for set format scan: %w", err)
+		var row CardTeamRatingRow
+		if err := rows.Scan(&row.UserID, &row.CardID, &row.Username, &row.Email, &row.Rating, &row.Notes); err != nil {
+			return nil, fmt.Errorf("repository: list card team ratings for set format scan: %w", err)
 		}
 		out = append(out, row)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("repository: list card team rankings for set format rows: %w", err)
+		return nil, fmt.Errorf("repository: list card team ratings for set format rows: %w", err)
 	}
 	return out, nil
 }

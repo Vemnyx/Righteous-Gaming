@@ -1,1 +1,1 @@
-DROP TABLE IF EXISTS user_card_rankings;
+DROP TABLE IF EXISTS user_card_ratings;
