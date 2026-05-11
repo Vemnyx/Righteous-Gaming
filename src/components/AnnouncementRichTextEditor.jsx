@@ -7,7 +7,6 @@ import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
-import Youtube from "@tiptap/extension-youtube";
 import { uploadPublicAsset, extFromFilename } from "../utils/uploadPublicAsset";
 
 /** TextAlign on `img` only sets `text-align` in CSS, which does not move block images; we persist `data-text-align` and layout with margin utilities. */
@@ -117,7 +116,7 @@ export const AnnouncementRichTextEditor = forwardRef(function AnnouncementRichTe
         heading: { levels: [2, 3] },
       }),
       TextAlign.configure({
-        types: ["paragraph", "heading", "youtube", "image"],
+        types: ["paragraph", "heading", "image"],
         alignments: ["left", "center", "right"],
         defaultAlignment: null,
       }),
@@ -143,18 +142,8 @@ export const AnnouncementRichTextEditor = forwardRef(function AnnouncementRichTe
           ],
         },
       }),
-      Youtube.configure({
-        width: 640,
-        height: 360,
-        nocookie: true,
-        controls: true,
-        HTMLAttributes: {
-          class: "max-h-[min(75vh,480px)] w-full max-w-full rounded-lg border-0",
-        },
-      }),
       Placeholder.configure({
-        placeholder:
-          "Write the announcement… Drag images here, paste a YouTube link, or use the toolbar.",
+        placeholder: "Write the announcement… Drag images here or use the toolbar.",
       }),
     ],
     content: initialHtml || "<p></p>",
@@ -226,8 +215,6 @@ export const AnnouncementRichTextEditor = forwardRef(function AnnouncementRichTe
     if (fromPara && ["left", "center", "right"].includes(fromPara)) return fromPara;
     const fromHead = ed.getAttributes("heading").textAlign;
     if (fromHead && ["left", "center", "right"].includes(fromHead)) return fromHead;
-    const fromYt = ed.getAttributes("youtube").textAlign;
-    if (fromYt && ["left", "center", "right"].includes(fromYt)) return fromYt;
     return "left";
   };
 
@@ -351,23 +338,9 @@ export const AnnouncementRichTextEditor = forwardRef(function AnnouncementRichTe
         >
           Link
         </button>
-        <button
-          type="button"
-          className={toolbarBtnClass(editor.isActive("youtube"), isLight, ts)}
-          onClick={() => {
-            const prev = window.prompt("YouTube URL (watch, embed, or youtu.be)");
-            const url = prev?.trim();
-            if (!url) return;
-            editor.chain().focus().setYoutubeVideo({ src: url }).run();
-          }}
-          aria-pressed={editor.isActive("youtube")}
-          title="Embed YouTube video"
-        >
-          YouTube
-        </button>
       </div>
       <div
-        className={`rounded-lg border border-white/[0.18] bg-black/25 [&_.ProseMirror_img]:max-h-[min(560px,75vh)] [&_.ProseMirror_img]:max-w-full [&_.ProseMirror_img]:object-contain [&_.ProseMirror_img[data-text-align=center]]:mx-auto [&_.ProseMirror_img[data-text-align=right]]:ml-auto [&_.ProseMirror_img[data-text-align=right]]:mr-0 [&_[data-youtube-video]]:my-4 [&_[data-youtube-video]]:w-full [&_[data-youtube-video]]:max-w-[min(100%,40rem)] [&_[data-youtube-video]_iframe]:aspect-video [&_[data-youtube-video]_iframe]:h-auto [&_[data-youtube-video]_iframe]:w-full [&_[data-youtube-video]_iframe]:rounded-lg [&_[data-resize-handle]]:z-10 [&_[data-resize-handle]]:m-[-6px] [&_[data-resize-handle]]:size-[14px] [&_[data-resize-handle]]:rounded-sm [&_[data-resize-handle]]:border-2 [&_[data-resize-handle]]:border-[rgba(180,140,228,0.95)] [&_[data-resize-handle]]:bg-[rgba(22,12,38,0.92)] [&_[data-resize-handle]]:shadow-[0_2px_8px_rgba(0,0,0,0.35)] ${isLight ? "ring-1 ring-white/[0.06]" : ""}`}
+        className={`rounded-lg border border-white/[0.18] bg-black/25 [&_.ProseMirror_img]:max-h-[min(560px,75vh)] [&_.ProseMirror_img]:max-w-full [&_.ProseMirror_img]:object-contain [&_.ProseMirror_img[data-text-align=center]]:mx-auto [&_.ProseMirror_img[data-text-align=right]]:ml-auto [&_.ProseMirror_img[data-text-align=right]]:mr-0 [&_[data-resize-handle]]:z-10 [&_[data-resize-handle]]:m-[-6px] [&_[data-resize-handle]]:size-[14px] [&_[data-resize-handle]]:rounded-sm [&_[data-resize-handle]]:border-2 [&_[data-resize-handle]]:border-[rgba(180,140,228,0.95)] [&_[data-resize-handle]]:bg-[rgba(22,12,38,0.92)] [&_[data-resize-handle]]:shadow-[0_2px_8px_rgba(0,0,0,0.35)] ${isLight ? "ring-1 ring-white/[0.06]" : ""}`}
         onPaste={onPasteContainer}
         onDragOver={(e) => e.preventDefault()}
         onDrop={onDropContainer}

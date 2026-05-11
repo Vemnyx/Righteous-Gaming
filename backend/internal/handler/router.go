@@ -35,7 +35,6 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("POST /api/upload", upload.uploadAsset)
 
 	mux.HandleFunc("GET /api/announcements", ah.listPublished)
-	mux.HandleFunc("GET /api/announcements/{id}", ah.getPublished)
 	mux.HandleFunc("GET /api/admin/announcements", ah.adminList)
 	mux.HandleFunc("POST /api/admin/announcements", ah.adminCreate)
 	mux.HandleFunc("GET /api/admin/announcements/{id}", ah.adminGet)

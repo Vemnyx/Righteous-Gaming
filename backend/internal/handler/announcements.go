@@ -23,14 +23,37 @@ const righteousAssetsPublicPrefix = "https://storage.googleapis.com/righteous-as
 // TipTap TextAlign persists style="text-align: …" on blocks; allow only that property.
 var announcementTextAlignStylePattern = regexp.MustCompile(`(?is)^\s*text-align\s*:\s*(left|center|right|justify)\s*;?\s*$`)
 
-// TipTap @tiptap/extension-youtube renders <div data-youtube-video=""><iframe src="https://…youtube…/embed/…"></iframe></div>
-var announcementYoutubeEmbedSrcPattern = regexp.MustCompile(
-	`(?is)^https://(www\.youtube-nocookie\.com|www\.youtube\.com|youtube\.com)/embed/(videoseries|[a-zA-Z0-9_-]+)(\?[^'\s<>]*)?$`,
+// YouTube oEmbed thumbnail URLs (hqdefault etc.) saved as image_url when a video is linked.
+var announcementYouTubeThumbPattern = regexp.MustCompile(
+	`(?is)^https://i\.ytimg\.com/vi/[a-zA-Z0-9_-]{11}/(default|hqdefault|mqdefault|sddefault|maxresdefault)\.jpg$`,
 )
-// iframe `allow` feature policy (subset of what YouTube uses).
-var announcementYoutubeIframeAllowPattern = regexp.MustCompile(
-	`(?is)^[\w;:\s\-.]{1,500}$`,
+
+var (
+	reYouTuBePath = regexp.MustCompile(`(?i)youtu\.be/([a-zA-Z0-9_-]{11})(?:[?#&/]|$)`)
+	reYouTubeV    = regexp.MustCompile(`(?i)[?&]v=([a-zA-Z0-9_-]{11})(?:[&#]|$)`)
+	reYouTubeEmbed = regexp.MustCompile(`(?i)youtube\.com/embed/([a-zA-Z0-9_-]{11})(?:[?#&]|$)`)
+	reYouTubeShorts = regexp.MustCompile(`(?i)youtube\.com/shorts/([a-zA-Z0-9_-]{11})(?:[?#&/]|$)`)
 )
+
+func extractYouTubeVideoID(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if m := reYouTuBePath.FindStringSubmatch(raw); len(m) > 1 {
+		return m[1]
+	}
+	if m := reYouTubeV.FindStringSubmatch(raw); len(m) > 1 {
+		return m[1]
+	}
+	if m := reYouTubeEmbed.FindStringSubmatch(raw); len(m) > 1 {
+		return m[1]
+	}
+	if m := reYouTubeShorts.FindStringSubmatch(raw); len(m) > 1 {
+		return m[1]
+	}
+	return ""
+}
 
 type announcementHTTP struct {
 	app *app.App
@@ -39,26 +62,13 @@ type announcementHTTP struct {
 
 func sanitizeAnnouncementHTML(raw string) string {
 	p := bluemonday.UGCPolicy()
-	// TipTap resizable images persist numeric width/height on <img>.
 	p.AllowAttrs("width", "height").OnElements("img")
-	// Block image alignment (TipTap TextAlign + custom render; not plain text-align on img).
 	p.AllowAttrs("data-text-align").Matching(regexp.MustCompile(`^(left|center|right)$`)).OnElements("img")
 	p.AllowAttrs("style").Matching(announcementTextAlignStylePattern).OnElements("p", "h2", "h3", "blockquote", "div")
-	// YouTube embeds (TipTap youtube node).
-	p.AllowElements("iframe")
-	p.AllowAttrs("data-youtube-video").Matching(regexp.MustCompile(`^$`)).OnElements("div")
-	p.AllowAttrs("src").Matching(announcementYoutubeEmbedSrcPattern).OnElements("iframe")
-	p.AllowAttrs("width", "height").Matching(regexp.MustCompile(`^[0-9]+$`)).OnElements("iframe")
-	p.AllowAttrs("title").Matching(regexp.MustCompile(`^[\p{L}\p{N}\s\-_.,'’]{0,240}$`)).OnElements("iframe")
-	p.AllowAttrs("frameborder").Matching(regexp.MustCompile(`^(0|1)$`)).OnElements("iframe")
-	p.AllowAttrs("allowfullscreen").OnElements("iframe")
-	p.AllowAttrs("allow").Matching(announcementYoutubeIframeAllowPattern).OnElements("iframe")
-	p.AllowAttrs("referrerpolicy").Matching(regexp.MustCompile(`(?i)^(no-referrer-when-downgrade|strict-origin-when-cross-origin|origin|no-referrer)$`)).OnElements("iframe")
-	p.AllowAttrs("loading").Matching(regexp.MustCompile(`(?i)^lazy$`)).OnElements("iframe")
 	return p.Sanitize(strings.TrimSpace(raw))
 }
 
-func sanitizeThumbnailURL(s *string) *string {
+func sanitizeImageURL(s *string) *string {
 	if s == nil {
 		return nil
 	}
@@ -66,10 +76,25 @@ func sanitizeThumbnailURL(s *string) *string {
 	if u == "" {
 		return nil
 	}
-	if !strings.HasPrefix(u, righteousAssetsPublicPrefix) {
+	if strings.HasPrefix(u, righteousAssetsPublicPrefix) {
+		return &u
+	}
+	if announcementYouTubeThumbPattern.MatchString(u) {
+		return &u
+	}
+	return nil
+}
+
+func sanitizeYoutubeURL(s *string) *string {
+	if s == nil {
 		return nil
 	}
-	return &u
+	id := extractYouTubeVideoID(*s)
+	if id == "" {
+		return nil
+	}
+	out := "https://www.youtube.com/watch?v=" + id
+	return &out
 }
 
 func (h *announcementHTTP) requireAdmin(w http.ResponseWriter, r *http.Request) (*domain.User, bool) {
@@ -104,62 +129,68 @@ func (h *announcementHTTP) requireAdmin(w http.ResponseWriter, r *http.Request) 
 }
 
 type announcementSummaryJSON struct {
-	ID           int        `json:"id"`
-	Title        string     `json:"title"`
-	ThumbnailURL *string    `json:"thumbnail_url,omitempty"`
-	PublishedAt  *time.Time `json:"published_at,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at,omitempty"`
+	ID          int        `json:"id"`
+	Title       string     `json:"title"`
+	ImageURL    *string    `json:"image_url,omitempty"`
+	YoutubeURL  *string    `json:"youtube_url,omitempty"`
+	PublishedAt *time.Time `json:"published_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at,omitempty"`
 }
 
-type announcementDetailJSON struct {
-	ID           int        `json:"id"`
-	Title        string     `json:"title"`
-	ThumbnailURL *string    `json:"thumbnail_url,omitempty"`
-	BodyHTML     string     `json:"body_html"`
-	PublishedAt  *time.Time `json:"published_at,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+type announcementPublicJSON struct {
+	ID          int        `json:"id"`
+	Title       string     `json:"title"`
+	ImageURL    *string    `json:"image_url,omitempty"`
+	YoutubeURL  *string    `json:"youtube_url,omitempty"`
+	BodyHTML    string     `json:"body_html"`
+	PublishedAt *time.Time `json:"published_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 func summaryToJSON(s repository.AnnouncementSummary) announcementSummaryJSON {
 	return announcementSummaryJSON{
-		ID:           s.ID,
-		Title:        s.Title,
-		ThumbnailURL: s.ThumbnailURL,
-		PublishedAt:  s.PublishedAt,
-		CreatedAt:    s.CreatedAt,
-		UpdatedAt:    s.UpdatedAt,
+		ID:          s.ID,
+		Title:       s.Title,
+		ImageURL:    s.ImageURL,
+		YoutubeURL:  s.YoutubeURL,
+		PublishedAt: s.PublishedAt,
+		CreatedAt:   s.CreatedAt,
+		UpdatedAt:   s.UpdatedAt,
 	}
 }
 
-func announcementToDetailJSON(a *repository.Announcement) announcementDetailJSON {
+func announcementToPublicJSON(a *repository.Announcement) announcementPublicJSON {
 	if a == nil {
-		return announcementDetailJSON{}
+		return announcementPublicJSON{}
 	}
-	return announcementDetailJSON{
-		ID:           a.ID,
-		Title:        a.Title,
-		ThumbnailURL: a.ThumbnailURL,
-		BodyHTML:     a.BodyHTML,
-		PublishedAt:  a.PublishedAt,
-		CreatedAt:    a.CreatedAt,
-		UpdatedAt:    a.UpdatedAt,
+	return announcementPublicJSON{
+		ID:          a.ID,
+		Title:       a.Title,
+		ImageURL:    a.ImageURL,
+		YoutubeURL:  a.YoutubeURL,
+		BodyHTML:    a.BodyHTML,
+		PublishedAt: a.PublishedAt,
+		CreatedAt:   a.CreatedAt,
+		UpdatedAt:   a.UpdatedAt,
 	}
 }
 
 type createAnnouncementRequest struct {
-	Title        string  `json:"title"`
-	ThumbnailURL *string `json:"thumbnail_url"`
-	BodyHTML     string  `json:"body_html"`
-	Published    bool    `json:"published"`
+	Title       string  `json:"title"`
+	ImageURL    *string `json:"image_url"`
+	YoutubeURL  *string `json:"youtube_url"`
+	BodyHTML    string  `json:"body_html"`
+	Published   bool    `json:"published"`
 }
 
 type updateAnnouncementRequest struct {
-	Title        string  `json:"title"`
-	ThumbnailURL *string `json:"thumbnail_url"`
-	BodyHTML     string  `json:"body_html"`
-	Published    bool    `json:"published"`
+	Title       string  `json:"title"`
+	ImageURL    *string `json:"image_url"`
+	YoutubeURL  *string `json:"youtube_url"`
+	BodyHTML    string  `json:"body_html"`
+	Published   bool    `json:"published"`
 }
 
 func publishedAtForCreate(published bool) *time.Time {
@@ -187,40 +218,17 @@ func (h *announcementHTTP) listPublished(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	list, err := h.app.Repo.ListPublishedSummaries(r.Context())
+	list, err := h.app.Repo.ListPublishedAnnouncements(r.Context())
 	if err != nil {
 		log.Error("list published announcements", "error", err)
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
-	out := make([]announcementSummaryJSON, 0, len(list))
+	out := make([]announcementPublicJSON, 0, len(list))
 	for i := range list {
-		out = append(out, summaryToJSON(list[i]))
+		out = append(out, announcementToPublicJSON(&list[i]))
 	}
 	writeCatalogJSON(w, http.StatusOK, map[string]any{"announcements": out})
-}
-
-// GET /api/announcements/{id}
-func (h *announcementHTTP) getPublished(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	id, ok := parseAnnouncementID(w, r.PathValue("id"))
-	if !ok {
-		return
-	}
-	a, err := h.app.Repo.PublishedAnnouncementByID(r.Context(), id)
-	if err != nil {
-		if errors.Is(err, repository.ErrAnnouncementNotFound) {
-			writeMessageError(w, http.StatusNotFound, "announcement not found")
-			return
-		}
-		log.Error("get published announcement", "error", err, "id", id)
-		writeMessageError(w, http.StatusInternalServerError, "internal server error")
-		return
-	}
-	writeCatalogJSON(w, http.StatusOK, announcementToDetailJSON(a))
 }
 
 // GET /api/admin/announcements
@@ -268,7 +276,7 @@ func (h *announcementHTTP) adminGet(w http.ResponseWriter, r *http.Request) {
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
-	writeCatalogJSON(w, http.StatusOK, announcementToDetailJSON(a))
+	writeCatalogJSON(w, http.StatusOK, announcementToPublicJSON(a))
 }
 
 // POST /api/admin/announcements
@@ -292,12 +300,14 @@ func (h *announcementHTTP) adminCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	html := sanitizeAnnouncementHTML(body.BodyHTML)
-	thumb := sanitizeThumbnailURL(body.ThumbnailURL)
+	img := sanitizeImageURL(body.ImageURL)
+	yt := sanitizeYoutubeURL(body.YoutubeURL)
 	in := repository.CreateAnnouncementInput{
-		Title:        title,
-		ThumbnailURL: thumb,
-		BodyHTML:     html,
-		PublishedAt:  publishedAtForCreate(body.Published),
+		Title:       title,
+		ImageURL:    img,
+		YoutubeURL:  yt,
+		BodyHTML:    html,
+		PublishedAt: publishedAtForCreate(body.Published),
 	}
 	a, err := h.app.Repo.CreateAnnouncement(r.Context(), in)
 	if err != nil {
@@ -305,7 +315,7 @@ func (h *announcementHTTP) adminCreate(w http.ResponseWriter, r *http.Request) {
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
-	writeCatalogJSON(w, http.StatusCreated, announcementToDetailJSON(a))
+	writeCatalogJSON(w, http.StatusCreated, announcementToPublicJSON(a))
 }
 
 // PATCH /api/admin/announcements/{id}
@@ -343,12 +353,14 @@ func (h *announcementHTTP) adminUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	html := sanitizeAnnouncementHTML(body.BodyHTML)
-	thumb := sanitizeThumbnailURL(body.ThumbnailURL)
+	img := sanitizeImageURL(body.ImageURL)
+	yt := sanitizeYoutubeURL(body.YoutubeURL)
 	in := repository.UpdateAnnouncementInput{
-		Title:        title,
-		ThumbnailURL: thumb,
-		BodyHTML:     html,
-		PublishedAt:  publishedAtForUpdate(body.Published, existing.PublishedAt),
+		Title:       title,
+		ImageURL:    img,
+		YoutubeURL:  yt,
+		BodyHTML:    html,
+		PublishedAt: publishedAtForUpdate(body.Published, existing.PublishedAt),
 	}
 	a, err := h.app.Repo.UpdateAnnouncement(r.Context(), id, in)
 	if err != nil {
@@ -360,7 +372,7 @@ func (h *announcementHTTP) adminUpdate(w http.ResponseWriter, r *http.Request) {
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
-	writeCatalogJSON(w, http.StatusOK, announcementToDetailJSON(a))
+	writeCatalogJSON(w, http.StatusOK, announcementToPublicJSON(a))
 }
 
 // DELETE /api/admin/announcements/{id}

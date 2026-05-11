@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { AnnouncementRichTextEditor } from "./AnnouncementRichTextEditor";
+import { AnnouncementRightMedia } from "./AnnouncementRightMedia";
 import { uploadPublicAsset, extFromFilename } from "../utils/uploadPublicAsset";
+import {
+  youtubeThumbnailDefault,
+  youtubeVideoIdFromInput,
+  youtubeWatchUrl,
+} from "../utils/youtube";
 
 /** @typedef {null | "new" | number} AnnouncementAdminForm */
 
@@ -36,13 +42,16 @@ export function AnnouncementsAdmin({
   const draftFolder = useMemo(() => crypto.randomUUID(), [newDraftGen]);
 
   const [title, setTitle] = useState("");
-  const [thumbnailUrl, setThumbnailUrl] = useState(/** @type {string | null} */ (null));
+  const [imageUrl, setImageUrl] = useState(/** @type {string | null} */ (null));
+  const [youtubeUrl, setYoutubeUrl] = useState(/** @type {string | null} */ (null));
   /** When editing an existing announcement, preserves publish visibility on Save. */
   const [publishedBaseline, setPublishedBaseline] = useState(/** @type {boolean | null} */ (null));
   const [initialHtml, setInitialHtml] = useState("<p></p>");
   const [detailLoading, setDetailLoading] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [editorNonce, setEditorNonce] = useState(0);
+  /** `updated_at` from the row when editing (for subtitle). */
+  const [editingUpdatedAt, setEditingUpdatedAt] = useState(/** @type {string | null} */ (null));
 
   const editorRef = useRef(/** @type {{ getHTML: () => string } | null} */ (null));
 
@@ -87,8 +96,10 @@ export function AnnouncementsAdmin({
     setNewDraftGen((g) => g + 1);
     setPublishedBaseline(null);
     setTitle("");
-    setThumbnailUrl(null);
+    setImageUrl(null);
+    setYoutubeUrl(null);
     setInitialHtml("<p></p>");
+    setEditingUpdatedAt(null);
     setSaveError(null);
     setDetailLoading(false);
     setEditorNonce((n) => n + 1);
@@ -110,9 +121,12 @@ export function AnnouncementsAdmin({
         const row = await res.json();
         if (cancelled) return;
         setTitle(row.title ?? "");
-        setThumbnailUrl(row.thumbnail_url ?? null);
+        setImageUrl(row.image_url ?? null);
+        setYoutubeUrl(row.youtube_url ?? null);
         setPublishedBaseline(row.published_at != null);
-        setInitialHtml(row.body_html && row.body_html.trim() ? row.body_html : "<p></p>");
+        setEditingUpdatedAt(row.updated_at ?? null);
+        const html = row.body_html && row.body_html.trim() ? row.body_html : "<p></p>";
+        setInitialHtml(html);
         setEditorNonce((n) => n + 1);
       } catch (e) {
         if (!cancelled) {
@@ -132,7 +146,7 @@ export function AnnouncementsAdmin({
     navigateAnnouncementForm(null);
   }, [navigateAnnouncementForm]);
 
-  const onThumbFile = useCallback(
+  const onCoverFile = useCallback(
     async (e) => {
       const f = e.target.files?.[0];
       e.target.value = "";
@@ -146,15 +160,29 @@ export function AnnouncementsAdmin({
             : announcementForm != null && typeof announcementForm === "number"
               ? `announcements/${announcementForm}`
               : `announcements/drafts/${draftFolder}`;
-        const path = `${base}/thumbnail.${ext}`;
+        const path = `${base}/cover.${ext}`;
         const url = await uploadPublicAsset(getIdToken, path, f);
-        setThumbnailUrl(url);
+        setImageUrl(url);
       } catch (err) {
-        setSaveError(err instanceof Error ? err.message : "Thumbnail upload failed");
+        setSaveError(err instanceof Error ? err.message : "Image upload failed");
       }
     },
     [announcementForm, draftFolder, getIdToken],
   );
+
+  const onAddYoutube = useCallback(() => {
+    const raw = window.prompt("YouTube URL (watch, youtu.be, embed, or shorts)");
+    const url = raw?.trim();
+    if (!url) return;
+    const id = youtubeVideoIdFromInput(url);
+    if (!id) {
+      setSaveError("Could not read a YouTube video ID from that URL.");
+      return;
+    }
+    setSaveError(null);
+    setYoutubeUrl(youtubeWatchUrl(id));
+    setImageUrl(youtubeThumbnailDefault(id));
+  }, []);
 
   const submitAnnouncement = useCallback(
     async (/** @type {boolean | null} */ wantPublishOrNull) => {
@@ -181,7 +209,8 @@ export function AnnouncementsAdmin({
         const token = await user.getIdToken();
         const payload = {
           title: t,
-          thumbnail_url: thumbnailUrl,
+          image_url: imageUrl,
+          youtube_url: youtubeUrl,
           body_html: bodyHtml,
           published: publishedFlag,
         };
@@ -217,12 +246,13 @@ export function AnnouncementsAdmin({
     [
       announcementForm,
       detailLoading,
+      imageUrl,
       navigateAnnouncementForm,
       publishedBaseline,
       reloadList,
-      thumbnailUrl,
       title,
       user,
+      youtubeUrl,
     ],
   );
 
@@ -255,58 +285,94 @@ export function AnnouncementsAdmin({
           <p className="text-[0.9rem] text-[#f4f0fa]/65">Loading…</p>
         ) : (
           <>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
-                Title
-              </span>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="rounded-lg border border-white/[0.22] bg-black/35 px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/35 focus:border-purple-400/55"
-                placeholder="Announcement title"
-              />
-            </label>
+            <p className="m-0 text-[0.8rem] text-[#f4f0fa]/50">
+              Layout matches the public Announcements tab: title and date on the left, hero media on the
+              right. Body text is below the title — inline YouTube embeds are not supported.
+            </p>
 
-            <div className="flex flex-col gap-2">
-              <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
-                Thumbnail
-              </span>
-              <div className="flex flex-wrap items-end gap-3">
-                <label className={`cursor-pointer rounded-lg border px-3 py-2 text-[0.8125rem] font-medium ${btnTheme}`}>
-                  Upload image
-                  <input type="file" accept="image/*" className="sr-only" onChange={onThumbFile} />
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+              <div className="min-w-0 flex-1 space-y-4 lg:max-w-[min(100%,42rem)]">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
+                    Title
+                  </span>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="rounded-lg border border-white/[0.22] bg-black/35 px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/35 focus:border-purple-400/55"
+                    placeholder="Announcement title"
+                  />
                 </label>
-                {thumbnailUrl ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <img
-                      src={thumbnailUrl}
-                      alt=""
-                      className="h-16 max-w-[200px] rounded-md object-cover object-center"
-                    />
-                    <button
-                      type="button"
-                      className={`${btnBase} ${btnTheme} py-1 text-[0.75rem]`}
-                      onClick={() => setThumbnailUrl(null)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ) : (
-                  <span className="text-[0.8rem] text-[#f4f0fa]/45">Optional — shown in the list.</span>
-                )}
+                <p className="m-0 text-[0.8rem] text-[#f4f0fa]/45">
+                  {isNew
+                    ? "Publish date is set when you publish."
+                    : `Last updated ${formatDateTime(editingUpdatedAt)} · ${
+                        publishedBaseline ? "Published" : "Draft"
+                      }`}
+                </p>
+                <div className="flex flex-col gap-2">
+                  <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
+                    Body
+                  </span>
+                  <AnnouncementRichTextEditor
+                    key={editorKey}
+                    ref={editorRef}
+                    initialHtml={initialHtml}
+                    draftFolder={draftFolder}
+                    editingId={editingIdForImages}
+                    getIdToken={getIdToken}
+                    isLight={isLight}
+                  />
+                </div>
+              </div>
+
+              <div className="flex w-full shrink-0 flex-col gap-3 lg:sticky lg:top-2 lg:w-[min(100%,24rem)] xl:w-[26rem]">
+                <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
+                  Hero media
+                </span>
+                <div className="flex min-h-[14rem] w-full flex-col justify-stretch">
+                  {youtubeUrl && youtubeVideoIdFromInput(youtubeUrl) ? (
+                    <div className="flex flex-col gap-2">
+                      <AnnouncementRightMedia youtubeUrl={youtubeUrl} imageUrl={null} className="min-h-0" />
+                      <button
+                        type="button"
+                        className={`${btnBase} ${btnTheme} py-1 text-[0.75rem]`}
+                        onClick={() => setYoutubeUrl(null)}
+                      >
+                        Remove YouTube
+                      </button>
+                    </div>
+                  ) : imageUrl ? (
+                    <div className="flex flex-col gap-2">
+                      <AnnouncementRightMedia youtubeUrl={null} imageUrl={imageUrl} className="min-h-0" />
+                      <button
+                        type="button"
+                        className={`${btnBase} ${btnTheme} py-1 text-[0.75rem]`}
+                        onClick={() => setImageUrl(null)}
+                      >
+                        Remove image
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex min-h-[14rem] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/[0.2] bg-black/25 px-4 py-8 text-center">
+                      <label
+                        className={`cursor-pointer rounded-lg border px-4 py-2.5 text-[0.85rem] font-semibold ${btnTheme}`}
+                      >
+                        Upload image
+                        <input type="file" accept="image/*" className="sr-only" onChange={onCoverFile} />
+                      </label>
+                      <button type="button" className={`${btnBase} ${btnTheme}`} onClick={onAddYoutube}>
+                        Add YouTube link
+                      </button>
+                      <p className="m-0 max-w-[16rem] text-[0.75rem] text-[#f4f0fa]/45">
+                        A YouTube link saves the video thumbnail as the list preview image.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-
-            <AnnouncementRichTextEditor
-              key={editorKey}
-              ref={editorRef}
-              initialHtml={initialHtml}
-              draftFolder={draftFolder}
-              editingId={editingIdForImages}
-              getIdToken={getIdToken}
-              isLight={isLight}
-            />
 
             {saveError ? (
               <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">
