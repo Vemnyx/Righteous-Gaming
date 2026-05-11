@@ -27,7 +27,6 @@ export function AnnouncementsAdmin({ isLight, active }) {
 
   const [title, setTitle] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState(/** @type {string | null} */ (null));
-  const [published, setPublished] = useState(false);
   const [initialHtml, setInitialHtml] = useState("<p></p>");
   const [detailLoading, setDetailLoading] = useState(false);
   const [saveError, setSaveError] = useState(null);
@@ -87,7 +86,6 @@ export function AnnouncementsAdmin({ isLight, active }) {
         if (cancelled) return;
         setTitle(row.title ?? "");
         setThumbnailUrl(row.thumbnail_url ?? null);
-        setPublished(Boolean(row.published_at));
         setInitialHtml(row.body_html && row.body_html.trim() ? row.body_html : "<p></p>");
         setEditorNonce((n) => n + 1);
       } catch (e) {
@@ -106,7 +104,6 @@ export function AnnouncementsAdmin({ isLight, active }) {
     setNewDraftGen((g) => g + 1);
     setTitle("");
     setThumbnailUrl(null);
-    setPublished(false);
     setInitialHtml("<p></p>");
     setSaveError(null);
     setEditorNonce((n) => n + 1);
@@ -146,88 +143,54 @@ export function AnnouncementsAdmin({ isLight, active }) {
     [draftFolder, getIdToken, mode],
   );
 
-  const save = useCallback(async () => {
-    if (!user) return;
-    const t = title.trim();
-    if (!t) {
-      setSaveError("Title is required.");
-      return;
-    }
-    const bodyHtml = editorRef.current?.getHTML() ?? "";
-    setSaveError(null);
-    try {
-      const token = await user.getIdToken();
-      const payload = {
-        title: t,
-        thumbnail_url: thumbnailUrl,
-        body_html: bodyHtml,
-        published,
-      };
-      if (mode === "new") {
-        const res = await fetch("/api/admin/announcements", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) throw new Error(await res.text());
-        await reloadList();
-        setMode(null);
-      } else if (typeof mode === "number") {
-        const res = await fetch(`/api/admin/announcements/${mode}`, {
-          method: "PATCH",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) throw new Error(await res.text());
-        await reloadList();
-        setMode(null);
-      }
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : "Save failed");
-    }
-  }, [mode, published, reloadList, thumbnailUrl, title, user]);
-
-  const remove = useCallback(async () => {
-    if (!user || typeof mode !== "number") return;
-    if (!window.confirm("Delete this announcement permanently?")) return;
-    setSaveError(null);
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch(`/api/admin/announcements/${mode}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(await res.text());
-      await reloadList();
-      setMode(null);
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : "Delete failed");
-    }
-  }, [mode, reloadList, user]);
-
-  const deleteFromRow = useCallback(
-    async (id) => {
+  const submitAnnouncement = useCallback(
+    async (/** @type {boolean} */ wantPublish) => {
       if (!user) return;
-      if (!window.confirm("Delete this announcement permanently?")) return;
+      const t = title.trim();
+      if (!t) {
+        setSaveError("Title is required.");
+        return;
+      }
+      const bodyHtml = editorRef.current?.getHTML() ?? "";
+      setSaveError(null);
       try {
         const token = await user.getIdToken();
-        const res = await fetch(`/api/admin/announcements/${id}`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(await res.text());
-        await reloadList();
+        const payload = {
+          title: t,
+          thumbnail_url: thumbnailUrl,
+          body_html: bodyHtml,
+          published: wantPublish,
+        };
+        if (mode === "new") {
+          const res = await fetch("/api/admin/announcements", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) throw new Error(await res.text());
+          await reloadList();
+          setMode(null);
+        } else if (typeof mode === "number") {
+          const res = await fetch(`/api/admin/announcements/${mode}`, {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) throw new Error(await res.text());
+          await reloadList();
+          setMode(null);
+        }
       } catch (e) {
-        setListError(e instanceof Error ? e.message : "Delete failed");
+        setSaveError(e instanceof Error ? e.message : "Save failed");
       }
     },
-    [reloadList, user],
+    [mode, reloadList, thumbnailUrl, title, user],
   );
 
   const btnBase =
@@ -301,16 +264,6 @@ export function AnnouncementsAdmin({ isLight, active }) {
               </div>
             </div>
 
-            <label className="flex items-center gap-2 text-[0.88rem] text-[#f4f0fa]/85">
-              <input
-                type="checkbox"
-                checked={published}
-                onChange={(e) => setPublished(e.target.checked)}
-                className="size-4 rounded border-white/30"
-              />
-              Published (visible on the Announcements tab)
-            </label>
-
             <AnnouncementRichTextEditor
               key={editorKey}
               ref={editorRef}
@@ -328,18 +281,20 @@ export function AnnouncementsAdmin({ isLight, active }) {
             ) : null}
 
             <div className="flex flex-wrap gap-2">
-              <button type="button" className={`${btnBase} ${btnTheme}`} onClick={save}>
-                Save
+              <button
+                type="button"
+                className={`${btnBase} ${btnTheme}`}
+                onClick={() => submitAnnouncement(false)}
+              >
+                Save Draft
               </button>
-              {typeof mode === "number" ? (
-                <button
-                  type="button"
-                  className={`${btnBase} border-red-400/40 bg-red-950/35 text-red-100 hover:border-red-400/60`}
-                  onClick={remove}
-                >
-                  Delete
-                </button>
-              ) : null}
+              <button
+                type="button"
+                className={`${btnBase} border-[rgba(152,117,207,0.85)] bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] text-white hover:border-[rgba(180,140,228,0.95)] hover:brightness-105`}
+                onClick={() => submitAnnouncement(true)}
+              >
+                Publish
+              </button>
             </div>
           </>
         )}
@@ -356,7 +311,7 @@ export function AnnouncementsAdmin({ isLight, active }) {
         </button>
       </div>
       <p className="m-0 text-[0.85rem] text-[#f4f0fa]/55">
-        Drafts stay hidden until you check &quot;Published&quot; and save.
+        Drafts stay hidden from the Announcements tab until you use Publish.
       </p>
 
       {listError ? (
@@ -377,7 +332,7 @@ export function AnnouncementsAdmin({ isLight, active }) {
                 <th className="px-3 py-2.5 font-semibold text-[#f4f0fa]/80">Title</th>
                 <th className="px-3 py-2.5 font-semibold text-[#f4f0fa]/80">Status</th>
                 <th className="px-3 py-2.5 font-semibold text-[#f4f0fa]/80">Updated</th>
-                <th className="px-3 py-2.5 font-semibold text-[#f4f0fa]/80">Actions</th>
+                <th className="px-3 py-2.5 font-semibold text-[#f4f0fa]/80">Edit</th>
               </tr>
             </thead>
             <tbody>
@@ -392,22 +347,13 @@ export function AnnouncementsAdmin({ isLight, active }) {
                   </td>
                   <td className="px-3 py-2.5 text-[#f4f0fa]/65">{formatDateTime(r.updated_at)}</td>
                   <td className="px-3 py-2.5">
-                    <div className="flex flex-wrap gap-1.5">
-                      <button
-                        type="button"
-                        className={`${btnBase} ${btnTheme} py-1 text-[0.75rem]`}
-                        onClick={() => openEdit(r.id)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className={`${btnBase} border-red-400/35 bg-red-950/25 py-1 text-[0.75rem] text-red-100 hover:border-red-400/55`}
-                        onClick={() => deleteFromRow(r.id)}
-                      >
-                        Delete
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      className={`${btnBase} ${btnTheme} py-1 text-[0.75rem]`}
+                      onClick={() => openEdit(r.id)}
+                    >
+                      Edit
+                    </button>
                   </td>
                 </tr>
               ))}

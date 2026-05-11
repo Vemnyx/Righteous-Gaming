@@ -9,6 +9,14 @@ function formatDateTime(iso) {
   return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
+/** @param {string | undefined | null} iso */
+function formatPublishedDate(iso) {
+  if (iso == null || iso === "") return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, { dateStyle: "medium" });
+}
+
 /**
  * @param {{ isLight: boolean, active: boolean }} props
  */
@@ -114,10 +122,6 @@ export function AnnouncementsFeed({ isLight, active }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 text-left">
-      <div>
-        <h2 className="m-0 text-lg font-semibold text-white">Announcements</h2>
-        <p className="mt-1 text-[0.85rem] text-[#f4f0fa]/55">News and updates from Righteous Gaming.</p>
-      </div>
       {error ? (
         <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">
           {error}
@@ -148,7 +152,7 @@ export function AnnouncementsFeed({ isLight, active }) {
                 <div className="min-w-0 flex-1">
                   <h3 className="m-0 text-base font-semibold text-white sm:text-lg">{row.title}</h3>
                   <p className="mt-1 text-[0.78rem] text-[#f4f0fa]/45">
-                    {formatDateTime(row.published_at)}
+                    {formatPublishedDate(row.published_at)}
                   </p>
                 </div>
               </button>

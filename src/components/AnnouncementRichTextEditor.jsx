@@ -42,7 +42,19 @@ export const AnnouncementRichTextEditor = forwardRef(function AnnouncementRichTe
       }),
       Image.configure({
         HTMLAttributes: {
-          class: "max-w-full h-auto rounded-md",
+          class: "max-w-full rounded-md block",
+        },
+        resize: {
+          enabled: true,
+          minWidth: 64,
+          minHeight: 48,
+          alwaysPreserveAspectRatio: true,
+          directions: [
+            "top-left",
+            "top-right",
+            "bottom-left",
+            "bottom-right",
+          ],
         },
       }),
       Placeholder.configure({
@@ -184,17 +196,13 @@ export const AnnouncementRichTextEditor = forwardRef(function AnnouncementRichTe
         </button>
       </div>
       <div
-        className={`rounded-lg border border-white/[0.18] bg-black/25 [&_.ProseMirror_img]:max-h-[min(480px,70vh)] [&_.ProseMirror_img]:object-contain ${isLight ? "ring-1 ring-white/[0.06]" : ""}`}
+        className={`rounded-lg border border-white/[0.18] bg-black/25 [&_.ProseMirror_img]:max-h-[min(560px,75vh)] [&_.ProseMirror_img]:max-w-full [&_.ProseMirror_img]:object-contain [&_[data-resize-handle]]:z-10 [&_[data-resize-handle]]:m-[-6px] [&_[data-resize-handle]]:size-[14px] [&_[data-resize-handle]]:rounded-sm [&_[data-resize-handle]]:border-2 [&_[data-resize-handle]]:border-[rgba(180,140,228,0.95)] [&_[data-resize-handle]]:bg-[rgba(22,12,38,0.92)] [&_[data-resize-handle]]:shadow-[0_2px_8px_rgba(0,0,0,0.35)] ${isLight ? "ring-1 ring-white/[0.06]" : ""}`}
         onPaste={onPasteContainer}
         onDragOver={(e) => e.preventDefault()}
         onDrop={onDropContainer}
       >
         <EditorContent editor={editor} />
       </div>
-      <p className="m-0 text-[0.72rem] text-[#f4f0fa]/45">
-        Images upload when dropped or pasted. Width follows the article column (resize with browser zoom if
-        needed).
-      </p>
     </div>
   );
 });

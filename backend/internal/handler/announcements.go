@@ -26,6 +26,8 @@ type announcementHTTP struct {
 
 func sanitizeAnnouncementHTML(raw string) string {
 	p := bluemonday.UGCPolicy()
+	// TipTap resizable images persist numeric width/height on <img>.
+	p.AllowAttrs("width", "height").OnElements("img")
 	return p.Sanitize(strings.TrimSpace(raw))
 }
 
