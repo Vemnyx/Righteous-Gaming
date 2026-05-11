@@ -682,11 +682,11 @@ export function CardRanker({ isLight, active }) {
                     <span aria-hidden>←</span>
                   </button>
                   <div className="flex min-h-0 min-w-0 max-w-[min(100%,22rem)] shrink-0 flex-col items-center justify-center gap-1.5 px-0.5 sm:max-w-sm sm:gap-2 sm:px-1">
-                    <label className="sr-only" htmlFor="card-ranker-jump-select">
+                    <label className="sr-only" htmlFor="card-rater-jump-select">
                       Jump to card
                     </label>
                     <select
-                      id="card-ranker-jump-select"
+                      id="card-rater-jump-select"
                       className={cardJumpSelectCls}
                       value={queue.length > 0 ? String(Math.min(cardIndex, queue.length - 1)) : ""}
                       onChange={(e) => {

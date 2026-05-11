@@ -29,7 +29,7 @@ const FALLBACK_TAB_ID = "announcements";
 /** @type {ResourceSubLink[]} */
 const RESOURCE_SUB_LINKS = [
   { segment: "cards", label: "Cards", path: "/resources/cards" },
-  { segment: "card-ranker", label: "Card Ranker", path: "/resources/card-ranker" },
+  { segment: "card-rater", label: "Card Rater", path: "/resources/card-rater" },
 ];
 
 /** @type {ResourceSubLink[]} */
@@ -65,7 +65,7 @@ function buildDashboardPathname(
   }
   if (tabId === RESOURCES_TAB_ID) {
     const seg =
-      resourcesChild === "cards" || resourcesChild === "card-ranker"
+      resourcesChild === "cards" || resourcesChild === "card-rater"
         ? resourcesChild
         : DEFAULT_RESOURCES_SEGMENT;
     if (
@@ -162,12 +162,12 @@ function parseDashboardPathname(pathname) {
         adminAnnouncementForm: null,
       };
     }
-    if (b === "card-ranker") {
+    if (b === "card-rater" || b === "card-ranker") {
       if (c !== undefined) return { kind: "invalid" };
       return {
         kind: "ok",
         tabId: RESOURCES_TAB_ID,
-        resourcesChild: "card-ranker",
+        resourcesChild: "card-rater",
         resourcesCardIdentifier: null,
         adminChild: null,
         adminAnnouncementForm: null,
@@ -1023,7 +1023,7 @@ export default function Dashboard({ onNavigate }) {
             key={tab.id}
             value={tab.id}
             className={`relative z-0 flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl border outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 ${
-              tab.id === RESOURCES_TAB_ID && resourcesChild === "card-ranker"
+              tab.id === RESOURCES_TAB_ID && resourcesChild === "card-rater"
                 ? "p-0 sm:p-0"
                 : "p-8 sm:p-10"
             } ${
@@ -1089,10 +1089,10 @@ export default function Dashboard({ onNavigate }) {
                   }
                   onOpenCardDetail={openCardDetail}
                 />
-              ) : resourcesChild === "card-ranker" ? (
+              ) : resourcesChild === "card-rater" ? (
                 <CardRanker
                   isLight={isLight}
-                  active={activeTab === RESOURCES_TAB_ID && resourcesChild === "card-ranker"}
+                  active={activeTab === RESOURCES_TAB_ID && resourcesChild === "card-rater"}
                 />
               ) : (
                 <div
