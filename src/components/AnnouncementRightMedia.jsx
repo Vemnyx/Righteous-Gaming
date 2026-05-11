@@ -2,7 +2,7 @@ import { youtubeEmbedSrc, youtubeVideoIdFromInput } from "../utils/youtube";
 
 /**
  * Hero media for announcements: YouTube embed when `youtubeUrl` is set, else image.
- * Flush mode: full column width, intrinsic height (16:9 video or `object-contain` image); may extend past the shell vertically.
+ * Flush mode: full column width. YouTube fills column height at lg+; images use intrinsic height (`object-contain`), vertically centered in the column when shorter than the row.
  *
  * @param {{
  *   youtubeUrl?: string | null,
@@ -27,17 +27,20 @@ export function AnnouncementRightMedia({
 
   if (vid) {
     if (flush) {
+      const flushYoutubeShell = `${flushShell} max-lg:overflow-x-hidden max-lg:overflow-y-visible lg:flex-1 lg:min-h-0 lg:h-full lg:overflow-hidden`.trim();
       return (
-        <div className={flushShell}>
-          <iframe
-            className="aspect-video h-auto w-full min-w-0 max-w-full border-0"
-            src={youtubeEmbedSrc(vid)}
-            title="YouTube video"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            allowFullScreen
-            loading="lazy"
-            referrerPolicy="strict-origin-when-cross-origin"
-          />
+        <div className={flushYoutubeShell}>
+          <div className="relative w-full max-w-full min-w-0 max-lg:block lg:absolute lg:inset-0 lg:min-h-0">
+            <iframe
+              className="aspect-video h-auto w-full min-w-0 max-w-full border-0 lg:absolute lg:inset-0 lg:h-full lg:w-full lg:aspect-auto"
+              src={youtubeEmbedSrc(vid)}
+              title="YouTube video"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              loading="lazy"
+              referrerPolicy="strict-origin-when-cross-origin"
+            />
+          </div>
         </div>
       );
     }
@@ -58,12 +61,13 @@ export function AnnouncementRightMedia({
 
   if (imageUrl) {
     if (flush) {
+      const flushImageShell = `${flushShell} flex-1 min-h-0 justify-center`.trim();
       return (
-        <div className={flushShell}>
+        <div className={flushImageShell}>
           <img
             src={imageUrl}
             alt=""
-            className="box-border block h-auto w-full max-w-full min-w-0 object-contain object-center"
+            className="box-border block h-auto w-full max-w-full min-w-0 shrink-0 object-contain object-center"
           />
         </div>
       );

@@ -393,7 +393,10 @@ export function AnnouncementsAdmin({
                       <button
                         type="button"
                         className={`${btnBase} ${btnTheme} py-1 text-[0.75rem]`}
-                        onClick={() => setYoutubeUrl(null)}
+                        onClick={() => {
+                          setYoutubeUrl(null);
+                          setImageUrl(null);
+                        }}
                       >
                         Remove YouTube
                       </button>

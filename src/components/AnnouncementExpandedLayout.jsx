@@ -1,5 +1,6 @@
 import { AnnouncementRightMedia } from "./AnnouncementRightMedia";
 import { announcementBodyClassName, sanitizeAnnouncementBodyHtml } from "../utils/announcementDomPurify";
+import { youtubeVideoIdFromInput } from "../utils/youtube";
 
 /** @param {string | undefined | null} iso */
 function formatDateTime(iso) {
@@ -35,6 +36,8 @@ export function AnnouncementExpandedLayout({
       ? formatDateTime(publishedAtIso)
       : unpublishedLabel;
 
+  const youtubeFlush = youtubeVideoIdFromInput(youtubeUrl ?? "") != null;
+
   return (
     <div className="flex min-h-[min(28rem,72vh)] flex-col lg:min-h-[min(24rem,62vh)] lg:flex-row lg:items-stretch lg:overflow-visible">
       <div className="flex min-w-0 flex-1 flex-col gap-3 px-4 py-5 sm:px-6 sm:py-6 lg:basis-0 lg:py-7 xl:px-8">
@@ -46,7 +49,11 @@ export function AnnouncementExpandedLayout({
         </div>
         <div className={announcementBodyClassName} dangerouslySetInnerHTML={{ __html: safeBody }} />
       </div>
-      <div className="relative flex w-full min-w-0 max-w-full flex-1 flex-col overflow-x-hidden overflow-y-visible lg:basis-0 lg:self-start lg:min-h-0">
+      <div
+        className={`relative flex w-full min-w-0 max-w-full flex-1 flex-col overflow-x-hidden lg:basis-0 lg:self-stretch lg:min-h-0 ${
+          youtubeFlush ? "overflow-y-hidden" : "overflow-y-visible"
+        }`}
+      >
         <AnnouncementRightMedia
           flush
           youtubeUrl={youtubeUrl}
