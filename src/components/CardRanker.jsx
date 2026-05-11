@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { CARD_FORMAT_NAMES, CardFormat, isValidCardFormatId } from "../constants/cardFormat";
+import { CardFormat } from "../constants/cardFormat";
 
 /** @typedef {{ id: number, name: string, code: string, image_url?: string | null }} CatalogSet */
 
@@ -12,20 +12,20 @@ import { CARD_FORMAT_NAMES, CardFormat, isValidCardFormatId } from "../constants
  * @typedef {PendingEntry | RankedEntry} QueueEntry
  */
 
-/** Prefer "Omens of the Stars" / "Omen of the Stars" (or set code OMN); else first set. */
-function defaultSetIdForRanker(/** @type {CatalogSet[]} */ list) {
-  if (list.length === 0) return "";
-  const byCode = list.find((s) => String(s.code ?? "").trim().toUpperCase() === "OMN");
-  if (byCode) return String(byCode.id);
-  const re = /omens?\s+of\s+the\s+stars/i;
-  const byName = list.find((s) => re.test(String(s.name ?? "").trim()));
-  if (byName) return String(byName.id);
-  return String(list[0].id);
-}
-
 function notesFromServer(/** @type {string | null | undefined} */ n) {
   if (n == null) return "";
   return String(n);
+}
+
+/** Card ranker always uses Limited format. */
+const RANKER_FORMAT_ID = CardFormat.Limited;
+
+/** Matches catalog names like "Omen of the Third Age" / "Omens of the Third Age". */
+const RANKER_SET_NAME_RE = /omens?\s+of\s+the\s+third\s+age/i;
+
+/** @param {CatalogSet[]} list */
+function matchRankerCatalogSet(list) {
+  return list.find((s) => RANKER_SET_NAME_RE.test(String(s.name ?? "").trim())) ?? null;
 }
 
 /**
@@ -33,11 +33,9 @@ function notesFromServer(/** @type {string | null | undefined} */ n) {
  */
 export function CardRanker({ isLight, active }) {
   const { user, configured } = useAuth();
-  const [sets, setSets] = useState(/** @type {CatalogSet[]} */ ([]));
+  const [rankerSet, setRankerSet] = useState(/** @type {CatalogSet | null} */ (null));
   const [setsLoading, setSetsLoading] = useState(false);
   const [setsError, setSetsError] = useState(/** @type {string | null} */ (null));
-  const [selectedSetId, setSelectedSetId] = useState("");
-  const [selectedFormatId, setSelectedFormatId] = useState(CardFormat.Limited);
 
   const [queue, setQueue] = useState(/** @type {QueueEntry[]} */ ([]));
   const [cardIndex, setCardIndex] = useState(0);
@@ -68,12 +66,14 @@ export function CardRanker({ isLight, active }) {
             code: String(s.code ?? "").trim(),
             image_url: s.image_url ?? null,
           }));
+        const hit = matchRankerCatalogSet(normalized);
         if (!cancelled) {
-          setSets(normalized);
-          setSelectedSetId((prev) => {
-            if (prev !== "" && normalized.some((s) => String(s.id) === prev)) return prev;
-            return defaultSetIdForRanker(normalized);
-          });
+          if (!hit) {
+            setSetsError('Could not find set "Omen of the Third Age" in the catalog.');
+            setRankerSet(null);
+          } else {
+            setRankerSet(hit);
+          }
         }
       } catch (e) {
         if (!cancelled) setSetsError(e instanceof Error ? e.message : "Failed to load sets");
@@ -87,7 +87,7 @@ export function CardRanker({ isLight, active }) {
   }, [active]);
 
   const loadRankQueue = useCallback(async () => {
-    if (!user || !selectedSetId || !isValidCardFormatId(selectedFormatId)) {
+    if (!user || !rankerSet) {
       setQueue([]);
       setCardIndex(0);
       return;
@@ -97,8 +97,8 @@ export function CardRanker({ isLight, active }) {
     try {
       const token = await user.getIdToken();
       const qs = new URLSearchParams({
-        set_id: selectedSetId,
-        format: String(selectedFormatId),
+        set_id: String(rankerSet.id),
+        format: String(RANKER_FORMAT_ID),
       });
       const headers = { Authorization: `Bearer ${token}` };
       const [resRanked, resPending] = await Promise.all([
@@ -136,17 +136,17 @@ export function CardRanker({ isLight, active }) {
     } finally {
       setRankLoading(false);
     }
-  }, [user, selectedSetId, selectedFormatId]);
+  }, [user, rankerSet]);
 
   useEffect(() => {
-    if (!active || !user) {
+    if (!active || !user || !rankerSet) {
       setQueue([]);
       setCardIndex(0);
       return undefined;
     }
     void loadRankQueue();
     return undefined;
-  }, [active, user, loadRankQueue]);
+  }, [active, user, rankerSet, loadRankQueue]);
 
   const current = queue[cardIndex] ?? null;
 
@@ -165,21 +165,10 @@ export function CardRanker({ isLight, active }) {
     }
   }, [current]);
 
-  const selectedSet = useMemo(() => {
-    if (!selectedSetId) return null;
-    const id = Number.parseInt(selectedSetId, 10);
-    if (!Number.isFinite(id)) return null;
-    return sets.find((s) => s.id === id) ?? null;
-  }, [sets, selectedSetId]);
-
   const setBgUrl =
-    selectedSet?.image_url != null && String(selectedSet.image_url).trim() !== ""
-      ? String(selectedSet.image_url).trim()
+    rankerSet?.image_url != null && String(rankerSet.image_url).trim() !== ""
+      ? String(rankerSet.image_url).trim()
       : null;
-
-  const selectCls = isLight
-    ? "min-w-[10rem] max-w-full rounded-lg border border-white/[0.22] bg-[#4a4658] px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none focus:border-purple-400/55 sm:min-w-[12rem]"
-    : "min-w-[10rem] max-w-full rounded-lg border border-white/[0.22] bg-black/35 px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none focus:border-purple-400/55 sm:min-w-[12rem]";
 
   const bgScrim = isLight
     ? "bg-gradient-to-b from-[#2d2a38]/88 via-[#2d2a38]/72 to-[#2d2a38]/85"
@@ -213,7 +202,8 @@ export function CardRanker({ isLight, active }) {
     setSubmitting(true);
     try {
       const token = await user.getIdToken();
-      const setId = Number.parseInt(selectedSetId, 10);
+      if (!rankerSet) return;
+      const setId = rankerSet.id;
       const rankVal = current.kind === "ranked" ? current.rank : draftRank;
       if (rankVal == null || rankVal < 1 || rankVal > 5) {
         setSaveError("Choose a star rating (1–5).");
@@ -224,7 +214,7 @@ export function CardRanker({ isLight, active }) {
       const body = {
         set_id: setId,
         card_id: current.card.id,
-        format: selectedFormatId,
+        format: RANKER_FORMAT_ID,
         rank: rankVal,
         notes: notesTrim === "" ? null : notesTrim,
       };
@@ -246,7 +236,7 @@ export function CardRanker({ isLight, active }) {
     } finally {
       setSubmitting(false);
     }
-  }, [user, current, canSubmit, draftNotes, selectedSetId, selectedFormatId, draftRank, loadRankQueue]);
+  }, [user, current, canSubmit, draftNotes, rankerSet, draftRank, loadRankQueue]);
 
   const goPrev = useCallback(() => {
     setCardIndex((i) => Math.max(0, i - 1));
@@ -389,99 +379,15 @@ export function CardRanker({ isLight, active }) {
         </>
       ) : null}
       <div className="relative z-[1] flex min-h-0 w-full flex-1 flex-col gap-4 px-4 pt-4 pb-8 sm:px-5 sm:pt-5 sm:pb-10">
-        <div className="flex flex-wrap items-center gap-3 self-start">
-          <select
-            className={selectCls}
-            value={selectedSetId}
-            onChange={(e) => setSelectedSetId(e.target.value)}
-            disabled={setsLoading || sets.length === 0}
-            aria-busy={setsLoading}
-            aria-label="Card set"
-          >
-            {setsLoading ? <option value="">Loading…</option> : null}
-            {!setsLoading &&
-              sets.map((s) => (
-                <option key={s.id} value={String(s.id)}>
-                  {s.code ? `${s.name} (${s.code})` : s.name}
-                </option>
-              ))}
-          </select>
-          <select
-            className={selectCls}
-            value={String(selectedFormatId)}
-            onChange={(e) => {
-              const v = Number.parseInt(e.target.value, 10);
-              setSelectedFormatId(isValidCardFormatId(v) ? v : CardFormat.Limited);
-            }}
-            aria-label="Format"
-          >
-            {CARD_FORMAT_NAMES.map((name, id) => (
-              <option key={id} value={String(id)}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </div>
-
         {setsError ? (
           <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">{setsError}</p>
         ) : null}
-        {setsLoading ? <p className="text-[0.9rem] text-[#f4f0fa]/80">Loading sets…</p> : null}
+        {setsLoading ? <p className="text-[0.9rem] text-[#f4f0fa]/80">Loading card set…</p> : null}
 
         {!configured || !user ? (
           <p className="text-[0.9rem] text-[#f4f0fa]/75">Sign in to rank cards for this set and format.</p>
-        ) : (
+        ) : rankerSet ? (
           <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row lg:items-stretch lg:gap-6">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:basis-0">
-              <div className="flex min-h-0 flex-1 flex-col gap-3">
-                {rankLoading ? <p className="text-[0.9rem] text-[#f4f0fa]/80">Loading cards…</p> : null}
-                <div className="min-h-0 flex-1" aria-hidden />
-              </div>
-              <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-white/[0.12] pt-4">
-                {!rankLoading ? (
-                  <div className="flex flex-col gap-1">
-                    <p className="m-0 text-[0.9rem] leading-snug text-[#f4f0fa]/88">
-                      Total cards available for ranking: {rankStats.total}
-                    </p>
-                    {showRankCompleteMessage ? (
-                      <p className="m-0 text-[0.9rem] leading-snug text-[#f4f0fa]/92">
-                        No more cards left to rank, come back later!
-                      </p>
-                    ) : (
-                      <p className="m-0 text-[0.9rem] leading-snug text-[#f4f0fa]/88">
-                        Unranked cards remaining: {rankStats.unranked}
-                      </p>
-                    )}
-                  </div>
-                ) : null}
-                <label className="flex flex-col gap-2">
-                  <span className="sr-only">Notes</span>
-                  <textarea
-                    className={inputCls}
-                    value={draftNotes}
-                    onChange={(e) => setDraftNotes(e.target.value)}
-                    placeholder="Notes (optional)"
-                    maxLength={2048}
-                    rows={6}
-                    disabled={!current}
-                  />
-                </label>
-                <button type="button" className={btnPrimary} disabled={!canSubmit} onClick={() => void submitRanking()}>
-                  {submitting ? "Saving…" : current?.kind === "ranked" ? "Save notes" : "Submit ranking"}
-                </button>
-                {saveError ? (
-                  <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">
-                    {saveError}
-                  </p>
-                ) : null}
-                {rankError ? (
-                  <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">
-                    {rankError}
-                  </p>
-                ) : null}
-              </div>
-            </div>
-
             <div className="relative flex min-h-[min(18rem,40vh)] min-w-0 flex-1 flex-col items-stretch justify-start lg:basis-0">
               {!rankLoading && queue.length === 0 ? (
                 <p className="text-center text-[0.9rem] text-[#f4f0fa]/70">No cards to show for this set and format.</p>
@@ -561,8 +467,57 @@ export function CardRanker({ isLight, active }) {
                 </div>
               ) : null}
             </div>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:basis-0">
+              <div className="flex min-h-0 flex-1 flex-col gap-3">
+                {rankLoading ? <p className="text-[0.9rem] text-[#f4f0fa]/80">Loading cards…</p> : null}
+                <div className="min-h-0 flex-1" aria-hidden />
+              </div>
+              <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-white/[0.12] pt-4">
+                {!rankLoading ? (
+                  <div className="flex flex-col gap-1">
+                    <p className="m-0 text-[0.9rem] leading-snug text-[#f4f0fa]/88">
+                      Total cards available for ranking: {rankStats.total}
+                    </p>
+                    {showRankCompleteMessage ? (
+                      <p className="m-0 text-[0.9rem] leading-snug text-[#f4f0fa]/92">
+                        No more cards left to rank, come back later!
+                      </p>
+                    ) : (
+                      <p className="m-0 text-[0.9rem] leading-snug text-[#f4f0fa]/88">
+                        Unranked cards remaining: {rankStats.unranked}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
+                <label className="flex flex-col gap-2">
+                  <span className="sr-only">Notes</span>
+                  <textarea
+                    className={inputCls}
+                    value={draftNotes}
+                    onChange={(e) => setDraftNotes(e.target.value)}
+                    placeholder="Notes (optional)"
+                    maxLength={2048}
+                    rows={6}
+                    disabled={!current}
+                  />
+                </label>
+                <button type="button" className={btnPrimary} disabled={!canSubmit} onClick={() => void submitRanking()}>
+                  {submitting ? "Saving…" : current?.kind === "ranked" ? "Save notes" : "Submit ranking"}
+                </button>
+                {saveError ? (
+                  <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">
+                    {saveError}
+                  </p>
+                ) : null}
+                {rankError ? (
+                  <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">
+                    {rankError}
+                  </p>
+                ) : null}
+              </div>
+            </div>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
