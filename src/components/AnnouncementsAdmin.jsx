@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
+import { AnnouncementExpandedLayout } from "./AnnouncementExpandedLayout";
 import { AnnouncementRichTextEditor } from "./AnnouncementRichTextEditor";
 import { AnnouncementRightMedia } from "./AnnouncementRightMedia";
+import { TextInputModal } from "./TextInputModal";
 import { uploadPublicAsset, extFromFilename } from "../utils/uploadPublicAsset";
 import {
   youtubeThumbnailDefault,
@@ -52,6 +55,12 @@ export function AnnouncementsAdmin({
   const [editorNonce, setEditorNonce] = useState(0);
   /** `updated_at` from the row when editing (for subtitle). */
   const [editingUpdatedAt, setEditingUpdatedAt] = useState(/** @type {string | null} */ (null));
+  /** `published_at` from API when editing (preview date line). */
+  const [editingPublishedAt, setEditingPublishedAt] = useState(/** @type {string | null} */ (null));
+  const [previewOpen, setPreviewOpen] = useState(false);
+  /** HTML snapshot when preview was opened (matches editor at click time). */
+  const [previewBodyHtml, setPreviewBodyHtml] = useState("");
+  const [youtubeModalOpen, setYoutubeModalOpen] = useState(false);
 
   const editorRef = useRef(/** @type {{ getHTML: () => string } | null} */ (null));
 
@@ -100,9 +109,15 @@ export function AnnouncementsAdmin({
     setYoutubeUrl(null);
     setInitialHtml("<p></p>");
     setEditingUpdatedAt(null);
+    setEditingPublishedAt(null);
     setSaveError(null);
     setDetailLoading(false);
     setEditorNonce((n) => n + 1);
+  }, [announcementForm]);
+
+  useEffect(() => {
+    setPreviewOpen(false);
+    setYoutubeModalOpen(false);
   }, [announcementForm]);
 
   useEffect(() => {
@@ -125,6 +140,7 @@ export function AnnouncementsAdmin({
         setYoutubeUrl(row.youtube_url ?? null);
         setPublishedBaseline(row.published_at != null);
         setEditingUpdatedAt(row.updated_at ?? null);
+        setEditingPublishedAt(row.published_at ?? null);
         const html = row.body_html && row.body_html.trim() ? row.body_html : "<p></p>";
         setInitialHtml(html);
         setEditorNonce((n) => n + 1);
@@ -170,19 +186,33 @@ export function AnnouncementsAdmin({
     [announcementForm, draftFolder, getIdToken],
   );
 
-  const onAddYoutube = useCallback(() => {
-    const raw = window.prompt("YouTube URL (watch, youtu.be, embed, or shorts)");
-    const url = raw?.trim();
-    if (!url) return;
-    const id = youtubeVideoIdFromInput(url);
-    if (!id) {
-      setSaveError("Could not read a YouTube video ID from that URL.");
-      return;
-    }
-    setSaveError(null);
-    setYoutubeUrl(youtubeWatchUrl(id));
-    setImageUrl(youtubeThumbnailDefault(id));
+  useEffect(() => {
+    if (!previewOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") setPreviewOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [previewOpen]);
+
+  const openPreview = useCallback(() => {
+    setPreviewBodyHtml(editorRef.current?.getHTML() ?? "");
+    setPreviewOpen(true);
   }, []);
+
+  const closeYoutubeModal = useCallback(() => setYoutubeModalOpen(false), []);
+
+  const confirmYoutubeUrl = useCallback(
+    (raw) => {
+      const id = youtubeVideoIdFromInput(raw);
+      if (!id) return;
+      setSaveError(null);
+      setYoutubeUrl(youtubeWatchUrl(id));
+      setImageUrl(youtubeThumbnailDefault(id));
+      setYoutubeModalOpen(false);
+    },
+    [],
+  );
 
   const submitAnnouncement = useCallback(
     async (/** @type {boolean | null} */ wantPublishOrNull) => {
@@ -256,13 +286,42 @@ export function AnnouncementsAdmin({
     ],
   );
 
+  const deleteRow = useCallback(
+    async (/** @type {{ id: number, title: string }} */ row) => {
+      if (!user) return;
+      const label = (row.title ?? "").trim() || "this announcement";
+      const ok = window.confirm(`Delete “${label}”? This cannot be undone.`);
+      if (!ok) return;
+      setListError(null);
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/admin/announcements/${row.id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(await res.text());
+        await reloadList();
+      } catch (e) {
+        setListError(e instanceof Error ? e.message : "Delete failed");
+      }
+    },
+    [user, reloadList],
+  );
+
   const btnBase =
     "rounded-lg border px-3 py-1.5 text-[0.8125rem] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40";
   const btnTheme = isLight
     ? "border-white/25 bg-black/25 text-[#f4f0fa] hover:border-white/40 hover:bg-black/35"
     : "border-white/[0.28] bg-black/20 text-[#f4f0fa] hover:border-white/40 hover:bg-black/30";
+  const btnDanger = isLight
+    ? "border-red-400/40 bg-red-950/35 text-red-100 hover:border-red-400/65 hover:bg-red-950/50"
+    : "border-red-500/35 bg-red-950/30 text-red-100 hover:border-red-400/50 hover:bg-red-950/45";
 
   const tableChromeBorder = isLight ? "border-white/[0.12]" : "border-white/[0.24] ring-1 ring-white/[0.05]";
+
+  const previewModalShell = isLight
+    ? "border border-white/[0.12] bg-gradient-to-b from-[#434054] to-[#2d2a38] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+    : "border border-white/[0.2] bg-[rgba(12,6,22,0.96)] shadow-[0_24px_80px_rgba(0,0,0,0.5)]";
 
   if (announcementForm !== null) {
     const isNew = announcementForm === "new";
@@ -355,7 +414,7 @@ export function AnnouncementsAdmin({
                         Upload image
                         <input type="file" accept="image/*" className="sr-only" onChange={onCoverFile} />
                       </label>
-                      <button type="button" className={`${btnBase} ${btnTheme}`} onClick={onAddYoutube}>
+                      <button type="button" className={`${btnBase} ${btnTheme}`} onClick={() => setYoutubeModalOpen(true)}>
                         Add YouTube link
                       </button>
                       <p className="m-0 max-w-[16rem] text-[0.75rem] text-[#f4f0fa]/45">
@@ -374,6 +433,14 @@ export function AnnouncementsAdmin({
             ) : null}
 
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={`${btnBase} ${btnTheme}`}
+                onClick={openPreview}
+                disabled={detailLoading && !isNew}
+              >
+                Preview
+              </button>
               {isNew ? (
                 <>
                   <button
@@ -402,6 +469,68 @@ export function AnnouncementsAdmin({
                 </button>
               )}
             </div>
+
+            <TextInputModal
+              open={youtubeModalOpen}
+              title="Add YouTube video"
+              description="Paste a watch, youtu.be, embed, or shorts URL."
+              placeholder="https://www.youtube.com/watch?v=…"
+              confirmLabel="Add video"
+              cancelLabel="Cancel"
+              isLight={isLight}
+              validate={(v) => {
+                const t = v.trim();
+                if (!t) return "Enter a URL.";
+                if (!youtubeVideoIdFromInput(t)) return "Could not read a YouTube video ID from that URL.";
+                return null;
+              }}
+              onConfirm={confirmYoutubeUrl}
+              onCancel={closeYoutubeModal}
+            />
+
+            {previewOpen && typeof document !== "undefined"
+              ? createPortal(
+                  <div
+                    className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-5"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="announcement-preview-heading"
+                  >
+                    <button
+                      type="button"
+                      className="absolute inset-0 bg-black/70 backdrop-blur-[2px]"
+                      aria-label="Close preview"
+                      onClick={() => setPreviewOpen(false)}
+                    />
+                    <div
+                      className={`relative z-[1] flex max-h-[min(92vh,880px)] w-full max-w-[min(96vw,58rem)] flex-col overflow-hidden rounded-2xl ${previewModalShell}`}
+                    >
+                      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.1] px-4 py-3 sm:px-5">
+                        <h3 id="announcement-preview-heading" className="m-0 text-[0.95rem] font-semibold text-white">
+                          Preview
+                        </h3>
+                        <button
+                          type="button"
+                          className={`${btnBase} ${btnTheme} py-1.5 text-[0.78rem]`}
+                          onClick={() => setPreviewOpen(false)}
+                        >
+                          Close
+                        </button>
+                      </div>
+                      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+                        <AnnouncementExpandedLayout
+                          title={title}
+                          publishedAtIso={isNew ? null : editingPublishedAt}
+                          bodyHtml={previewBodyHtml}
+                          youtubeUrl={youtubeUrl}
+                          imageUrl={imageUrl}
+                        />
+                      </div>
+                    </div>
+                  </div>,
+                  document.body,
+                )
+              : null}
           </>
         )}
       </div>
@@ -432,13 +561,13 @@ export function AnnouncementsAdmin({
         <p className="text-[0.9rem] text-[#f4f0fa]/60">No announcements yet.</p>
       ) : (
         <div className={`overflow-x-auto rounded-xl border ${tableChromeBorder}`}>
-          <table className="w-full min-w-[520px] border-collapse text-left text-[0.8125rem]">
+          <table className="w-full min-w-[560px] border-collapse text-left text-[0.8125rem]">
             <thead>
               <tr className={isLight ? "border-b border-white/[0.12]" : "border-b border-white/[0.2]"}>
                 <th className="px-3 py-2.5 font-semibold text-[#f4f0fa]/80">Title</th>
                 <th className="px-3 py-2.5 font-semibold text-[#f4f0fa]/80">Status</th>
                 <th className="px-3 py-2.5 font-semibold text-[#f4f0fa]/80">Updated</th>
-                <th className="px-3 py-2.5 font-semibold text-[#f4f0fa]/80">Edit</th>
+                <th className="px-3 py-2.5 font-semibold text-[#f4f0fa]/80">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -453,13 +582,22 @@ export function AnnouncementsAdmin({
                   </td>
                   <td className="px-3 py-2.5 text-[#f4f0fa]/65">{formatDateTime(r.updated_at)}</td>
                   <td className="px-3 py-2.5">
-                    <button
-                      type="button"
-                      className={`${btnBase} ${btnTheme} py-1 text-[0.75rem]`}
-                      onClick={() => navigateAnnouncementForm(r.id)}
-                    >
-                      Edit
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        className={`${btnBase} ${btnTheme} py-1 text-[0.75rem]`}
+                        onClick={() => navigateAnnouncementForm(r.id)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className={`${btnBase} ${btnDanger} py-1 text-[0.75rem]`}
+                        onClick={() => void deleteRow(r)}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

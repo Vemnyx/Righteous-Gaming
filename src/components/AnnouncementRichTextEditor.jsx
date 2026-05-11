@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useImperativeHandle } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useState } from "react";
 import { mergeAttributes } from "@tiptap/core";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -8,6 +8,22 @@ import Placeholder from "@tiptap/extension-placeholder";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
 import { uploadPublicAsset, extFromFilename } from "../utils/uploadPublicAsset";
+import { TextInputModal } from "./TextInputModal";
+
+/** @param {string} v */
+function validateAnnouncementLinkUrl(v) {
+  const t = v.trim();
+  if (!t) return "Enter a URL.";
+  try {
+    const u = new URL(t);
+    if (u.protocol !== "http:" && u.protocol !== "https:" && u.protocol !== "mailto:") {
+      return "Use an http, https, or mailto link.";
+    }
+    return null;
+  } catch {
+    return "Enter a valid URL.";
+  }
+}
 
 /** TextAlign on `img` only sets `text-align` in CSS, which does not move block images; we persist `data-text-align` and layout with margin utilities. */
 const AnnouncementImage = BaseImage.extend({
@@ -109,6 +125,11 @@ export const AnnouncementRichTextEditor = forwardRef(function AnnouncementRichTe
   { initialHtml, draftFolder, editingId, getIdToken, isLight },
   ref,
 ) {
+  const [linkModal, setLinkModal] = useState(/** @type {{ open: boolean, initial: string }} */ ({
+    open: false,
+    initial: "",
+  }));
+
   const editor = useEditor({
     shouldRerenderOnTransaction: true,
     extensions: [
@@ -202,6 +223,23 @@ export const AnnouncementRichTextEditor = forwardRef(function AnnouncementRichTe
     [insertImageFile],
   );
 
+  const openLinkModal = useCallback(() => {
+    if (!editor) return;
+    const href = editor.getAttributes("link")?.href;
+    setLinkModal({ open: true, initial: typeof href === "string" ? href : "" });
+  }, [editor]);
+
+  const closeLinkModal = useCallback(() => setLinkModal((m) => ({ ...m, open: false })), []);
+
+  const applyLink = useCallback(
+    (url) => {
+      if (!editor) return;
+      editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
+      setLinkModal((m) => ({ ...m, open: false }));
+    },
+    [editor],
+  );
+
   const ts = toolbarSurface(isLight);
 
   /** @param {*} ed TipTap Editor */
@@ -227,6 +265,7 @@ export const AnnouncementRichTextEditor = forwardRef(function AnnouncementRichTe
   }
 
   return (
+    <>
     <div className="flex flex-col gap-2">
       <div
         className={`flex flex-wrap gap-1 rounded-lg border p-1.5 ${ts}`}
@@ -302,37 +341,8 @@ export const AnnouncementRichTextEditor = forwardRef(function AnnouncementRichTe
         </button>
         <button
           type="button"
-          className={toolbarBtnClass(editor.isActive("bulletList"), isLight, ts)}
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-          aria-pressed={editor.isActive("bulletList")}
-          title={
-            editor.isActive("bulletList") ? "Bullet list — on" : "Bullet list — off"
-          }
-        >
-          List
-        </button>
-        <button
-          type="button"
-          className={toolbarBtnClass(editor.isActive("orderedList"), isLight, ts)}
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          aria-pressed={editor.isActive("orderedList")}
-          title={
-            editor.isActive("orderedList")
-              ? "Numbered list — on"
-              : "Numbered list — off"
-          }
-        >
-          1.
-        </button>
-        <button
-          type="button"
           className={toolbarBtnClass(editor.isActive("link"), isLight, ts)}
-          onClick={() => {
-            const prev = window.prompt("Link URL (https://…)");
-            const url = prev?.trim();
-            if (!url) return;
-            editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
-          }}
+          onClick={openLinkModal}
           aria-pressed={editor.isActive("link")}
           title={editor.isActive("link") ? "Link — applied to selection" : "Add link"}
         >
@@ -348,6 +358,20 @@ export const AnnouncementRichTextEditor = forwardRef(function AnnouncementRichTe
         <EditorContent editor={editor} />
       </div>
     </div>
+    <TextInputModal
+      open={linkModal.open}
+      title={editor.isActive("link") ? "Edit link" : "Add link"}
+      description="Paste a full URL (https://… or mailto:…)."
+      placeholder="https://example.com/path"
+      confirmLabel={editor.isActive("link") ? "Update link" : "Add link"}
+      cancelLabel="Cancel"
+      initialValue={linkModal.initial}
+      isLight={isLight}
+      validate={validateAnnouncementLinkUrl}
+      onConfirm={applyLink}
+      onCancel={closeLinkModal}
+    />
+    </>
   );
 });
 
