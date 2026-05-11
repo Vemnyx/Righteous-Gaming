@@ -272,24 +272,24 @@ export function AnnouncementsAdmin({
 
     return (
       <div className="flex min-h-0 w-full flex-col gap-5 text-left">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <button type="button" className={`${btnBase} ${btnTheme}`} onClick={cancelForm}>
             ← Back
           </button>
-          <h2 className="m-0 flex-1 text-lg font-semibold text-white">
+          <h2 className="m-0 min-w-0 flex-1 text-lg font-semibold text-white">
             {isNew ? "New announcement" : "Edit announcement"}
           </h2>
+          {!isNew && !detailLoading ? (
+            <p className="m-0 max-w-full shrink-0 text-right text-[0.72rem] text-[#f4f0fa]/50 sm:text-[0.8rem]">
+              Last updated {formatDateTime(editingUpdatedAt)} · {publishedBaseline ? "Published" : "Draft"}
+            </p>
+          ) : null}
         </div>
 
         {detailLoading && !isNew ? (
           <p className="text-[0.9rem] text-[#f4f0fa]/65">Loading…</p>
         ) : (
           <>
-            <p className="m-0 text-[0.8rem] text-[#f4f0fa]/50">
-              Layout matches the public Announcements tab: title and date on the left, hero media on the
-              right. Body text is below the title — inline YouTube embeds are not supported.
-            </p>
-
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
               <div className="min-w-0 flex-1 space-y-4 lg:max-w-[min(100%,42rem)]">
                 <label className="flex flex-col gap-1.5">
@@ -304,27 +304,20 @@ export function AnnouncementsAdmin({
                     placeholder="Announcement title"
                   />
                 </label>
-                <p className="m-0 text-[0.8rem] text-[#f4f0fa]/45">
-                  {isNew
-                    ? "Publish date is set when you publish."
-                    : `Last updated ${formatDateTime(editingUpdatedAt)} · ${
-                        publishedBaseline ? "Published" : "Draft"
-                      }`}
-                </p>
-                <div className="flex flex-col gap-2">
-                  <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
-                    Body
-                  </span>
-                  <AnnouncementRichTextEditor
-                    key={editorKey}
-                    ref={editorRef}
-                    initialHtml={initialHtml}
-                    draftFolder={draftFolder}
-                    editingId={editingIdForImages}
-                    getIdToken={getIdToken}
-                    isLight={isLight}
-                  />
-                </div>
+                {isNew ? (
+                  <p className="m-0 text-[0.8rem] text-[#f4f0fa]/45">
+                    Publish date is set when you publish.
+                  </p>
+                ) : null}
+                <AnnouncementRichTextEditor
+                  key={editorKey}
+                  ref={editorRef}
+                  initialHtml={initialHtml}
+                  draftFolder={draftFolder}
+                  editingId={editingIdForImages}
+                  getIdToken={getIdToken}
+                  isLight={isLight}
+                />
               </div>
 
               <div className="flex w-full shrink-0 flex-col gap-3 lg:sticky lg:top-2 lg:w-[min(100%,24rem)] xl:w-[26rem]">
