@@ -438,9 +438,9 @@ export function CardRanker({ isLight, active }) {
             await submitRanking();
           }
           if (direction < 0) {
-            goNext();
-          } else {
             goPrev();
+          } else {
+            goNext();
           }
           setCardDragX(0);
         })();
