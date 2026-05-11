@@ -165,6 +165,36 @@ func insertCardReturning(ctx context.Context, q cardQuerier, in CreateCardInput)
 	return scanCard(row)
 }
 
+// ListCardIdentifiersLowerBySetID returns lower(trim(card_identifier)) for all non-null identifiers in a set.
+func (r *Repository) ListCardIdentifiersLowerBySetID(ctx context.Context, setID int) (map[string]struct{}, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	const q = `
+SELECT lower(trim(card_identifier))
+FROM cards
+WHERE set_id = $1 AND card_identifier IS NOT NULL AND trim(card_identifier) <> ''`
+	rows, err := r.pool.Query(ctx, q, setID)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list card identifiers by set: %w", err)
+	}
+	defer rows.Close()
+	out := make(map[string]struct{})
+	for rows.Next() {
+		var ident string
+		if err := rows.Scan(&ident); err != nil {
+			return nil, fmt.Errorf("repository: list card identifiers scan: %w", err)
+		}
+		if ident != "" {
+			out[ident] = struct{}{}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: list card identifiers rows: %w", err)
+	}
+	return out, nil
+}
+
 // CreateCard inserts a card and returns the persisted row.
 func (r *Repository) CreateCard(ctx context.Context, in CreateCardInput) (*Card, error) {
 	if r.pool == nil {

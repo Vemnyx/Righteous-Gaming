@@ -63,6 +63,27 @@ WHERE id = $1`
 	return &s, nil
 }
 
+// SetByNameFold returns a set whose name matches case-insensitively after trim, or ErrSetNotFound.
+func (r *Repository) SetByNameFold(ctx context.Context, name string) (*Set, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	const q = `
+SELECT id, name, code, image_url
+FROM sets
+WHERE lower(trim(name)) = lower(trim($1))
+LIMIT 1`
+	row := r.pool.QueryRow(ctx, q, name)
+	var s Set
+	if err := row.Scan(&s.ID, &s.Name, &s.Code, &s.ImageURL); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrSetNotFound
+		}
+		return nil, fmt.Errorf("repository: set by name fold: %w", err)
+	}
+	return &s, nil
+}
+
 // SetByCode returns the set with the given code, or ErrSetNotFound.
 func (r *Repository) SetByCode(ctx context.Context, code string) (*Set, error) {
 	if r.pool == nil {

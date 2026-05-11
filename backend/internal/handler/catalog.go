@@ -11,6 +11,7 @@ import (
 
 	"righteous-gaming/backend/internal/app"
 	"righteous-gaming/backend/internal/repository"
+	"righteous-gaming/backend/internal/service"
 	"righteous-gaming/backend/log"
 )
 
@@ -19,6 +20,7 @@ const maxCardsBatchItems = 512
 
 type catalogHTTP struct {
 	app *app.App
+	svc *service.UserService
 }
 
 type setJSON struct {

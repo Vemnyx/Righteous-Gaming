@@ -12,7 +12,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux := http.NewServeMux()
 	uh := &userHTTP{svc: userSvc, app: application}
 	mh := &mailHTTP{app: application}
-	ch := &catalogHTTP{app: application}
+	ch := &catalogHTTP{app: application, svc: userSvc}
 	rh := &cardRatingsHTTP{app: application, svc: userSvc}
 	upload := &uploadHTTP{app: application, svc: userSvc}
 	ah := &announcementHTTP{app: application, svc: userSvc}
@@ -44,6 +44,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("GET /api/cards/{id}", ch.getCard)
 	mux.HandleFunc("POST /api/cards", ch.createCard)
 	mux.HandleFunc("POST /api/cards/batch", ch.createCardsBatch)
+	mux.HandleFunc("POST /api/admin/catalog/sync-fabrary-latest-set", ch.postAdminSyncFabraryLatestSet)
 	mux.HandleFunc("POST /api/upload", upload.uploadAsset)
 
 	mux.HandleFunc("GET /api/announcements", ah.listPublished)

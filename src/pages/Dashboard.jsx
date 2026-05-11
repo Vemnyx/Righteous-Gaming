@@ -10,6 +10,7 @@ import { AnnouncementsAdmin } from "../components/AnnouncementsAdmin";
 import { CardRaterAdmin } from "../components/CardRaterAdmin";
 import { CardRaterRedirect } from "../components/CardRaterRedirect";
 import { CardRaterAnalytics } from "../components/CardRaterAnalytics";
+import { SetsAdmin } from "../components/SetsAdmin";
 
 /** Persisted before opening Invite User so Back restores the dashboard URL (e.g. `/admin/users`). */
 const SESSION_INVITE_RETURN_KEY = "rg-dashboard-return-url";
@@ -38,6 +39,7 @@ const RESOURCE_SUB_LINKS = [
 /** @type {ResourceSubLink[]} */
 const ADMIN_SUB_LINKS = [
   { segment: "users", label: "Users", path: "/admin/users" },
+  { segment: "sets", label: "Sets", path: "/admin/sets" },
   { segment: "announcements", label: "Announcements", path: "/admin/announcements" },
   { segment: "card-rater", label: "Card Rater", path: "/admin/card-rater" },
 ];
@@ -60,7 +62,10 @@ function buildDashboardPathname(
 ) {
   if (tabId === ADMIN_TAB_ID) {
     const seg =
-      adminChild === "users" || adminChild === "announcements" || adminChild === "card-rater"
+      adminChild === "users" ||
+      adminChild === "sets" ||
+      adminChild === "announcements" ||
+      adminChild === "card-rater"
         ? adminChild
         : DEFAULT_ADMIN_SEGMENT;
     if (seg === "announcements") {
@@ -252,6 +257,18 @@ function parseDashboardPathname(pathname) {
         resourcesCardIdentifier: null,
         resourcesCardRaterId: null,
         adminChild: "users",
+        adminAnnouncementForm: null,
+      };
+    }
+    if (b === "sets") {
+      if (c !== undefined || rest.length > 0) return { kind: "invalid" };
+      return {
+        kind: "ok",
+        tabId: ADMIN_TAB_ID,
+        resourcesChild: null,
+        resourcesCardIdentifier: null,
+        resourcesCardRaterId: null,
+        adminChild: "sets",
         adminAnnouncementForm: null,
       };
     }
@@ -1197,6 +1214,8 @@ export default function Dashboard({ onNavigate }) {
                   announcementForm={adminAnnouncementForm}
                   navigateAnnouncementForm={navigateAdminAnnouncementForm}
                 />
+              ) : adminChild === "sets" ? (
+                <SetsAdmin isLight={isLight} active={activeTab === ADMIN_TAB_ID && adminChild === "sets"} />
               ) : adminChild === "card-rater" ? (
                 <CardRaterAdmin
                   isLight={isLight}
