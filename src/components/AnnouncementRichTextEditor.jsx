@@ -1,13 +1,82 @@
 import { forwardRef, useCallback, useImperativeHandle } from "react";
+import { mergeAttributes } from "@tiptap/core";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import Image from "@tiptap/extension-image";
+import BaseImage from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
 import Youtube from "@tiptap/extension-youtube";
 import { uploadPublicAsset, extFromFilename } from "../utils/uploadPublicAsset";
+
+/** TextAlign on `img` only sets `text-align` in CSS, which does not move block images; we persist `data-text-align` and layout with margin utilities. */
+const AnnouncementImage = BaseImage.extend({
+  name: "image",
+  parseHTML() {
+    return [
+      {
+        tag: this.options.allowBase64 ? "img[src]" : 'img[src]:not([src^="data:"])',
+        getAttrs: (element) => {
+          const src = element.getAttribute("src");
+          if (!src) return false;
+          const out = {
+            src,
+            alt: element.getAttribute("alt") ?? "",
+            title: element.getAttribute("title"),
+            width: element.getAttribute("width"),
+            height: element.getAttribute("height"),
+          };
+          const dataTa = element.getAttribute("data-text-align");
+          const styleTa = element.style?.textAlign;
+          if (["left", "center", "right"].includes(dataTa)) out.textAlign = dataTa;
+          else if (["left", "center", "right"].includes(styleTa)) out.textAlign = styleTa;
+          return out;
+        },
+      },
+    ];
+  },
+  renderHTML({ node, HTMLAttributes }) {
+    const merged = mergeAttributes(this.options.HTMLAttributes, HTMLAttributes);
+    if (merged.style && typeof merged.style === "string") {
+      const cleaned = merged.style
+        .replace(/text-align\s*:\s*[^;]+;?/gi, "")
+        .replace(/;\s*;/g, ";")
+        .replace(/^;\s*|\s*;$/g, "")
+        .trim();
+      if (cleaned) merged.style = cleaned;
+      else delete merged.style;
+    }
+    const ta = node.attrs.textAlign;
+    if (ta === "center" || ta === "right") merged["data-text-align"] = ta;
+    else delete merged["data-text-align"];
+    return ["img", merged];
+  },
+  addNodeView() {
+    const parentFactory = this.parent?.();
+    if (!parentFactory) return null;
+    return (props) => {
+      const nodeView = parentFactory(props);
+      const sync = (node) => {
+        const root = nodeView.dom;
+        const img = root?.tagName === "IMG" ? root : root?.querySelector?.("img");
+        if (!img || !(img instanceof HTMLImageElement)) return;
+        if (img.style.textAlign) img.style.textAlign = "";
+        const ta = node.attrs.textAlign;
+        if (ta === "center" || ta === "right") img.setAttribute("data-text-align", ta);
+        else img.removeAttribute("data-text-align");
+      };
+      sync(props.node);
+      const origUpdate = nodeView.update.bind(nodeView);
+      nodeView.update = (node, outerDeco, innerDeco) => {
+        const ok = origUpdate(node, outerDeco, innerDeco);
+        if (ok) sync(node);
+        return ok;
+      };
+      return nodeView;
+    };
+  },
+});
 
 /**
  * @typedef {{
@@ -48,7 +117,7 @@ export const AnnouncementRichTextEditor = forwardRef(function AnnouncementRichTe
         heading: { levels: [2, 3] },
       }),
       TextAlign.configure({
-        types: ["paragraph", "heading", "youtube"],
+        types: ["paragraph", "heading", "youtube", "image"],
         alignments: ["left", "center", "right"],
         defaultAlignment: null,
       }),
@@ -57,7 +126,7 @@ export const AnnouncementRichTextEditor = forwardRef(function AnnouncementRichTe
         openOnClick: false,
         HTMLAttributes: { class: "text-violet-300 underline underline-offset-2" },
       }),
-      Image.configure({
+      AnnouncementImage.configure({
         HTMLAttributes: {
           class: "max-w-full rounded-md block",
         },
@@ -148,6 +217,11 @@ export const AnnouncementRichTextEditor = forwardRef(function AnnouncementRichTe
 
   /** @param {*} ed TipTap Editor */
   const currentTextAlign = (ed) => {
+    if (ed.isActive("image")) {
+      const ta = ed.getAttributes("image").textAlign;
+      if (ta && ["left", "center", "right"].includes(ta)) return ta;
+      return "left";
+    }
     const fromPara = ed.getAttributes("paragraph").textAlign;
     if (fromPara && ["left", "center", "right"].includes(fromPara)) return fromPara;
     const fromHead = ed.getAttributes("heading").textAlign;
@@ -293,7 +367,7 @@ export const AnnouncementRichTextEditor = forwardRef(function AnnouncementRichTe
         </button>
       </div>
       <div
-        className={`rounded-lg border border-white/[0.18] bg-black/25 [&_.ProseMirror_img]:max-h-[min(560px,75vh)] [&_.ProseMirror_img]:max-w-full [&_.ProseMirror_img]:object-contain [&_[data-youtube-video]]:my-4 [&_[data-youtube-video]]:w-full [&_[data-youtube-video]]:max-w-[min(100%,40rem)] [&_[data-youtube-video]_iframe]:aspect-video [&_[data-youtube-video]_iframe]:h-auto [&_[data-youtube-video]_iframe]:w-full [&_[data-youtube-video]_iframe]:rounded-lg [&_[data-resize-handle]]:z-10 [&_[data-resize-handle]]:m-[-6px] [&_[data-resize-handle]]:size-[14px] [&_[data-resize-handle]]:rounded-sm [&_[data-resize-handle]]:border-2 [&_[data-resize-handle]]:border-[rgba(180,140,228,0.95)] [&_[data-resize-handle]]:bg-[rgba(22,12,38,0.92)] [&_[data-resize-handle]]:shadow-[0_2px_8px_rgba(0,0,0,0.35)] ${isLight ? "ring-1 ring-white/[0.06]" : ""}`}
+        className={`rounded-lg border border-white/[0.18] bg-black/25 [&_.ProseMirror_img]:max-h-[min(560px,75vh)] [&_.ProseMirror_img]:max-w-full [&_.ProseMirror_img]:object-contain [&_.ProseMirror_img[data-text-align=center]]:mx-auto [&_.ProseMirror_img[data-text-align=right]]:ml-auto [&_.ProseMirror_img[data-text-align=right]]:mr-0 [&_[data-youtube-video]]:my-4 [&_[data-youtube-video]]:w-full [&_[data-youtube-video]]:max-w-[min(100%,40rem)] [&_[data-youtube-video]_iframe]:aspect-video [&_[data-youtube-video]_iframe]:h-auto [&_[data-youtube-video]_iframe]:w-full [&_[data-youtube-video]_iframe]:rounded-lg [&_[data-resize-handle]]:z-10 [&_[data-resize-handle]]:m-[-6px] [&_[data-resize-handle]]:size-[14px] [&_[data-resize-handle]]:rounded-sm [&_[data-resize-handle]]:border-2 [&_[data-resize-handle]]:border-[rgba(180,140,228,0.95)] [&_[data-resize-handle]]:bg-[rgba(22,12,38,0.92)] [&_[data-resize-handle]]:shadow-[0_2px_8px_rgba(0,0,0,0.35)] ${isLight ? "ring-1 ring-white/[0.06]" : ""}`}
         onPaste={onPasteContainer}
         onDragOver={(e) => e.preventDefault()}
         onDrop={onDropContainer}

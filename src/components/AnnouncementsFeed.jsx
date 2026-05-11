@@ -113,6 +113,7 @@ export function AnnouncementsFeed({ isLight, active }) {
           ADD_ATTR: [
             "style",
             "data-youtube-video",
+            "data-text-align",
             "src",
             "width",
             "height",
@@ -155,7 +156,7 @@ export function AnnouncementsFeed({ isLight, active }) {
               {formatDateTime(detail.published_at)}
             </p>
             <div
-              className="announcement-body max-w-none text-[0.95rem] leading-relaxed text-[#f4f0fa]/92 [&_a]:text-violet-300 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_img]:my-4 [&_img]:max-w-full [&_img]:rounded-lg [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_[data-youtube-video]]:my-5 [&_[data-youtube-video]]:w-full [&_[data-youtube-video]]:max-w-[min(100%,40rem)] [&_[data-youtube-video]_iframe]:aspect-video [&_[data-youtube-video]_iframe]:h-auto [&_[data-youtube-video]_iframe]:w-full [&_[data-youtube-video]_iframe]:rounded-lg [&_[data-youtube-video]_iframe]:border-0"
+              className="announcement-body max-w-none text-[0.95rem] leading-relaxed text-[#f4f0fa]/92 [&_a]:text-violet-300 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_img]:my-4 [&_img]:max-w-full [&_img]:rounded-lg [&_img[data-text-align=center]]:mx-auto [&_img[data-text-align=right]]:ml-auto [&_img[data-text-align=right]]:mr-0 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_[data-youtube-video]]:my-5 [&_[data-youtube-video]]:w-full [&_[data-youtube-video]]:max-w-[min(100%,40rem)] [&_[data-youtube-video]_iframe]:aspect-video [&_[data-youtube-video]_iframe]:h-auto [&_[data-youtube-video]_iframe]:w-full [&_[data-youtube-video]_iframe]:rounded-lg [&_[data-youtube-video]_iframe]:border-0"
               dangerouslySetInnerHTML={{ __html: html }}
             />
           </article>

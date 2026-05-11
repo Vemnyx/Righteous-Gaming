@@ -41,6 +41,8 @@ func sanitizeAnnouncementHTML(raw string) string {
 	p := bluemonday.UGCPolicy()
 	// TipTap resizable images persist numeric width/height on <img>.
 	p.AllowAttrs("width", "height").OnElements("img")
+	// Block image alignment (TipTap TextAlign + custom render; not plain text-align on img).
+	p.AllowAttrs("data-text-align").Matching(regexp.MustCompile(`^(left|center|right)$`)).OnElements("img")
 	p.AllowAttrs("style").Matching(announcementTextAlignStylePattern).OnElements("p", "h2", "h3", "blockquote", "div")
 	// YouTube embeds (TipTap youtube node).
 	p.AllowElements("iframe")
