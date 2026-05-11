@@ -4,6 +4,8 @@ import { useAuth } from "../auth/AuthContext";
 import { UsersAdminTable } from "../components/UsersAdminTable";
 import { CardsCatalog } from "../components/CardsCatalog";
 import { CardDetailPage } from "../components/CardDetailPage";
+import { AnnouncementsFeed } from "../components/AnnouncementsFeed";
+import { AnnouncementsAdmin } from "../components/AnnouncementsAdmin";
 
 /** Persisted before opening Invite User so Back restores the dashboard URL (e.g. `/admin/users`). */
 const SESSION_INVITE_RETURN_KEY = "rg-dashboard-return-url";
@@ -27,7 +29,10 @@ const RESOURCE_SUB_LINKS = [
 ];
 
 /** @type {ResourceSubLink[]} */
-const ADMIN_SUB_LINKS = [{ segment: "users", label: "Users", path: "/admin/users" }];
+const ADMIN_SUB_LINKS = [
+  { segment: "users", label: "Users", path: "/admin/users" },
+  { segment: "announcements", label: "Announcements", path: "/admin/announcements" },
+];
 
 /**
  * @param {string} tabId
@@ -37,7 +42,8 @@ const ADMIN_SUB_LINKS = [{ segment: "users", label: "Users", path: "/admin/users
  */
 function buildDashboardPathname(tabId, resourcesChild, resourcesCardIdentifier, adminChild) {
   if (tabId === ADMIN_TAB_ID) {
-    const seg = adminChild === "users" ? "users" : DEFAULT_ADMIN_SEGMENT;
+    const seg =
+      adminChild === "users" || adminChild === "announcements" ? adminChild : DEFAULT_ADMIN_SEGMENT;
     return `/admin/${seg}`;
   }
   if (tabId === RESOURCES_TAB_ID) {
@@ -144,6 +150,15 @@ function parseDashboardPathname(pathname) {
         resourcesChild: null,
         resourcesCardIdentifier: null,
         adminChild: "users",
+      };
+    }
+    if (b === "announcements" && c === undefined) {
+      return {
+        kind: "ok",
+        tabId: ADMIN_TAB_ID,
+        resourcesChild: null,
+        resourcesCardIdentifier: null,
+        adminChild: "announcements",
       };
     }
     return { kind: "invalid" };
@@ -899,25 +914,30 @@ export default function Dashboard({ onNavigate }) {
           >
             {tab.id === ADMIN_TAB_ID ? (
               adminChild === "users" ? (
-              <UsersAdminTable
-                isLight={isLight}
-                active={activeTab === ADMIN_TAB_ID && adminChild === "users"}
-                onInviteUser={
-                  onNavigate
-                    ? () => {
-                        try {
-                          sessionStorage.setItem(
-                            SESSION_INVITE_RETURN_KEY,
-                            window.location.pathname + window.location.search + window.location.hash,
-                          );
-                        } catch {
-                          /* ignore */
+                <UsersAdminTable
+                  isLight={isLight}
+                  active={activeTab === ADMIN_TAB_ID && adminChild === "users"}
+                  onInviteUser={
+                    onNavigate
+                      ? () => {
+                          try {
+                            sessionStorage.setItem(
+                              SESSION_INVITE_RETURN_KEY,
+                              window.location.pathname + window.location.search + window.location.hash,
+                            );
+                          } catch {
+                            /* ignore */
+                          }
+                          onNavigate("/admin/invite-user");
                         }
-                        onNavigate("/admin/invite-user");
-                      }
-                    : undefined
-                }
-              />
+                      : undefined
+                  }
+                />
+              ) : adminChild === "announcements" ? (
+                <AnnouncementsAdmin
+                  isLight={isLight}
+                  active={activeTab === ADMIN_TAB_ID && adminChild === "announcements"}
+                />
               ) : (
                 <div
                   className="flex min-h-[min(40vh,18rem)] flex-1 flex-col items-center justify-center px-4 text-center"
@@ -955,6 +975,11 @@ export default function Dashboard({ onNavigate }) {
                   <p className="text-[0.9rem] text-[#f4f0fa]/65">Coming soon.</p>
                 </div>
               )
+            ) : tab.id === "announcements" ? (
+              <AnnouncementsFeed
+                isLight={isLight}
+                active={activeTab === "announcements"}
+              />
             ) : (
               <div className="relative flex flex-1 flex-col items-center justify-center px-4 py-8 text-center">
                 <span className={comingSoonGlow} aria-hidden />
