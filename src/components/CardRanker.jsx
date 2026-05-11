@@ -279,7 +279,7 @@ export function CardRanker({ isLight, active }) {
   const starDisabled = `${starBase} cursor-default border-white/[0.18] bg-black/45 text-amber-200/55`;
 
   const arrowNavCls =
-    "mt-10 flex h-[min(14rem,52vh)] min-h-[10.5rem] w-12 shrink-0 items-center justify-center rounded-xl border-2 border-yellow-400/85 bg-yellow-400/18 text-xl font-semibold text-yellow-200 shadow-[0_0_18px_rgba(250,204,21,0.35)] transition-colors hover:border-yellow-300 hover:bg-yellow-400/28 hover:text-yellow-50 disabled:cursor-not-allowed disabled:border-white/20 disabled:bg-black/30 disabled:text-[#f4f0fa]/40 disabled:shadow-none sm:mt-12 sm:w-14 sm:text-2xl";
+    "mt-14 flex h-[min(14rem,52vh)] min-h-[10.5rem] w-12 shrink-0 items-center justify-center rounded-xl border-2 border-yellow-400/85 bg-yellow-400/18 text-xl font-semibold text-yellow-200 shadow-[0_0_18px_rgba(250,204,21,0.35)] transition-colors hover:border-yellow-300 hover:bg-yellow-400/28 hover:text-yellow-50 disabled:cursor-not-allowed disabled:border-white/20 disabled:bg-black/30 disabled:text-[#f4f0fa]/40 disabled:shadow-none sm:mt-16 sm:w-14 sm:text-2xl";
 
   const canSubmit = useMemo(() => {
     if (!user || !current || submitting) return false;
@@ -608,7 +608,7 @@ export function CardRanker({ isLight, active }) {
                       })}
                     </div>
                     <div
-                      className="mt-2 flex min-h-0 w-full max-w-xs touch-pan-y select-none items-center justify-center sm:mt-3 sm:max-w-sm"
+                      className="mt-3 flex min-h-0 w-full max-w-xs touch-pan-y select-none items-center justify-center sm:mt-4 sm:max-w-sm"
                       onPointerDown={onCardSwipePointerDown}
                       onPointerUp={onCardSwipePointerUpOrCancel}
                       onPointerCancel={onCardSwipePointerUpOrCancel}
@@ -664,7 +664,7 @@ export function CardRanker({ isLight, active }) {
                         <>
                           <p className="m-0 text-[0.92rem] font-semibold leading-snug text-[#f4f0fa]">
                             Avg Team Ranking -{" "}
-                            {teamRankings.averageRank != null ? teamRankings.averageRank.toFixed(2) : "—"}
+                            {teamRankings.averageRank != null ? `${teamRankings.averageRank.toFixed(2)}★` : "—"}
                           </p>
                           <div className="max-h-[14rem] min-h-[5rem] overflow-y-auto overscroll-contain rounded-md border border-white/[0.12] bg-black/30 px-2 py-1">
                             {teamRankings.rows.length === 0 ? (
@@ -675,11 +675,12 @@ export function CardRanker({ isLight, active }) {
                                   key={`${row.user_name}-${idx}`}
                                   className="border-b border-white/[0.08] py-2.5 last:border-b-0"
                                 >
-                                  <p className="m-0 text-[0.875rem] font-semibold text-[#f4f0fa]">{row.user_name}</p>
-                                  <p className="m-0 mt-0.5 text-[0.82rem] text-[#f4f0fa]/85">Rating: {row.rank}★ / 5</p>
+                                  <p className="m-0 text-[0.875rem] font-semibold text-[#f4f0fa]">
+                                    {row.user_name} - {row.rank}/5 ★
+                                  </p>
                                   {row.notes != null && String(row.notes).trim() !== "" ? (
-                                    <p className="m-0 mt-1 whitespace-pre-wrap text-[0.8rem] leading-snug text-[#f4f0fa]/72">
-                                      Notes: {row.notes}
+                                    <p className="m-0 mt-3 whitespace-pre-wrap text-[0.8rem] leading-snug text-[#f4f0fa]/72">
+                                      notes: {row.notes}
                                     </p>
                                   ) : null}
                                 </div>
