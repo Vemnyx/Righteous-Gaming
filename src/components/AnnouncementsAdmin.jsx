@@ -3,6 +3,8 @@ import { useAuth } from "../auth/AuthContext";
 import { AnnouncementRichTextEditor } from "./AnnouncementRichTextEditor";
 import { uploadPublicAsset, extFromFilename } from "../utils/uploadPublicAsset";
 
+/** @typedef {null | "new" | number} AnnouncementAdminForm */
+
 /** @param {string | undefined | null} iso */
 function formatDateTime(iso) {
   if (iso == null || iso === "") return "—";
@@ -12,21 +14,31 @@ function formatDateTime(iso) {
 }
 
 /**
- * @param {{ isLight: boolean, active: boolean }} props
+ * @param {{
+ *   isLight: boolean,
+ *   active: boolean,
+ *   announcementForm: AnnouncementAdminForm,
+ *   navigateAnnouncementForm: (next: AnnouncementAdminForm, opts?: { replace?: boolean }) => void,
+ * }} props
  */
-export function AnnouncementsAdmin({ isLight, active }) {
+export function AnnouncementsAdmin({
+  isLight,
+  active,
+  announcementForm,
+  navigateAnnouncementForm,
+}) {
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
   const [listLoading, setListLoading] = useState(false);
   const [listError, setListError] = useState(null);
 
-  /** @type {null | "new" | number} */
-  const [mode, setMode] = useState(null);
   const [newDraftGen, setNewDraftGen] = useState(0);
   const draftFolder = useMemo(() => crypto.randomUUID(), [newDraftGen]);
 
   const [title, setTitle] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState(/** @type {string | null} */ (null));
+  /** When editing an existing announcement, preserves publish visibility on Save. */
+  const [publishedBaseline, setPublishedBaseline] = useState(/** @type {boolean | null} */ (null));
   const [initialHtml, setInitialHtml] = useState("<p></p>");
   const [detailLoading, setDetailLoading] = useState(false);
   const [saveError, setSaveError] = useState(null);
@@ -59,7 +71,7 @@ export function AnnouncementsAdmin({ isLight, active }) {
   }, [user]);
 
   useEffect(() => {
-    if (!active || !user) return undefined;
+    if (!active || !user || announcementForm !== null) return undefined;
     let cancelled = false;
     (async () => {
       if (cancelled) return;
@@ -68,17 +80,30 @@ export function AnnouncementsAdmin({ isLight, active }) {
     return () => {
       cancelled = true;
     };
-  }, [active, user, reloadList]);
+  }, [active, user, reloadList, announcementForm]);
 
   useEffect(() => {
-    if (mode == null || typeof mode !== "number" || !user) return undefined;
+    if (announcementForm !== "new") return;
+    setNewDraftGen((g) => g + 1);
+    setPublishedBaseline(null);
+    setTitle("");
+    setThumbnailUrl(null);
+    setInitialHtml("<p></p>");
+    setSaveError(null);
+    setDetailLoading(false);
+    setEditorNonce((n) => n + 1);
+  }, [announcementForm]);
+
+  useEffect(() => {
+    if (announcementForm == null || typeof announcementForm !== "number" || !user) return undefined;
     let cancelled = false;
     (async () => {
       setDetailLoading(true);
       setSaveError(null);
+      setPublishedBaseline(null);
       try {
         const token = await user.getIdToken();
-        const res = await fetch(`/api/admin/announcements/${mode}`, {
+        const res = await fetch(`/api/admin/announcements/${announcementForm}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error(await res.text());
@@ -86,10 +111,14 @@ export function AnnouncementsAdmin({ isLight, active }) {
         if (cancelled) return;
         setTitle(row.title ?? "");
         setThumbnailUrl(row.thumbnail_url ?? null);
+        setPublishedBaseline(row.published_at != null);
         setInitialHtml(row.body_html && row.body_html.trim() ? row.body_html : "<p></p>");
         setEditorNonce((n) => n + 1);
       } catch (e) {
-        if (!cancelled) setListError(e instanceof Error ? e.message : "Load failed");
+        if (!cancelled) {
+          setListError(e instanceof Error ? e.message : "Load failed");
+          navigateAnnouncementForm(null, { replace: true });
+        }
       } finally {
         if (!cancelled) setDetailLoading(false);
       }
@@ -97,27 +126,11 @@ export function AnnouncementsAdmin({ isLight, active }) {
     return () => {
       cancelled = true;
     };
-  }, [mode, user]);
-
-  const startNew = useCallback(() => {
-    setMode("new");
-    setNewDraftGen((g) => g + 1);
-    setTitle("");
-    setThumbnailUrl(null);
-    setInitialHtml("<p></p>");
-    setSaveError(null);
-    setEditorNonce((n) => n + 1);
-  }, []);
-
-  const openEdit = useCallback((id) => {
-    setMode(id);
-    setSaveError(null);
-  }, []);
+  }, [announcementForm, user, navigateAnnouncementForm]);
 
   const cancelForm = useCallback(() => {
-    setMode(null);
-    setSaveError(null);
-  }, []);
+    navigateAnnouncementForm(null);
+  }, [navigateAnnouncementForm]);
 
   const onThumbFile = useCallback(
     async (e) => {
@@ -128,10 +141,10 @@ export function AnnouncementsAdmin({ isLight, active }) {
       try {
         const ext = extFromFilename(f.name);
         const base =
-          mode === "new"
+          announcementForm === "new"
             ? `announcements/drafts/${draftFolder}`
-            : mode != null && typeof mode === "number"
-              ? `announcements/${mode}`
+            : announcementForm != null && typeof announcementForm === "number"
+              ? `announcements/${announcementForm}`
               : `announcements/drafts/${draftFolder}`;
         const path = `${base}/thumbnail.${ext}`;
         const url = await uploadPublicAsset(getIdToken, path, f);
@@ -140,12 +153,12 @@ export function AnnouncementsAdmin({ isLight, active }) {
         setSaveError(err instanceof Error ? err.message : "Thumbnail upload failed");
       }
     },
-    [draftFolder, getIdToken, mode],
+    [announcementForm, draftFolder, getIdToken],
   );
 
   const submitAnnouncement = useCallback(
-    async (/** @type {boolean} */ wantPublish) => {
-      if (!user) return;
+    async (/** @type {boolean | null} */ wantPublishOrNull) => {
+      if (!user || announcementForm == null) return;
       const t = title.trim();
       if (!t) {
         setSaveError("Title is required.");
@@ -153,15 +166,26 @@ export function AnnouncementsAdmin({ isLight, active }) {
       }
       const bodyHtml = editorRef.current?.getHTML() ?? "";
       setSaveError(null);
+      /** @type {boolean} */
+      let publishedFlag;
+      if (announcementForm === "new") {
+        if (wantPublishOrNull == null) return;
+        publishedFlag = wantPublishOrNull;
+      } else if (typeof announcementForm === "number") {
+        if (publishedBaseline == null || detailLoading) return;
+        publishedFlag = Boolean(publishedBaseline);
+      } else {
+        return;
+      }
       try {
         const token = await user.getIdToken();
         const payload = {
           title: t,
           thumbnail_url: thumbnailUrl,
           body_html: bodyHtml,
-          published: wantPublish,
+          published: publishedFlag,
         };
-        if (mode === "new") {
+        if (announcementForm === "new") {
           const res = await fetch("/api/admin/announcements", {
             method: "POST",
             headers: {
@@ -172,9 +196,9 @@ export function AnnouncementsAdmin({ isLight, active }) {
           });
           if (!res.ok) throw new Error(await res.text());
           await reloadList();
-          setMode(null);
-        } else if (typeof mode === "number") {
-          const res = await fetch(`/api/admin/announcements/${mode}`, {
+          navigateAnnouncementForm(null, { replace: true });
+        } else if (typeof announcementForm === "number") {
+          const res = await fetch(`/api/admin/announcements/${announcementForm}`, {
             method: "PATCH",
             headers: {
               Authorization: `Bearer ${token}`,
@@ -184,13 +208,22 @@ export function AnnouncementsAdmin({ isLight, active }) {
           });
           if (!res.ok) throw new Error(await res.text());
           await reloadList();
-          setMode(null);
+          navigateAnnouncementForm(null, { replace: true });
         }
       } catch (e) {
         setSaveError(e instanceof Error ? e.message : "Save failed");
       }
     },
-    [mode, reloadList, thumbnailUrl, title, user],
+    [
+      announcementForm,
+      detailLoading,
+      navigateAnnouncementForm,
+      publishedBaseline,
+      reloadList,
+      thumbnailUrl,
+      title,
+      user,
+    ],
   );
 
   const btnBase =
@@ -201,10 +234,11 @@ export function AnnouncementsAdmin({ isLight, active }) {
 
   const tableChromeBorder = isLight ? "border-white/[0.12]" : "border-white/[0.24] ring-1 ring-white/[0.05]";
 
-  if (mode !== null) {
+  if (announcementForm !== null) {
+    const isNew = announcementForm === "new";
     const editorKey =
-      mode === "new" ? `new-${draftFolder}-${editorNonce}` : `edit-${mode}-${editorNonce}`;
-    const editingIdForImages = mode === "new" ? null : mode;
+      isNew ? `new-${draftFolder}-${editorNonce}` : `edit-${announcementForm}-${editorNonce}`;
+    const editingIdForImages = isNew ? null : announcementForm;
 
     return (
       <div className="flex min-h-0 w-full flex-col gap-5 text-left">
@@ -213,11 +247,11 @@ export function AnnouncementsAdmin({ isLight, active }) {
             ← Back
           </button>
           <h2 className="m-0 flex-1 text-lg font-semibold text-white">
-            {mode === "new" ? "New announcement" : "Edit announcement"}
+            {isNew ? "New announcement" : "Edit announcement"}
           </h2>
         </div>
 
-        {detailLoading ? (
+        {detailLoading && !isNew ? (
           <p className="text-[0.9rem] text-[#f4f0fa]/65">Loading…</p>
         ) : (
           <>
@@ -281,20 +315,33 @@ export function AnnouncementsAdmin({ isLight, active }) {
             ) : null}
 
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={`${btnBase} ${btnTheme}`}
-                onClick={() => submitAnnouncement(false)}
-              >
-                Save Draft
-              </button>
-              <button
-                type="button"
-                className={`${btnBase} border-[rgba(152,117,207,0.85)] bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] text-white hover:border-[rgba(180,140,228,0.95)] hover:brightness-105`}
-                onClick={() => submitAnnouncement(true)}
-              >
-                Publish
-              </button>
+              {isNew ? (
+                <>
+                  <button
+                    type="button"
+                    className={`${btnBase} ${btnTheme}`}
+                    onClick={() => submitAnnouncement(false)}
+                  >
+                    Save Draft
+                  </button>
+                  <button
+                    type="button"
+                    className={`${btnBase} border-[rgba(152,117,207,0.85)] bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] text-white hover:border-[rgba(180,140,228,0.95)] hover:brightness-105`}
+                    onClick={() => submitAnnouncement(true)}
+                  >
+                    Publish
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className={`${btnBase} ${btnTheme}`}
+                  onClick={() => submitAnnouncement(null)}
+                  disabled={detailLoading || publishedBaseline === null}
+                >
+                  Save
+                </button>
+              )}
             </div>
           </>
         )}
@@ -306,7 +353,7 @@ export function AnnouncementsAdmin({ isLight, active }) {
     <div className="flex min-h-0 w-full flex-col gap-4 text-left">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="m-0 text-lg font-semibold text-white">Announcements</h2>
-        <button type="button" className={`${btnBase} ${btnTheme}`} onClick={startNew}>
+        <button type="button" className={`${btnBase} ${btnTheme}`} onClick={() => navigateAnnouncementForm("new")}>
           New announcement
         </button>
       </div>
@@ -350,7 +397,7 @@ export function AnnouncementsAdmin({ isLight, active }) {
                     <button
                       type="button"
                       className={`${btnBase} ${btnTheme} py-1 text-[0.75rem]`}
-                      onClick={() => openEdit(r.id)}
+                      onClick={() => navigateAnnouncementForm(r.id)}
                     >
                       Edit
                     </button>

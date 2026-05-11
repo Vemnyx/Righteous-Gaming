@@ -21,6 +21,9 @@ const DEFAULT_RESOURCES_SEGMENT = "cards";
 
 const FALLBACK_TAB_ID = "announcements";
 
+/** Admin announcements sub-route: list (`null`), create (`'new'`), or edit numeric id */
+/** @typedef {null | "new" | number} AnnouncementAdminForm */
+
 /** @typedef {{ segment: string, label: string, path: string }} ResourceSubLink */
 /** @type {ResourceSubLink[]} */
 const RESOURCE_SUB_LINKS = [
@@ -39,11 +42,24 @@ const ADMIN_SUB_LINKS = [
  * @param {string | null} resourcesChild — segment after `/resources/`, e.g. `cards`
  * @param {string | null} [resourcesCardIdentifier] — Fab `card_identifier` for `/resources/cards/:id`
  * @param {string | null} [adminChild] — segment after `/admin/`, e.g. `users`
+ * @param {AnnouncementAdminForm} [announcementForm] — announcements list vs `/new` vs `/:id/edit`
  */
-function buildDashboardPathname(tabId, resourcesChild, resourcesCardIdentifier, adminChild) {
+function buildDashboardPathname(
+  tabId,
+  resourcesChild,
+  resourcesCardIdentifier,
+  adminChild,
+  announcementForm = null,
+) {
   if (tabId === ADMIN_TAB_ID) {
     const seg =
       adminChild === "users" || adminChild === "announcements" ? adminChild : DEFAULT_ADMIN_SEGMENT;
+    if (seg === "announcements") {
+      if (announcementForm === "new") return "/admin/announcements/new";
+      if (typeof announcementForm === "number" && announcementForm > 0)
+        return `/admin/announcements/${announcementForm}/edit`;
+      return "/admin/announcements";
+    }
     return `/admin/${seg}`;
   }
   if (tabId === RESOURCES_TAB_ID) {
@@ -63,10 +79,22 @@ function buildDashboardPathname(tabId, resourcesChild, resourcesCardIdentifier, 
   return `/${tabId}`;
 }
 
-function replaceDashboardUrl(tabId, resourcesChild, resourcesCardIdentifier, adminChild) {
+function replaceDashboardUrl(
+  tabId,
+  resourcesChild,
+  resourcesCardIdentifier,
+  adminChild,
+  announcementForm = null,
+) {
   try {
     const u = new URL(window.location.href);
-    u.pathname = buildDashboardPathname(tabId, resourcesChild, resourcesCardIdentifier, adminChild);
+    u.pathname = buildDashboardPathname(
+      tabId,
+      resourcesChild,
+      resourcesCardIdentifier,
+      adminChild,
+      announcementForm,
+    );
     u.search = "";
     const next = `${u.pathname}${u.search}${u.hash}`;
     const cur = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -76,10 +104,22 @@ function replaceDashboardUrl(tabId, resourcesChild, resourcesCardIdentifier, adm
   }
 }
 
-function pushDashboardUrl(tabId, resourcesChild, resourcesCardIdentifier, adminChild) {
+function pushDashboardUrl(
+  tabId,
+  resourcesChild,
+  resourcesCardIdentifier,
+  adminChild,
+  announcementForm = null,
+) {
   try {
     const u = new URL(window.location.href);
-    u.pathname = buildDashboardPathname(tabId, resourcesChild, resourcesCardIdentifier, adminChild);
+    u.pathname = buildDashboardPathname(
+      tabId,
+      resourcesChild,
+      resourcesCardIdentifier,
+      adminChild,
+      announcementForm,
+    );
     u.search = "";
     const next = `${u.pathname}${u.search}${u.hash}`;
     const cur = `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -91,7 +131,7 @@ function pushDashboardUrl(tabId, resourcesChild, resourcesCardIdentifier, adminC
 
 /**
  * @param {string} pathname
- * @returns {{ kind: "empty" } | { kind: "invalid" } | { kind: "ok", tabId: string, resourcesChild: string | null, resourcesCardIdentifier: string | null, adminChild: string | null }}
+ * @returns {{ kind: "empty" } | { kind: "invalid" } | { kind: "ok", tabId: string, resourcesChild: string | null, resourcesCardIdentifier: string | null, adminChild: string | null, adminAnnouncementForm: AnnouncementAdminForm }}
  */
 function parseDashboardPathname(pathname) {
   const parts = pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
@@ -109,6 +149,7 @@ function parseDashboardPathname(pathname) {
           resourcesChild: "cards",
           resourcesCardIdentifier: null,
           adminChild: null,
+          adminAnnouncementForm: null,
         };
       }
       return {
@@ -117,6 +158,7 @@ function parseDashboardPathname(pathname) {
         resourcesChild: "cards",
         resourcesCardIdentifier: decodeURIComponent(c),
         adminChild: null,
+        adminAnnouncementForm: null,
       };
     }
     if (b === "card-ranker") {
@@ -127,13 +169,13 @@ function parseDashboardPathname(pathname) {
         resourcesChild: "card-ranker",
         resourcesCardIdentifier: null,
         adminChild: null,
+        adminAnnouncementForm: null,
       };
     }
     return { kind: "invalid" };
   }
 
   if (a === "admin") {
-    if (rest.length > 0) return { kind: "invalid" };
     if (b === undefined) {
       return {
         kind: "ok",
@@ -141,25 +183,62 @@ function parseDashboardPathname(pathname) {
         resourcesChild: null,
         resourcesCardIdentifier: null,
         adminChild: "users",
+        adminAnnouncementForm: null,
       };
     }
-    if (b === "users" && c === undefined) {
+    if (b === "users") {
+      if (c !== undefined || rest.length > 0) return { kind: "invalid" };
       return {
         kind: "ok",
         tabId: ADMIN_TAB_ID,
         resourcesChild: null,
         resourcesCardIdentifier: null,
         adminChild: "users",
+        adminAnnouncementForm: null,
       };
     }
-    if (b === "announcements" && c === undefined) {
-      return {
-        kind: "ok",
-        tabId: ADMIN_TAB_ID,
-        resourcesChild: null,
-        resourcesCardIdentifier: null,
-        adminChild: "announcements",
-      };
+    if (b === "announcements") {
+      const trail = c === undefined && rest.length === 0 ? [] : [c, ...rest];
+      if (trail.length === 0) {
+        return {
+          kind: "ok",
+          tabId: ADMIN_TAB_ID,
+          resourcesChild: null,
+          resourcesCardIdentifier: null,
+          adminChild: "announcements",
+          adminAnnouncementForm: null,
+        };
+      }
+      if (trail.length === 1 && trail[0] === "new") {
+        return {
+          kind: "ok",
+          tabId: ADMIN_TAB_ID,
+          resourcesChild: null,
+          resourcesCardIdentifier: null,
+          adminChild: "announcements",
+          adminAnnouncementForm: "new",
+        };
+      }
+      if (
+        trail.length === 2 &&
+        trail[1] === "edit" &&
+        String(trail[0]) !== "" &&
+        String(trail[0]) !== "new"
+      ) {
+        const editId = parseInt(String(trail[0]), 10);
+        if (!Number.isFinite(editId) || editId <= 0 || String(editId) !== String(trail[0])) {
+          return { kind: "invalid" };
+        }
+        return {
+          kind: "ok",
+          tabId: ADMIN_TAB_ID,
+          resourcesChild: null,
+          resourcesCardIdentifier: null,
+          adminChild: "announcements",
+          adminAnnouncementForm: editId,
+        };
+      }
+      return { kind: "invalid" };
     }
     return { kind: "invalid" };
   }
@@ -172,6 +251,7 @@ function parseDashboardPathname(pathname) {
       resourcesChild: null,
       resourcesCardIdentifier: null,
       adminChild: "users",
+      adminAnnouncementForm: null,
     };
   }
 
@@ -183,6 +263,7 @@ function parseDashboardPathname(pathname) {
     resourcesChild: null,
     resourcesCardIdentifier: null,
     adminChild: null,
+    adminAnnouncementForm: null,
   };
 }
 
@@ -190,7 +271,7 @@ function parseDashboardPathname(pathname) {
  * @param {string} pathname
  * @param {string} search
  * @param {{ id: string }[]} tabsAllowed
- * @returns {{ tabId: string, resourcesChild: string | null, resourcesCardIdentifier: string | null, adminChild: string | null }}
+ * @returns {{ tabId: string, resourcesChild: string | null, resourcesCardIdentifier: string | null, adminChild: string | null, adminAnnouncementForm: AnnouncementAdminForm }}
  */
 function resolveDashboardLocation(pathname, search, tabsAllowed) {
   const parsed = parseDashboardPathname(pathname);
@@ -201,6 +282,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
       resourcesChild: null,
       resourcesCardIdentifier: null,
       adminChild: null,
+      adminAnnouncementForm: null,
     };
   }
 
@@ -213,6 +295,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
           resourcesChild: null,
           resourcesCardIdentifier: null,
           adminChild: null,
+          adminAnnouncementForm: null,
         };
       }
       if (raw && tabsAllowed.some((t) => t.id === raw)) {
@@ -221,6 +304,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
           resourcesChild: null,
           resourcesCardIdentifier: null,
           adminChild: null,
+          adminAnnouncementForm: null,
         };
       }
     } catch {
@@ -231,10 +315,11 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
       resourcesChild: null,
       resourcesCardIdentifier: null,
       adminChild: null,
+      adminAnnouncementForm: null,
     };
   }
 
-  let { tabId, resourcesChild, resourcesCardIdentifier, adminChild } = parsed;
+  let { tabId, resourcesChild, resourcesCardIdentifier, adminChild, adminAnnouncementForm } = parsed;
 
   if (!tabsAllowed.some((t) => t.id === tabId)) {
     return {
@@ -242,10 +327,11 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
       resourcesChild: null,
       resourcesCardIdentifier: null,
       adminChild: null,
+      adminAnnouncementForm: null,
     };
   }
 
-  return { tabId, resourcesChild, resourcesCardIdentifier, adminChild };
+  return { tabId, resourcesChild, resourcesCardIdentifier, adminChild, adminAnnouncementForm };
 }
 
 /** Matches backend/domain: RoleAdmin = 0, RoleMember = 1 */
@@ -430,6 +516,10 @@ export default function Dashboard({ onNavigate }) {
   );
   /** When `activeTab === admin`, which sub-route is shown (`/admin/...`). */
   const [adminChild, setAdminChild] = useState(/** @type {string | null} */ (null));
+  /** Sub-route under `/admin/announcements` (list vs create vs edit). */
+  const [adminAnnouncementForm, setAdminAnnouncementForm] = useState(
+    /** @type {AnnouncementAdminForm} */ (null),
+  );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileResourcesOpen, setMobileResourcesOpen] = useState(false);
   const [mobileAdminOpen, setMobileAdminOpen] = useState(false);
@@ -463,17 +553,20 @@ export default function Dashboard({ onNavigate }) {
       setResourcesChild(DEFAULT_RESOURCES_SEGMENT);
       setResourcesCardIdentifier(null);
       setAdminChild(null);
-      replaceDashboardUrl(RESOURCES_TAB_ID, DEFAULT_RESOURCES_SEGMENT, null, null);
+      setAdminAnnouncementForm(null);
+      replaceDashboardUrl(RESOURCES_TAB_ID, DEFAULT_RESOURCES_SEGMENT, null, null, null);
     } else if (tabId === ADMIN_TAB_ID) {
       setAdminChild(DEFAULT_ADMIN_SEGMENT);
       setResourcesChild(null);
       setResourcesCardIdentifier(null);
-      replaceDashboardUrl(ADMIN_TAB_ID, null, null, DEFAULT_ADMIN_SEGMENT);
+      setAdminAnnouncementForm(null);
+      replaceDashboardUrl(ADMIN_TAB_ID, null, null, DEFAULT_ADMIN_SEGMENT, null);
     } else {
       setResourcesChild(null);
       setResourcesCardIdentifier(null);
       setAdminChild(null);
-      replaceDashboardUrl(tabId, null, null, null);
+      setAdminAnnouncementForm(null);
+      replaceDashboardUrl(tabId, null, null, null, null);
       setMobileResourcesOpen(false);
       setMobileAdminOpen(false);
     }
@@ -484,7 +577,8 @@ export default function Dashboard({ onNavigate }) {
     setResourcesChild(segment);
     setResourcesCardIdentifier(null);
     setAdminChild(null);
-    replaceDashboardUrl(RESOURCES_TAB_ID, segment, null, null);
+    setAdminAnnouncementForm(null);
+    replaceDashboardUrl(RESOURCES_TAB_ID, segment, null, null, null);
   }, []);
 
   const goAdminSub = useCallback((segment) => {
@@ -492,8 +586,22 @@ export default function Dashboard({ onNavigate }) {
     setAdminChild(segment);
     setResourcesChild(null);
     setResourcesCardIdentifier(null);
-    replaceDashboardUrl(ADMIN_TAB_ID, null, null, segment);
+    setAdminAnnouncementForm(null);
+    replaceDashboardUrl(ADMIN_TAB_ID, null, null, segment, null);
   }, []);
+
+  const navigateAdminAnnouncementForm = useCallback(
+    (/** @type {AnnouncementAdminForm} */ next, options) => {
+      setAdminAnnouncementForm(next);
+      const useReplace = options?.replace === true;
+      if (useReplace) {
+        replaceDashboardUrl(ADMIN_TAB_ID, null, null, "announcements", next);
+      } else {
+        pushDashboardUrl(ADMIN_TAB_ID, null, null, "announcements", next);
+      }
+    },
+    [],
+  );
 
   const openCardDetail = useCallback((identifier) => {
     const id = String(identifier).trim();
@@ -502,7 +610,8 @@ export default function Dashboard({ onNavigate }) {
     setResourcesChild("cards");
     setResourcesCardIdentifier(id);
     setAdminChild(null);
-    pushDashboardUrl(RESOURCES_TAB_ID, "cards", id, null);
+    setAdminAnnouncementForm(null);
+    pushDashboardUrl(RESOURCES_TAB_ID, "cards", id, null, null);
   }, []);
 
   useEffect(() => {
@@ -517,15 +626,21 @@ export default function Dashboard({ onNavigate }) {
       const nextCardId =
         nextTab === RESOURCES_TAB_ID ? resolved.resourcesCardIdentifier : null;
       const nextAdminChild = nextTab === ADMIN_TAB_ID ? resolved.adminChild : null;
+      const nextAnnouncementForm =
+        nextTab === ADMIN_TAB_ID && nextAdminChild === "announcements"
+          ? resolved.adminAnnouncementForm
+          : null;
       setActiveTab(nextTab);
       setResourcesChild(nextChild);
       setResourcesCardIdentifier(nextCardId);
       setAdminChild(nextAdminChild);
+      setAdminAnnouncementForm(nextAnnouncementForm);
       replaceDashboardUrl(
         nextTab,
         nextTab === RESOURCES_TAB_ID ? nextChild : null,
         nextTab === RESOURCES_TAB_ID ? nextCardId : null,
         nextTab === ADMIN_TAB_ID ? nextAdminChild : null,
+        nextAnnouncementForm,
       );
       setMobileResourcesOpen(false);
       setMobileAdminOpen(false);
@@ -937,6 +1052,8 @@ export default function Dashboard({ onNavigate }) {
                 <AnnouncementsAdmin
                   isLight={isLight}
                   active={activeTab === ADMIN_TAB_ID && adminChild === "announcements"}
+                  announcementForm={adminAnnouncementForm}
+                  navigateAnnouncementForm={navigateAdminAnnouncementForm}
                 />
               ) : (
                 <div

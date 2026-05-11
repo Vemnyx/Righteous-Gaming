@@ -1,6 +1,33 @@
 import { useCallback, useEffect, useState } from "react";
 import DOMPurify from "dompurify";
 
+const announcementTextAlignStyle = /^\s*text-align\s*:\s*(left|center|right|justify)\s*;?\s*$/i;
+
+/** Must match backend `announcementYoutubeEmbedSrcPattern` (TipTap youtube embed URLs). */
+const announcementYoutubeEmbedSrc =
+  /^https:\/\/(www\.youtube-nocookie\.com|www\.youtube\.com|youtube\.com)\/embed\/(?:videoseries|[\w-]+)(?:\?[\w&=%.\-]*)?$/i;
+
+let announcementPurifyHooksInstalled = false;
+function ensureAnnouncementPurifyHooks() {
+  if (announcementPurifyHooksInstalled) return;
+  announcementPurifyHooksInstalled = true;
+  DOMPurify.addHook("uponSanitizeAttribute", (node, data) => {
+    if (data.attrName !== "style") return;
+    const v = String(data.attrValue ?? "").trim();
+    if (!announcementTextAlignStyle.test(v)) {
+      data.keepAttr = false;
+    }
+  });
+  DOMPurify.addHook("uponSanitizeElement", (node) => {
+    if (node.nodeName !== "IFRAME") return;
+    const src = node.getAttribute("src")?.trim() ?? "";
+    if (!announcementYoutubeEmbedSrc.test(src)) {
+      node.textContent = "";
+      node.remove();
+    }
+  });
+}
+
 /** @param {string | undefined | null} iso */
 function formatDateTime(iso) {
   if (iso == null || iso === "") return "—";
@@ -78,11 +105,28 @@ export function AnnouncementsFeed({ isLight, active }) {
     : "border border-white/[0.2] bg-[rgba(12,6,22,0.55)] shadow-[0_12px_40px_rgba(0,0,0,0.35)]";
 
   if (detail || detailLoading) {
+    ensureAnnouncementPurifyHooks();
     const html = detail?.body_html
-      ? DOMPurify.sanitize(detail.body_html, { USE_PROFILES: { html: true } })
+      ? DOMPurify.sanitize(detail.body_html, {
+          USE_PROFILES: { html: true },
+          ADD_TAGS: ["iframe"],
+          ADD_ATTR: [
+            "style",
+            "data-youtube-video",
+            "src",
+            "width",
+            "height",
+            "title",
+            "frameborder",
+            "allowfullscreen",
+            "allow",
+            "referrerpolicy",
+            "loading",
+          ],
+        })
       : "";
     return (
-      <div className="flex min-h-0 flex-1 flex-col gap-4 text-left">
+      <div className="-mx-8 -mt-4 flex min-h-0 flex-1 flex-col gap-3 px-3 text-left sm:-mx-10 sm:-mt-6 sm:px-4">
         <button
           type="button"
           onClick={back}
@@ -111,7 +155,7 @@ export function AnnouncementsFeed({ isLight, active }) {
               {formatDateTime(detail.published_at)}
             </p>
             <div
-              className="announcement-body max-w-none text-[0.95rem] leading-relaxed text-[#f4f0fa]/92 [&_a]:text-violet-300 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_img]:my-4 [&_img]:max-w-full [&_img]:rounded-lg [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6"
+              className="announcement-body max-w-none text-[0.95rem] leading-relaxed text-[#f4f0fa]/92 [&_a]:text-violet-300 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_img]:my-4 [&_img]:max-w-full [&_img]:rounded-lg [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_[data-youtube-video]]:my-5 [&_[data-youtube-video]]:w-full [&_[data-youtube-video]]:max-w-[min(100%,40rem)] [&_[data-youtube-video]_iframe]:aspect-video [&_[data-youtube-video]_iframe]:h-auto [&_[data-youtube-video]_iframe]:w-full [&_[data-youtube-video]_iframe]:rounded-lg [&_[data-youtube-video]_iframe]:border-0"
               dangerouslySetInnerHTML={{ __html: html }}
             />
           </article>
@@ -121,7 +165,7 @@ export function AnnouncementsFeed({ isLight, active }) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 text-left">
+    <div className="-mx-8 -mt-4 flex min-h-0 flex-1 flex-col gap-2 px-3 text-left sm:-mx-10 sm:-mt-6 sm:px-4">
       {error ? (
         <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">
           {error}
@@ -132,26 +176,33 @@ export function AnnouncementsFeed({ isLight, active }) {
       ) : items.length === 0 ? (
         <p className="text-[0.9rem] text-[#f4f0fa]/60">No announcements yet.</p>
       ) : (
-        <ul className="m-0 flex list-none flex-col gap-3 p-0">
+        <ul className="m-0 flex w-full list-none flex-col gap-2 p-0">
           {items.map((row) => (
-            <li key={row.id}>
+            <li key={row.id} className="w-full">
               <button
                 type="button"
                 onClick={() => openDetail(row.id)}
-                className={`flex w-full gap-4 rounded-2xl p-4 text-left transition-colors ${cardShell} hover:border-white/30`}
+                className={`flex w-full overflow-hidden rounded-2xl p-0 text-left transition-colors ${cardShell} hover:border-white/30`}
               >
-                {row.thumbnail_url ? (
-                  <img
-                    src={row.thumbnail_url}
-                    alt=""
-                    className="size-20 shrink-0 rounded-lg object-cover sm:size-24"
-                  />
-                ) : (
-                  <div className="size-20 shrink-0 rounded-lg bg-white/5 sm:size-24" aria-hidden />
-                )}
-                <div className="min-w-0 flex-1">
-                  <h3 className="m-0 text-base font-semibold text-white sm:text-lg">{row.title}</h3>
-                  <p className="mt-1 text-[0.78rem] text-[#f4f0fa]/45">
+                <div
+                  className="relative w-32 shrink-0 self-stretch min-h-[6.75rem] overflow-hidden rounded-l-2xl sm:min-h-[7.5rem] sm:w-40 md:w-44 lg:w-48"
+                  aria-hidden={!row.thumbnail_url}
+                >
+                  {row.thumbnail_url ? (
+                    <img
+                      src={row.thumbnail_url}
+                      alt=""
+                      className="absolute inset-0 h-full w-full object-cover object-center"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 bg-white/[0.07]" />
+                  )}
+                </div>
+                <div className="flex min-h-[6.75rem] min-w-0 flex-1 flex-col justify-center gap-1.5 px-5 py-4 sm:min-h-[7.5rem] sm:px-6 sm:py-5">
+                  <h3 className="m-0 text-lg font-semibold leading-snug text-white sm:text-xl md:text-2xl">
+                    {row.title}
+                  </h3>
+                  <p className="m-0 text-[0.95rem] text-[#f4f0fa]/55 sm:text-base md:text-[1.05rem]">
                     {formatPublishedDate(row.published_at)}
                   </p>
                 </div>

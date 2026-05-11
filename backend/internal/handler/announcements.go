@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,18 @@ import (
 
 const righteousAssetsPublicPrefix = "https://storage.googleapis.com/righteous-assets/"
 
+// TipTap TextAlign persists style="text-align: …" on blocks; allow only that property.
+var announcementTextAlignStylePattern = regexp.MustCompile(`(?is)^\s*text-align\s*:\s*(left|center|right|justify)\s*;?\s*$`)
+
+// TipTap @tiptap/extension-youtube renders <div data-youtube-video=""><iframe src="https://…youtube…/embed/…"></iframe></div>
+var announcementYoutubeEmbedSrcPattern = regexp.MustCompile(
+	`(?is)^https://(www\.youtube-nocookie\.com|www\.youtube\.com|youtube\.com)/embed/(videoseries|[a-zA-Z0-9_-]+)(\?[^'\s<>]*)?$`,
+)
+// iframe `allow` feature policy (subset of what YouTube uses).
+var announcementYoutubeIframeAllowPattern = regexp.MustCompile(
+	`(?is)^[\w;:\s\-.]{1,500}$`,
+)
+
 type announcementHTTP struct {
 	app *app.App
 	svc *service.UserService
@@ -28,6 +41,18 @@ func sanitizeAnnouncementHTML(raw string) string {
 	p := bluemonday.UGCPolicy()
 	// TipTap resizable images persist numeric width/height on <img>.
 	p.AllowAttrs("width", "height").OnElements("img")
+	p.AllowAttrs("style").Matching(announcementTextAlignStylePattern).OnElements("p", "h2", "h3", "blockquote", "div")
+	// YouTube embeds (TipTap youtube node).
+	p.AllowElements("iframe")
+	p.AllowAttrs("data-youtube-video").Matching(regexp.MustCompile(`^$`)).OnElements("div")
+	p.AllowAttrs("src").Matching(announcementYoutubeEmbedSrcPattern).OnElements("iframe")
+	p.AllowAttrs("width", "height").Matching(regexp.MustCompile(`^[0-9]+$`)).OnElements("iframe")
+	p.AllowAttrs("title").Matching(regexp.MustCompile(`^[\p{L}\p{N}\s\-_.,'’]{0,240}$`)).OnElements("iframe")
+	p.AllowAttrs("frameborder").Matching(regexp.MustCompile(`^(0|1)$`)).OnElements("iframe")
+	p.AllowAttrs("allowfullscreen").OnElements("iframe")
+	p.AllowAttrs("allow").Matching(announcementYoutubeIframeAllowPattern).OnElements("iframe")
+	p.AllowAttrs("referrerpolicy").Matching(regexp.MustCompile(`(?i)^(no-referrer-when-downgrade|strict-origin-when-cross-origin|origin|no-referrer)$`)).OnElements("iframe")
+	p.AllowAttrs("loading").Matching(regexp.MustCompile(`(?i)^lazy$`)).OnElements("iframe")
 	return p.Sanitize(strings.TrimSpace(raw))
 }
 
