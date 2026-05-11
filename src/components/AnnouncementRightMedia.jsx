@@ -10,6 +10,7 @@ import { youtubeEmbedSrc, youtubeVideoIdFromInput } from "../utils/youtube";
  *   className?: string,
  *   emptyLabel?: string,
  *   flush?: boolean,
+ *   onFlushImageClick?: () => void,
  * }} props
  */
 export function AnnouncementRightMedia({
@@ -18,6 +19,7 @@ export function AnnouncementRightMedia({
   className = "",
   emptyLabel = "No media",
   flush = false,
+  onFlushImageClick,
 }) {
   const vid = youtubeVideoIdFromInput(youtubeUrl ?? "");
 
@@ -62,12 +64,28 @@ export function AnnouncementRightMedia({
   if (imageUrl) {
     if (flush) {
       const flushImageShell = `${flushShell} flex-1 min-h-0 justify-center`.trim();
+      const heroImgInteractive = Boolean(onFlushImageClick);
       return (
         <div className={flushImageShell}>
           <img
             src={imageUrl}
             alt=""
-            className="box-border block h-auto w-full max-w-full min-w-0 shrink-0 object-contain object-center"
+            role={heroImgInteractive ? "button" : undefined}
+            tabIndex={heroImgInteractive ? 0 : undefined}
+            onClick={onFlushImageClick}
+            onKeyDown={
+              heroImgInteractive
+                ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onFlushImageClick();
+                    }
+                  }
+                : undefined
+            }
+            className={`box-border block h-auto w-full max-w-full min-w-0 shrink-0 object-contain object-center ${
+              heroImgInteractive ? "cursor-zoom-in outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55" : ""
+            }`}
           />
         </div>
       );

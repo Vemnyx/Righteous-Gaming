@@ -27,4 +27,4 @@ export function sanitizeAnnouncementBodyHtml(html) {
 
 /** Tailwind applied to sanitized announcement prose (shared feed + admin preview). */
 export const announcementBodyClassName =
-  "announcement-body max-w-none text-[0.95rem] leading-relaxed text-[#f4f0fa]/92 [&_a]:text-violet-300 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_img]:my-4 [&_img]:max-w-full [&_img]:rounded-lg [&_img[data-text-align=center]]:mx-auto [&_img[data-text-align=right]]:ml-auto [&_img[data-text-align=right]]:mr-0 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6";
+  "announcement-body max-w-none text-[0.95rem] leading-relaxed text-[#f4f0fa]/92 [&_a]:text-violet-300 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:font-semibold [&_img]:my-4 [&_img]:max-w-full [&_img]:cursor-zoom-in [&_img]:rounded-lg [&_img[data-text-align=center]]:mx-auto [&_img[data-text-align=right]]:ml-auto [&_img[data-text-align=right]]:mr-0 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6";
