@@ -186,20 +186,20 @@ export function CardRanker({ isLight, active }) {
     : "bg-gradient-to-b from-[rgba(12,6,22,0.88)] via-[rgba(12,6,22,0.72)] to-[rgba(12,6,22,0.9)]";
 
   const inputCls = isLight
-    ? "min-h-[8rem] w-full max-w-full resize-y rounded-lg border border-white/[0.28] bg-black/[0.18] px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 backdrop-blur-[2px] focus:border-purple-400/55"
-    : "min-h-[8rem] w-full max-w-full resize-y rounded-lg border border-white/[0.22] bg-black/[0.22] px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/35 backdrop-blur-[2px] focus:border-purple-400/55";
+    ? "min-h-[8rem] w-full max-w-full resize-y rounded-lg border border-white/[0.32] bg-black/70 px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/45 backdrop-blur-[2px] focus:border-purple-400/55"
+    : "min-h-[8rem] w-full max-w-full resize-y rounded-lg border border-white/[0.28] bg-black/70 px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 backdrop-blur-[2px] focus:border-purple-400/55";
 
   const btnPrimary =
     "rounded-lg border border-white/[0.28] bg-violet-600/90 px-4 py-2.5 text-[0.875rem] font-semibold text-white shadow-md transition-colors hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-45";
 
   const starBase =
-    "flex size-[3.25rem] items-center justify-center rounded-xl border text-[1.35rem] leading-none transition-colors sm:size-14 sm:text-2xl";
-  const starIdle = `${starBase} border-white/[0.2] bg-black/30 text-amber-200/80 hover:border-amber-300/40 hover:bg-black/45`;
-  const starOn = `${starBase} border-amber-300/70 bg-amber-500/30 text-amber-100 shadow-[0_0_14px_rgba(251,191,36,0.45)]`;
-  const starDisabled = `${starBase} cursor-default border-white/[0.12] bg-black/25 text-amber-200/50`;
+    "flex size-16 items-center justify-center rounded-xl border text-[1.6rem] leading-none transition-colors sm:size-[4.5rem] sm:text-3xl";
+  const starIdle = `${starBase} border-white/[0.28] bg-black/55 text-amber-200/90 hover:border-amber-300/55 hover:bg-black/65`;
+  const starOn = `${starBase} border-amber-300/85 bg-amber-500/55 text-amber-50 shadow-[0_0_16px_rgba(251,191,36,0.5)]`;
+  const starDisabled = `${starBase} cursor-default border-white/[0.18] bg-black/45 text-amber-200/55`;
 
   const arrowNavCls =
-    "flex h-[min(14rem,52vh)] min-h-[10.5rem] w-9 shrink-0 items-center justify-center self-center rounded-xl border-2 border-yellow-400/85 bg-yellow-400/18 text-xl font-semibold text-yellow-200 shadow-[0_0_18px_rgba(250,204,21,0.35)] transition-colors hover:border-yellow-300 hover:bg-yellow-400/28 hover:text-yellow-50 disabled:cursor-not-allowed disabled:border-white/20 disabled:bg-black/30 disabled:text-[#f4f0fa]/40 disabled:shadow-none sm:w-10 sm:text-2xl";
+    "flex h-[min(14rem,52vh)] min-h-[10.5rem] w-12 shrink-0 items-center justify-center self-center rounded-xl border-2 border-yellow-400/85 bg-yellow-400/18 text-xl font-semibold text-yellow-200 shadow-[0_0_18px_rgba(250,204,21,0.35)] transition-colors hover:border-yellow-300 hover:bg-yellow-400/28 hover:text-yellow-50 disabled:cursor-not-allowed disabled:border-white/20 disabled:bg-black/30 disabled:text-[#f4f0fa]/40 disabled:shadow-none sm:w-14 sm:text-2xl";
 
   const canSubmit = useMemo(() => {
     if (!user || !current || submitting) return false;
@@ -279,7 +279,7 @@ export function CardRanker({ isLight, active }) {
           />
         </>
       ) : null}
-      <div className="relative z-[1] flex min-h-0 w-full flex-1 flex-col gap-4 p-0">
+      <div className="relative z-[1] flex min-h-0 w-full flex-1 flex-col gap-4 px-4 py-4 sm:px-5 sm:py-5">
         <div className="flex flex-wrap items-center gap-3 self-start">
           <select
             className={selectCls}
@@ -357,12 +357,12 @@ export function CardRanker({ isLight, active }) {
               </div>
             </div>
 
-            <div className="relative flex min-h-[min(18rem,40vh)] min-w-0 flex-1 flex-col items-stretch justify-center lg:basis-0">
+            <div className="relative flex min-h-[min(18rem,40vh)] min-w-0 flex-1 flex-col items-stretch justify-start lg:basis-0">
               {!rankLoading && queue.length === 0 ? (
                 <p className="text-center text-[0.9rem] text-[#f4f0fa]/70">No cards to show for this set and format.</p>
               ) : null}
               {current ? (
-                <div className="flex min-h-0 w-full flex-1 items-stretch justify-center gap-0.5 sm:gap-1">
+                <div className="flex min-h-0 w-full flex-1 items-start justify-center gap-0.5 sm:gap-1">
                   <button
                     type="button"
                     onClick={goPrev}
@@ -372,8 +372,8 @@ export function CardRanker({ isLight, active }) {
                   >
                     <span aria-hidden>←</span>
                   </button>
-                  <div className="flex min-h-0 min-w-0 max-w-[min(100%,22rem)] flex-1 flex-col items-center justify-center gap-4 px-0.5 sm:max-w-sm sm:px-1">
-                    <div className="flex w-full max-w-md justify-center gap-2 sm:gap-2.5" role="group" aria-label="Star rating 1 to 5">
+                  <div className="flex min-h-0 min-w-0 max-w-[min(100%,22rem)] flex-1 flex-col items-center justify-start gap-1.5 px-0.5 sm:max-w-sm sm:gap-2 sm:px-1">
+                    <div className="flex w-full max-w-md justify-center gap-2.5 sm:gap-3" role="group" aria-label="Star rating 1 to 5">
                       {[1, 2, 3, 4, 5].map((n) => {
                         const locked = current.kind === "ranked";
                         const cap = locked ? current.rank : draftRank;
@@ -382,7 +382,7 @@ export function CardRanker({ isLight, active }) {
                         const starClass = locked
                           ? filled
                             ? `${starOn} cursor-default opacity-95`
-                            : `${starDisabled} opacity-40`
+                            : `${starDisabled} opacity-55`
                           : filled
                             ? starOn
                             : starIdle;
