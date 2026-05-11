@@ -25,6 +25,7 @@ type UserCardRankingWithCard struct {
 }
 
 // ListUserCardRankingsWithCards returns ranked rows with full card rows for the user, set, and format.
+// Basic-rarity cards are omitted (they are not part of the ranking experience).
 func (r *Repository) ListUserCardRankingsWithCards(ctx context.Context, userID, setID int, format int16) ([]UserCardRankingWithCard, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
@@ -36,6 +37,7 @@ FROM user_card_rankings r
 INNER JOIN cards c ON c.id = r.card_id
 INNER JOIN sets s ON s.id = c.set_id
 WHERE r.user_id = $1 AND r.set_id = $2 AND r.format = $3
+  AND (c.rarity IS NULL OR c.rarity <> 0)
 ORDER BY r.rank ASC, r.card_id ASC`
 	rows, err := r.pool.Query(ctx, q, userID, setID, format)
 	if err != nil {
@@ -151,6 +153,7 @@ WHERE user_id = $1 AND set_id = $2 AND card_id = $3 AND format = $4`
 
 // ListUnrankedCardsForUserSetFormat returns cards in the set that include the format in their
 // formats array and have no user_card_rankings row for this user, set, and format.
+// Basic-rarity cards (rarity = 0, domain.CardRarityBasic) are omitted.
 func (r *Repository) ListUnrankedCardsForUserSetFormat(ctx context.Context, userID, setID int, format int16) ([]Card, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
@@ -158,6 +161,7 @@ func (r *Repository) ListUnrankedCardsForUserSetFormat(ctx context.Context, user
 	q := cardSelectJoinSet + `
 WHERE c.set_id = $1
   AND $2::smallint = ANY (c.formats)
+  AND (c.rarity IS NULL OR c.rarity <> 0)
   AND NOT EXISTS (
     SELECT 1 FROM user_card_rankings r
     WHERE r.user_id = $3 AND r.set_id = $1 AND r.format = $2 AND r.card_id = c.id

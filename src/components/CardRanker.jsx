@@ -185,17 +185,21 @@ export function CardRanker({ isLight, active }) {
     ? "bg-gradient-to-b from-[#2d2a38]/88 via-[#2d2a38]/72 to-[#2d2a38]/85"
     : "bg-gradient-to-b from-[rgba(12,6,22,0.88)] via-[rgba(12,6,22,0.72)] to-[rgba(12,6,22,0.9)]";
 
-  const inputCls =
-    "min-h-[8rem] w-full max-w-full resize-y rounded-lg border border-white/[0.22] bg-black/40 px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/35 focus:border-purple-400/55";
+  const inputCls = isLight
+    ? "min-h-[8rem] w-full max-w-full resize-y rounded-lg border border-white/[0.28] bg-black/[0.18] px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 backdrop-blur-[2px] focus:border-purple-400/55"
+    : "min-h-[8rem] w-full max-w-full resize-y rounded-lg border border-white/[0.22] bg-black/[0.22] px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/35 backdrop-blur-[2px] focus:border-purple-400/55";
 
   const btnPrimary =
     "rounded-lg border border-white/[0.28] bg-violet-600/90 px-4 py-2.5 text-[0.875rem] font-semibold text-white shadow-md transition-colors hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-45";
 
   const starBase =
-    "flex size-11 items-center justify-center rounded-lg border text-lg leading-none transition-colors sm:size-12 sm:text-xl";
+    "flex size-[3.25rem] items-center justify-center rounded-xl border text-[1.35rem] leading-none transition-colors sm:size-14 sm:text-2xl";
   const starIdle = `${starBase} border-white/[0.2] bg-black/30 text-amber-200/80 hover:border-amber-300/40 hover:bg-black/45`;
-  const starOn = `${starBase} border-amber-300/60 bg-amber-500/25 text-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.35)]`;
+  const starOn = `${starBase} border-amber-300/70 bg-amber-500/30 text-amber-100 shadow-[0_0_14px_rgba(251,191,36,0.45)]`;
   const starDisabled = `${starBase} cursor-default border-white/[0.12] bg-black/25 text-amber-200/50`;
+
+  const arrowNavCls =
+    "flex h-[min(14rem,52vh)] min-h-[10.5rem] w-9 shrink-0 items-center justify-center self-center rounded-xl border-2 border-yellow-400/85 bg-yellow-400/18 text-xl font-semibold text-yellow-200 shadow-[0_0_18px_rgba(250,204,21,0.35)] transition-colors hover:border-yellow-300 hover:bg-yellow-400/28 hover:text-yellow-50 disabled:cursor-not-allowed disabled:border-white/20 disabled:bg-black/30 disabled:text-[#f4f0fa]/40 disabled:shadow-none sm:w-10 sm:text-2xl";
 
   const canSubmit = useMemo(() => {
     if (!user || !current || submitting) return false;
@@ -258,12 +262,12 @@ export function CardRanker({ isLight, active }) {
       : null;
 
   return (
-    <div className="relative flex min-h-0 w-full min-h-[min(52vh,28rem)] flex-1 flex-col overflow-hidden rounded-xl text-left">
+    <div className="relative flex min-h-0 w-full min-h-[min(52vh,28rem)] flex-1 flex-col overflow-hidden rounded-2xl text-left">
       {setBgUrl ? (
         <>
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 z-0 rounded-xl bg-center bg-no-repeat"
+            className="pointer-events-none absolute inset-0 z-0 rounded-2xl bg-center bg-no-repeat"
             style={{
               backgroundImage: `url(${JSON.stringify(setBgUrl)})`,
               backgroundSize: "100% 100%",
@@ -271,11 +275,11 @@ export function CardRanker({ isLight, active }) {
           />
           <div
             aria-hidden
-            className={`pointer-events-none absolute inset-0 z-0 rounded-xl ${bgScrim}`}
+            className={`pointer-events-none absolute inset-0 z-0 rounded-2xl ${bgScrim}`}
           />
         </>
       ) : null}
-      <div className="relative z-[1] flex min-h-0 w-full flex-1 flex-col gap-4 px-4 py-4 sm:px-5 sm:py-5">
+      <div className="relative z-[1] flex min-h-0 w-full flex-1 flex-col gap-4 p-0">
         <div className="flex flex-wrap items-center gap-3 self-start">
           <select
             className={selectCls}
@@ -319,33 +323,38 @@ export function CardRanker({ isLight, active }) {
           <p className="text-[0.9rem] text-[#f4f0fa]/75">Sign in to rank cards for this set and format.</p>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row lg:items-stretch lg:gap-6">
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 lg:basis-0">
-              <label className="flex flex-col gap-2">
-                <span className="sr-only">Notes</span>
-                <textarea
-                  className={inputCls}
-                  value={draftNotes}
-                  onChange={(e) => setDraftNotes(e.target.value)}
-                  placeholder="Notes (optional)"
-                  maxLength={2048}
-                  rows={6}
-                  disabled={!current}
-                />
-              </label>
-              <button type="button" className={btnPrimary} disabled={!canSubmit} onClick={() => void submitRanking()}>
-                {submitting ? "Saving…" : current?.kind === "ranked" ? "Save notes" : "Submit ranking"}
-              </button>
-              {saveError ? (
-                <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">
-                  {saveError}
-                </p>
-              ) : null}
-              {rankError ? (
-                <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">
-                  {rankError}
-                </p>
-              ) : null}
-              {rankLoading ? <p className="text-[0.9rem] text-[#f4f0fa]/80">Loading cards…</p> : null}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:basis-0">
+              <div className="flex min-h-0 flex-1 flex-col gap-3">
+                {rankLoading ? <p className="text-[0.9rem] text-[#f4f0fa]/80">Loading cards…</p> : null}
+                <div className="min-h-0 flex-1" aria-hidden />
+              </div>
+              <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-white/[0.12] pt-4">
+                <label className="flex flex-col gap-2">
+                  <span className="sr-only">Notes</span>
+                  <textarea
+                    className={inputCls}
+                    value={draftNotes}
+                    onChange={(e) => setDraftNotes(e.target.value)}
+                    placeholder="Notes (optional)"
+                    maxLength={2048}
+                    rows={6}
+                    disabled={!current}
+                  />
+                </label>
+                <button type="button" className={btnPrimary} disabled={!canSubmit} onClick={() => void submitRanking()}>
+                  {submitting ? "Saving…" : current?.kind === "ranked" ? "Save notes" : "Submit ranking"}
+                </button>
+                {saveError ? (
+                  <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">
+                    {saveError}
+                  </p>
+                ) : null}
+                {rankError ? (
+                  <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">
+                    {rankError}
+                  </p>
+                ) : null}
+              </div>
             </div>
 
             <div className="relative flex min-h-[min(18rem,40vh)] min-w-0 flex-1 flex-col items-stretch justify-center lg:basis-0">
@@ -353,28 +362,28 @@ export function CardRanker({ isLight, active }) {
                 <p className="text-center text-[0.9rem] text-[#f4f0fa]/70">No cards to show for this set and format.</p>
               ) : null}
               {current ? (
-                <div className="flex min-h-0 w-full flex-1 items-stretch gap-2 sm:gap-3">
+                <div className="flex min-h-0 w-full flex-1 items-stretch justify-center gap-0.5 sm:gap-1">
                   <button
                     type="button"
                     onClick={goPrev}
                     disabled={cardIndex <= 0 || rankLoading}
-                    className="flex shrink-0 items-center justify-center self-center rounded-lg border border-white/[0.2] bg-black/35 px-2 py-6 text-[#f4f0fa] transition-colors hover:bg-black/50 disabled:cursor-not-allowed disabled:opacity-35 sm:px-3"
+                    className={arrowNavCls}
                     aria-label="Previous card"
                   >
-                    <span className="text-lg" aria-hidden>
-                      ←
-                    </span>
+                    <span aria-hidden>←</span>
                   </button>
-                  <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-4">
+                  <div className="flex min-h-0 min-w-0 max-w-[min(100%,22rem)] flex-1 flex-col items-center justify-center gap-4 px-0.5 sm:max-w-sm sm:px-1">
                     <div className="flex w-full max-w-md justify-center gap-2 sm:gap-2.5" role="group" aria-label="Star rating 1 to 5">
                       {[1, 2, 3, 4, 5].map((n) => {
-                        const selected = draftRank === n;
                         const locked = current.kind === "ranked";
+                        const cap = locked ? current.rank : draftRank;
+                        const filled = cap != null && cap >= 1 && cap <= 5 && n <= cap;
+                        const isExact = cap === n;
                         const starClass = locked
-                          ? selected
+                          ? filled
                             ? `${starOn} cursor-default opacity-95`
                             : `${starDisabled} opacity-40`
-                          : selected
+                          : filled
                             ? starOn
                             : starIdle;
                         return (
@@ -382,7 +391,7 @@ export function CardRanker({ isLight, active }) {
                             key={n}
                             type="button"
                             disabled={locked || rankLoading}
-                            aria-pressed={selected}
+                            aria-pressed={isExact}
                             aria-label={`${n} star${n === 1 ? "" : "s"}`}
                             className={starClass}
                             onClick={() => setDraftRank(n)}
@@ -417,12 +426,10 @@ export function CardRanker({ isLight, active }) {
                     type="button"
                     onClick={goNext}
                     disabled={cardIndex >= queue.length - 1 || rankLoading}
-                    className="flex shrink-0 items-center justify-center self-center rounded-lg border border-white/[0.2] bg-black/35 px-2 py-6 text-[#f4f0fa] transition-colors hover:bg-black/50 disabled:cursor-not-allowed disabled:opacity-35 sm:px-3"
+                    className={arrowNavCls}
                     aria-label="Next card"
                   >
-                    <span className="text-lg" aria-hidden>
-                      →
-                    </span>
+                    <span aria-hidden>→</span>
                   </button>
                 </div>
               ) : null}

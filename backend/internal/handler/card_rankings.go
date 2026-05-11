@@ -65,6 +65,17 @@ func cardPlaysFormat(c *repository.Card, format int16) bool {
 	return slices.Contains(c.Formats, format)
 }
 
+// cardExcludedFromRankings is true for Basic rarity (domain.CardRarityBasic = 0). NULL rarity is allowed.
+func cardExcludedFromRankings(c *repository.Card) bool {
+	if c == nil {
+		return true
+	}
+	if c.Rarity == nil {
+		return false
+	}
+	return *c.Rarity == int16(domain.CardRarityBasic)
+}
+
 func (h *cardRankingsHTTP) sessionUser(w http.ResponseWriter, r *http.Request) (*domain.User, bool) {
 	idToken := bearerIDToken(r.Header.Get("Authorization"))
 	if idToken == "" {
@@ -233,6 +244,10 @@ func (h *cardRankingsHTTP) saveMyRanking(w http.ResponseWriter, r *http.Request)
 	}
 	if !cardPlaysFormat(card, body.Format) {
 		writeFieldError(w, http.StatusBadRequest, "format", "card is not legal in this format")
+		return
+	}
+	if cardExcludedFromRankings(card) {
+		writeFieldError(w, http.StatusBadRequest, "card_id", "basic rarity cards cannot be ranked")
 		return
 	}
 

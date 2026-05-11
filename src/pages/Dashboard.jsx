@@ -1022,7 +1022,11 @@ export default function Dashboard({ onNavigate }) {
           <Tabs.Content
             key={tab.id}
             value={tab.id}
-            className={`relative z-0 flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl border p-8 outline-none sm:p-10 focus-visible:ring-2 focus-visible:ring-purple-500/50 ${
+            className={`relative z-0 flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl border outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 ${
+              tab.id === RESOURCES_TAB_ID && resourcesChild === "card-ranker"
+                ? "p-0 sm:p-0"
+                : "p-8 sm:p-10"
+            } ${
               isLight
                 ? "border-white/[0.12] bg-gradient-to-b from-[#434054] via-[#353145] to-[#292433] shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
                 : "border-white/[0.26] bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.06]"
