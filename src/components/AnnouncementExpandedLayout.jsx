@@ -10,7 +10,7 @@ function formatDateTime(iso) {
 }
 
 /**
- * Expanded announcement layout (public tab): title + datetime + body on the left; hero media flush right.
+ * Expanded announcement layout (public tab): title + datetime + body on the left; hero media on the right. At lg+, columns share width evenly (50/50).
  *
  * @param {{
  *   title: string,
@@ -37,7 +37,7 @@ export function AnnouncementExpandedLayout({
 
   return (
     <div className="flex min-h-[min(28rem,72vh)] flex-col lg:min-h-[min(24rem,62vh)] lg:flex-row lg:items-stretch">
-      <div className="flex min-w-0 flex-1 flex-col gap-3 px-4 py-5 sm:px-6 sm:py-6 lg:max-w-[min(100%,36rem)] lg:shrink-0 lg:basis-[52%] lg:py-7 xl:max-w-[min(100%,40rem)] xl:px-8">
+      <div className="flex min-w-0 flex-1 flex-col gap-3 px-4 py-5 sm:px-6 sm:py-6 lg:basis-0 lg:py-7 xl:px-8">
         <div className="min-w-0">
           <h2 className="m-0 text-xl font-bold tracking-tight text-white sm:text-2xl">
             {title.trim() || "Untitled"}
@@ -46,7 +46,7 @@ export function AnnouncementExpandedLayout({
         </div>
         <div className={announcementBodyClassName} dangerouslySetInnerHTML={{ __html: safeBody }} />
       </div>
-      <div className="relative flex min-h-[14rem] min-w-0 flex-1 flex-col self-stretch lg:min-h-0">
+      <div className="relative flex min-h-[14rem] w-full min-w-0 max-w-full flex-1 flex-col self-stretch overflow-hidden lg:basis-0 lg:min-h-0">
         <AnnouncementRightMedia
           flush
           youtubeUrl={youtubeUrl}
