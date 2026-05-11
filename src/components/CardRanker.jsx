@@ -37,7 +37,7 @@ function matchRankerCatalogSet(list) {
 function cardJumpOptionLabel(entry) {
   const name = String(entry.card.name ?? "").trim() || `Card ${entry.card.id}`;
   const dot = pitchDot(entry.card);
-  return dot ? `${dot} ${name}` : name;
+  return dot ? `${name} ${dot}` : name;
 }
 
 /** @param {RankerCard} card */
@@ -262,12 +262,12 @@ export function CardRanker({ isLight, active }) {
     : "min-h-[8rem] w-full max-w-full resize-y rounded-lg border border-white/[0.28] bg-black/70 px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 backdrop-blur-[2px] focus:border-purple-400/55";
 
   const teamPanelCls = isLight
-    ? "flex min-h-[11rem] flex-1 flex-col gap-2 rounded-lg border border-white/[0.24] bg-black/35 px-3 py-3 text-[0.9rem] text-[#f4f0fa] shadow-sm"
-    : "flex min-h-[11rem] flex-1 flex-col gap-2 rounded-lg border border-white/[0.16] bg-black/45 px-3 py-3 text-[0.9rem] text-[#f4f0fa] shadow-sm";
+    ? "mb-4 flex min-h-[11rem] flex-1 flex-col gap-2 rounded-lg border border-white/[0.24] bg-black/35 px-3 py-3 text-[0.9rem] text-[#f4f0fa] shadow-sm"
+    : "mb-4 flex min-h-[11rem] flex-1 flex-col gap-2 rounded-lg border border-white/[0.16] bg-black/45 px-3 py-3 text-[0.9rem] text-[#f4f0fa] shadow-sm";
 
   const cardJumpSelectCls = isLight
-    ? "mb-3 w-full max-w-md rounded-lg border border-white/[0.24] bg-[#4a4658]/95 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55 sm:mb-4"
-    : "mb-3 w-full max-w-md rounded-lg border border-white/[0.22] bg-black/50 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55 sm:mb-4";
+    ? "mb-5 w-full max-w-md rounded-lg border border-white/[0.24] bg-[#4a4658]/95 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55 sm:mb-6"
+    : "mb-5 w-full max-w-md rounded-lg border border-white/[0.22] bg-black/50 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55 sm:mb-6";
 
   const btnPrimary =
     "rounded-lg border border-white/[0.28] bg-violet-600/90 px-4 py-2.5 text-[0.875rem] font-semibold text-white shadow-md transition-colors hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-45";
@@ -279,7 +279,7 @@ export function CardRanker({ isLight, active }) {
   const starDisabled = `${starBase} cursor-default border-white/[0.18] bg-black/45 text-amber-200/55`;
 
   const arrowNavCls =
-    "mt-8 flex h-[min(14rem,52vh)] min-h-[10.5rem] w-12 shrink-0 items-center justify-center rounded-xl border-2 border-yellow-400/85 bg-yellow-400/18 text-xl font-semibold text-yellow-200 shadow-[0_0_18px_rgba(250,204,21,0.35)] transition-colors hover:border-yellow-300 hover:bg-yellow-400/28 hover:text-yellow-50 disabled:cursor-not-allowed disabled:border-white/20 disabled:bg-black/30 disabled:text-[#f4f0fa]/40 disabled:shadow-none sm:mt-10 sm:w-14 sm:text-2xl";
+    "mt-10 flex h-[min(14rem,52vh)] min-h-[10.5rem] w-12 shrink-0 items-center justify-center rounded-xl border-2 border-yellow-400/85 bg-yellow-400/18 text-xl font-semibold text-yellow-200 shadow-[0_0_18px_rgba(250,204,21,0.35)] transition-colors hover:border-yellow-300 hover:bg-yellow-400/28 hover:text-yellow-50 disabled:cursor-not-allowed disabled:border-white/20 disabled:bg-black/30 disabled:text-[#f4f0fa]/40 disabled:shadow-none sm:mt-12 sm:w-14 sm:text-2xl";
 
   const canSubmit = useMemo(() => {
     if (!user || !current || submitting) return false;
@@ -649,7 +649,7 @@ export function CardRanker({ isLight, active }) {
                   {!current ? (
                     <p className="m-0 text-[0.88rem] leading-snug text-[#f4f0fa]/65">Team rankings will appear here for the current card.</p>
                   ) : current.kind === "pending" ? (
-                    <p className="m-0 text-[0.88rem] leading-snug text-[#f4f0fa]/80">
+                    <p className="m-0 text-[0.98rem] font-semibold leading-snug text-[#f4f0fa]/88">
                       Team rankings are hidden until you submit your ranking for this card.
                     </p>
                   ) : (
