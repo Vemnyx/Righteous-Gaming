@@ -506,7 +506,7 @@ export function AnnouncementsAdmin({
                       onClick={() => setPreviewOpen(false)}
                     />
                     <div
-                      className={`relative z-[1] flex w-full max-w-[92rem] max-h-[min(92vh,900px)] flex-col overflow-hidden rounded-2xl ${previewModalShell}`}
+                      className={`relative z-[1] flex w-[min(100%,80vw)] max-h-[min(92vh,900px)] flex-col overflow-hidden rounded-2xl ${previewModalShell}`}
                     >
                       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
                         <AnnouncementExpandedLayout

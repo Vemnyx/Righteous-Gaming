@@ -72,7 +72,11 @@ export function AnnouncementsFeed({ isLight, active }) {
             const expanded = expandedId === row.id;
             return (
               <li key={row.id} className="w-full">
-                <div className={`overflow-hidden rounded-2xl ${cardShell}`}>
+                <div
+                  className={`rounded-2xl ${cardShell} ${
+                    expanded ? "overflow-x-hidden overflow-y-visible" : "overflow-hidden"
+                  }`}
+                >
                   {!expanded ? (
                     <button
                       type="button"
