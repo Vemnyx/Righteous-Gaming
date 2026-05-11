@@ -302,6 +302,10 @@ func (h *announcementHTTP) adminCreate(w http.ResponseWriter, r *http.Request) {
 	html := sanitizeAnnouncementHTML(body.BodyHTML)
 	img := sanitizeImageURL(body.ImageURL)
 	yt := sanitizeYoutubeURL(body.YoutubeURL)
+	if img == nil && yt == nil {
+		writeFieldError(w, http.StatusBadRequest, "image_url", "a hero image or youtube_url is required")
+		return
+	}
 	in := repository.CreateAnnouncementInput{
 		Title:       title,
 		ImageURL:    img,
@@ -355,6 +359,10 @@ func (h *announcementHTTP) adminUpdate(w http.ResponseWriter, r *http.Request) {
 	html := sanitizeAnnouncementHTML(body.BodyHTML)
 	img := sanitizeImageURL(body.ImageURL)
 	yt := sanitizeYoutubeURL(body.YoutubeURL)
+	if img == nil && yt == nil {
+		writeFieldError(w, http.StatusBadRequest, "image_url", "a hero image or youtube_url is required")
+		return
+	}
 	in := repository.UpdateAnnouncementInput{
 		Title:       title,
 		ImageURL:    img,

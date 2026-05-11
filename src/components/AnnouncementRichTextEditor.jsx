@@ -268,86 +268,90 @@ export const AnnouncementRichTextEditor = forwardRef(function AnnouncementRichTe
     <>
     <div className="flex flex-col gap-2">
       <div
-        className={`flex flex-wrap gap-1 rounded-lg border p-1.5 ${ts}`}
+        className={`flex w-full flex-wrap items-center gap-1 rounded-lg border p-1.5 ${ts}`}
         role="toolbar"
         aria-label="Formatting"
       >
-        <button
-          type="button"
-          className={toolbarBtnClass(editor.isActive("bold"), isLight, ts)}
-          onClick={() => editor.chain().focus().toggleBold().run()}
-          aria-pressed={editor.isActive("bold")}
-          title={editor.isActive("bold") ? "Bold — on (click to turn off)" : "Bold — off"}
-        >
-          Bold
-        </button>
-        <button
-          type="button"
-          className={toolbarBtnClass(editor.isActive("italic"), isLight, ts)}
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-          aria-pressed={editor.isActive("italic")}
-          title={editor.isActive("italic") ? "Italic — on" : "Italic — off"}
-        >
-          Italic
-        </button>
-        <button
-          type="button"
-          className={toolbarBtnClass(editor.isActive("underline"), isLight, ts)}
-          onClick={() => editor.chain().focus().toggleUnderline().run()}
-          aria-pressed={editor.isActive("underline")}
-          title={editor.isActive("underline") ? "Underline — on" : "Underline — off"}
-        >
-          Underline
-        </button>
-        <button
-          type="button"
-          className={toolbarBtnClass(editor.isActive("heading", { level: 2 }), isLight, ts)}
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          aria-pressed={editor.isActive("heading", { level: 2 })}
-          title={
-            editor.isActive("heading", { level: 2 })
-              ? "Heading — on"
-              : "Heading — off"
-          }
-        >
-          H2
-        </button>
-        <button
-          type="button"
-          className={toolbarBtnClass(currentTextAlign(editor) === "left", isLight, ts)}
-          onClick={() => editor.chain().focus().setTextAlign("left").run()}
-          aria-pressed={currentTextAlign(editor) === "left"}
-          title="Align left"
-        >
-          Left
-        </button>
-        <button
-          type="button"
-          className={toolbarBtnClass(currentTextAlign(editor) === "center", isLight, ts)}
-          onClick={() => editor.chain().focus().setTextAlign("center").run()}
-          aria-pressed={currentTextAlign(editor) === "center"}
-          title="Align center"
-        >
-          Center
-        </button>
-        <button
-          type="button"
-          className={toolbarBtnClass(currentTextAlign(editor) === "right", isLight, ts)}
-          onClick={() => editor.chain().focus().setTextAlign("right").run()}
-          aria-pressed={currentTextAlign(editor) === "right"}
-          title="Align right"
-        >
-          Right
-        </button>
-        <button
-          type="button"
-          className={toolbarBtnClass(editor.isActive("link"), isLight, ts)}
-          onClick={openLinkModal}
-          aria-pressed={editor.isActive("link")}
-          title={editor.isActive("link") ? "Link — applied to selection" : "Add link"}
-        >
-          Link
-        </button>
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
+          <button
+            type="button"
+            className={toolbarBtnClass(editor.isActive("bold"), isLight, ts)}
+            onClick={() => editor.chain().focus().toggleBold().run()}
+            aria-pressed={editor.isActive("bold")}
+            title={editor.isActive("bold") ? "Bold — on (click to turn off)" : "Bold — off"}
+          >
+            Bold
+          </button>
+          <button
+            type="button"
+            className={toolbarBtnClass(editor.isActive("italic"), isLight, ts)}
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+            aria-pressed={editor.isActive("italic")}
+            title={editor.isActive("italic") ? "Italic — on" : "Italic — off"}
+          >
+            Italic
+          </button>
+          <button
+            type="button"
+            className={toolbarBtnClass(editor.isActive("underline"), isLight, ts)}
+            onClick={() => editor.chain().focus().toggleUnderline().run()}
+            aria-pressed={editor.isActive("underline")}
+            title={editor.isActive("underline") ? "Underline — on" : "Underline — off"}
+          >
+            Underline
+          </button>
+          <button
+            type="button"
+            className={toolbarBtnClass(editor.isActive("heading", { level: 2 }), isLight, ts)}
+            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+            aria-pressed={editor.isActive("heading", { level: 2 })}
+            title={
+              editor.isActive("heading", { level: 2 })
+                ? "Heading — on"
+                : "Heading — off"
+            }
+          >
+            H2
+          </button>
+          <button
+            type="button"
+            className={toolbarBtnClass(editor.isActive("link"), isLight, ts)}
+            onClick={openLinkModal}
+            aria-pressed={editor.isActive("link")}
+            title={editor.isActive("link") ? "Link — applied to selection" : "Add link"}
+          >
+            Link
+          </button>
+        </div>
+        <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1" role="group" aria-label="Text alignment">
+          <button
+            type="button"
+            className={toolbarBtnClass(currentTextAlign(editor) === "left", isLight, ts)}
+            onClick={() => editor.chain().focus().setTextAlign("left").run()}
+            aria-pressed={currentTextAlign(editor) === "left"}
+            title="Align left"
+          >
+            Left
+          </button>
+          <button
+            type="button"
+            className={toolbarBtnClass(currentTextAlign(editor) === "center", isLight, ts)}
+            onClick={() => editor.chain().focus().setTextAlign("center").run()}
+            aria-pressed={currentTextAlign(editor) === "center"}
+            title="Align center"
+          >
+            Center
+          </button>
+          <button
+            type="button"
+            className={toolbarBtnClass(currentTextAlign(editor) === "right", isLight, ts)}
+            onClick={() => editor.chain().focus().setTextAlign("right").run()}
+            aria-pressed={currentTextAlign(editor) === "right"}
+            title="Align right"
+          >
+            Right
+          </button>
+        </div>
       </div>
       <div
         className={`rounded-lg border border-white/[0.18] bg-black/25 [&_.ProseMirror_img]:max-h-[min(560px,75vh)] [&_.ProseMirror_img]:max-w-full [&_.ProseMirror_img]:object-contain [&_.ProseMirror_img[data-text-align=center]]:mx-auto [&_.ProseMirror_img[data-text-align=right]]:ml-auto [&_.ProseMirror_img[data-text-align=right]]:mr-0 [&_[data-resize-handle]]:z-10 [&_[data-resize-handle]]:m-[-6px] [&_[data-resize-handle]]:size-[14px] [&_[data-resize-handle]]:rounded-sm [&_[data-resize-handle]]:border-2 [&_[data-resize-handle]]:border-[rgba(180,140,228,0.95)] [&_[data-resize-handle]]:bg-[rgba(22,12,38,0.92)] [&_[data-resize-handle]]:shadow-[0_2px_8px_rgba(0,0,0,0.35)] ${isLight ? "ring-1 ring-white/[0.06]" : ""}`}

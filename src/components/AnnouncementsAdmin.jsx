@@ -223,6 +223,14 @@ export function AnnouncementsAdmin({
         return;
       }
       const bodyHtml = editorRef.current?.getHTML() ?? "";
+      const trimmedImage = imageUrl != null ? String(imageUrl).trim() : "";
+      const trimmedYt = youtubeUrl != null ? String(youtubeUrl).trim() : "";
+      const hasValidYoutube = trimmedYt !== "" && youtubeVideoIdFromInput(trimmedYt) != null;
+      const hasHeroImage = trimmedImage !== "";
+      if (!hasHeroImage && !hasValidYoutube) {
+        setSaveError("Add a hero image or YouTube video before saving.");
+        return;
+      }
       setSaveError(null);
       /** @type {boolean} */
       let publishedFlag;
@@ -363,11 +371,6 @@ export function AnnouncementsAdmin({
                     placeholder="Announcement title"
                   />
                 </label>
-                {isNew ? (
-                  <p className="m-0 text-[0.8rem] text-[#f4f0fa]/45">
-                    Publish date is set when you publish.
-                  </p>
-                ) : null}
                 <AnnouncementRichTextEditor
                   key={editorKey}
                   ref={editorRef}
@@ -491,10 +494,10 @@ export function AnnouncementsAdmin({
             {previewOpen && typeof document !== "undefined"
               ? createPortal(
                   <div
-                    className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-5"
+                    className="fixed inset-0 z-[200] flex items-center justify-center p-2 sm:p-3 md:p-4"
                     role="dialog"
                     aria-modal="true"
-                    aria-labelledby="announcement-preview-heading"
+                    aria-label="Announcement preview"
                   >
                     <button
                       type="button"
@@ -503,20 +506,8 @@ export function AnnouncementsAdmin({
                       onClick={() => setPreviewOpen(false)}
                     />
                     <div
-                      className={`relative z-[1] flex max-h-[min(92vh,880px)] w-full max-w-[min(96vw,58rem)] flex-col overflow-hidden rounded-2xl ${previewModalShell}`}
+                      className={`relative z-[1] flex w-full max-w-[92rem] max-h-[min(92vh,900px)] flex-col overflow-hidden rounded-2xl ${previewModalShell}`}
                     >
-                      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.1] px-4 py-3 sm:px-5">
-                        <h3 id="announcement-preview-heading" className="m-0 text-[0.95rem] font-semibold text-white">
-                          Preview
-                        </h3>
-                        <button
-                          type="button"
-                          className={`${btnBase} ${btnTheme} py-1.5 text-[0.78rem]`}
-                          onClick={() => setPreviewOpen(false)}
-                        >
-                          Close
-                        </button>
-                      </div>
                       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
                         <AnnouncementExpandedLayout
                           title={title}
