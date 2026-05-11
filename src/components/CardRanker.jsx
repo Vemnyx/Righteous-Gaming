@@ -33,6 +33,23 @@ function matchRankerCatalogSet(list) {
   return list.find((s) => RANKER_SET_NAME_RE.test(String(s.name ?? "").trim())) ?? null;
 }
 
+/** @param {{ card: RankerCard }} entry */
+function cardJumpOptionLabel(entry) {
+  const name = String(entry.card.name ?? "").trim() || `Card ${entry.card.id}`;
+  const dot = pitchDot(entry.card);
+  return dot ? `${dot} ${name}` : name;
+}
+
+/** @param {RankerCard} card */
+function pitchDot(card) {
+  const p = typeof card.pitch === "number" ? card.pitch : Number.parseInt(String(card.pitch ?? ""), 10);
+  if (!Number.isFinite(p)) return "";
+  if (p === 1) return "🔴";
+  if (p === 2) return "🟡";
+  if (p === 3) return "🔵";
+  return "";
+}
+
 /**
  * @param {{ isLight: boolean, active: boolean }} props
  */
@@ -245,12 +262,12 @@ export function CardRanker({ isLight, active }) {
     : "min-h-[8rem] w-full max-w-full resize-y rounded-lg border border-white/[0.28] bg-black/70 px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 backdrop-blur-[2px] focus:border-purple-400/55";
 
   const teamPanelCls = isLight
-    ? "flex min-h-[11rem] shrink-0 flex-col gap-2 rounded-lg border border-white/[0.24] bg-black/35 px-3 py-3 text-[0.9rem] text-[#f4f0fa] shadow-sm"
-    : "flex min-h-[11rem] shrink-0 flex-col gap-2 rounded-lg border border-white/[0.16] bg-black/45 px-3 py-3 text-[0.9rem] text-[#f4f0fa] shadow-sm";
+    ? "flex min-h-[11rem] flex-1 flex-col gap-2 rounded-lg border border-white/[0.24] bg-black/35 px-3 py-3 text-[0.9rem] text-[#f4f0fa] shadow-sm"
+    : "flex min-h-[11rem] flex-1 flex-col gap-2 rounded-lg border border-white/[0.16] bg-black/45 px-3 py-3 text-[0.9rem] text-[#f4f0fa] shadow-sm";
 
   const cardJumpSelectCls = isLight
-    ? "mb-1 w-full max-w-md rounded-lg border border-white/[0.24] bg-[#4a4658]/95 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55"
-    : "mb-1 w-full max-w-md rounded-lg border border-white/[0.22] bg-black/50 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55";
+    ? "mb-3 w-full max-w-md rounded-lg border border-white/[0.24] bg-[#4a4658]/95 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55 sm:mb-4"
+    : "mb-3 w-full max-w-md rounded-lg border border-white/[0.22] bg-black/50 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55 sm:mb-4";
 
   const btnPrimary =
     "rounded-lg border border-white/[0.28] bg-violet-600/90 px-4 py-2.5 text-[0.875rem] font-semibold text-white shadow-md transition-colors hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-45";
@@ -262,7 +279,7 @@ export function CardRanker({ isLight, active }) {
   const starDisabled = `${starBase} cursor-default border-white/[0.18] bg-black/45 text-amber-200/55`;
 
   const arrowNavCls =
-    "flex h-[min(14rem,52vh)] min-h-[10.5rem] w-12 shrink-0 items-center justify-center rounded-xl border-2 border-yellow-400/85 bg-yellow-400/18 text-xl font-semibold text-yellow-200 shadow-[0_0_18px_rgba(250,204,21,0.35)] transition-colors hover:border-yellow-300 hover:bg-yellow-400/28 hover:text-yellow-50 disabled:cursor-not-allowed disabled:border-white/20 disabled:bg-black/30 disabled:text-[#f4f0fa]/40 disabled:shadow-none sm:w-14 sm:text-2xl";
+    "mt-8 flex h-[min(14rem,52vh)] min-h-[10.5rem] w-12 shrink-0 items-center justify-center rounded-xl border-2 border-yellow-400/85 bg-yellow-400/18 text-xl font-semibold text-yellow-200 shadow-[0_0_18px_rgba(250,204,21,0.35)] transition-colors hover:border-yellow-300 hover:bg-yellow-400/28 hover:text-yellow-50 disabled:cursor-not-allowed disabled:border-white/20 disabled:bg-black/30 disabled:text-[#f4f0fa]/40 disabled:shadow-none sm:mt-10 sm:w-14 sm:text-2xl";
 
   const canSubmit = useMemo(() => {
     if (!user || !current || submitting) return false;
@@ -304,13 +321,28 @@ export function CardRanker({ isLight, active }) {
         const t = await res.text();
         throw new Error(t?.trim() || res.statusText);
       }
-      await loadRankQueue();
+      // Keep the in-session queue order stable: mark/update current entry in place
+      // instead of reloading and rebuilding pending->ranked order after each submit.
+      setQueue((prev) => {
+        if (cardIndex < 0 || cardIndex >= prev.length) return prev;
+        const next = prev.slice();
+        const entry = next[cardIndex];
+        if (!entry) return prev;
+        const notesVal = notesTrim === "" ? null : notesTrim;
+        next[cardIndex] = {
+          kind: "ranked",
+          card: entry.card,
+          rank: rankVal,
+          notes: notesVal,
+        };
+        return next;
+      });
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "Save failed");
     } finally {
       setSubmitting(false);
     }
-  }, [user, current, canSubmit, draftNotes, rankerSet, draftRank, loadRankQueue]);
+  }, [user, current, canSubmit, draftNotes, rankerSet, draftRank, cardIndex]);
 
   const goPrev = useCallback(() => {
     setCardIndex((i) => Math.max(0, i - 1));
@@ -400,23 +432,58 @@ export function CardRanker({ isLight, active }) {
 
     /** @param {KeyboardEvent} e */
     function onKeyDown(e) {
-      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
       if (isTextualFieldTarget(e.target)) return;
-      if (rankLoading) return;
-      if (e.key === "ArrowLeft") {
-        if (cardIndex <= 0) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (rankLoading || !current) return;
+
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        if (e.key === "ArrowLeft") {
+          if (cardIndex <= 0) return;
+          e.preventDefault();
+          goPrev();
+          return;
+        }
+        if (cardIndex >= queue.length - 1) return;
         e.preventDefault();
-        goPrev();
+        goNext();
         return;
       }
-      if (cardIndex >= queue.length - 1) return;
-      e.preventDefault();
-      goNext();
+
+      let starPick = /** @type {number | null} */ (null);
+      if (e.key.length === 1) {
+        const c = e.key.charCodeAt(0);
+        if (c >= 49 && c <= 53) {
+          starPick = c - 48;
+        }
+      }
+      if (starPick == null && e.code.startsWith("Numpad")) {
+        const tail = e.code.slice(6);
+        const n = Number.parseInt(tail, 10);
+        if (Number.isFinite(n) && n >= 1 && n <= 5) {
+          starPick = n;
+        }
+      }
+      if (starPick != null) {
+        if (current.kind !== "pending") return;
+        e.preventDefault();
+        setDraftRank(starPick);
+        return;
+      }
+
+      if (e.key === "Enter") {
+        if (e.target instanceof HTMLElement && e.target.closest("button")) {
+          return;
+        }
+        if (!canSubmit) return;
+        e.preventDefault();
+        void submitRanking();
+        return;
+      }
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [active, user, queue.length, cardIndex, rankLoading, goPrev, goNext]);
+  }, [active, user, queue.length, cardIndex, rankLoading, goPrev, goNext, current, canSubmit, submitRanking]);
 
   const imgUrl =
     current?.card?.image_url != null && String(current.card.image_url).trim() !== ""
@@ -493,15 +560,24 @@ export function CardRanker({ isLight, active }) {
                       }}
                       disabled={rankLoading || queue.length === 0}
                     >
-                      {queue.map((entry, i) => {
-                        const raw = String(entry.card.name ?? "").trim() || `Card ${entry.card.id}`;
-                        const label = queue.length > 1 ? `${i + 1}. ${raw}` : raw;
-                        return (
-                          <option key={`jump-${entry.card.id}-${i}`} value={String(i)}>
-                            {label}
-                          </option>
-                        );
-                      })}
+                      <optgroup label="Unranked">
+                        {queue.map((entry, i) =>
+                          entry.kind === "pending" ? (
+                            <option key={`jump-${entry.card.id}-p-${i}`} value={String(i)}>
+                              {cardJumpOptionLabel(entry)}
+                            </option>
+                          ) : null,
+                        )}
+                      </optgroup>
+                      <optgroup label="Ranked">
+                        {queue.map((entry, i) =>
+                          entry.kind === "ranked" ? (
+                            <option key={`jump-${entry.card.id}-r-${i}`} value={String(i)}>
+                              {cardJumpOptionLabel(entry)}
+                            </option>
+                          ) : null,
+                        )}
+                      </optgroup>
                     </select>
                     <div className="flex w-full max-w-md justify-center gap-2.5 sm:gap-3" role="group" aria-label="Star rating 1 to 5">
                       {[1, 2, 3, 4, 5].map((n) => {
@@ -600,7 +676,7 @@ export function CardRanker({ isLight, active }) {
                                   className="border-b border-white/[0.08] py-2.5 last:border-b-0"
                                 >
                                   <p className="m-0 text-[0.875rem] font-semibold text-[#f4f0fa]">{row.user_name}</p>
-                                  <p className="m-0 mt-0.5 text-[0.82rem] text-[#f4f0fa]/85">Rating: {row.rank} / 5</p>
+                                  <p className="m-0 mt-0.5 text-[0.82rem] text-[#f4f0fa]/85">Rating: {row.rank}★ / 5</p>
                                   {row.notes != null && String(row.notes).trim() !== "" ? (
                                     <p className="m-0 mt-1 whitespace-pre-wrap text-[0.8rem] leading-snug text-[#f4f0fa]/72">
                                       Notes: {row.notes}
@@ -615,7 +691,6 @@ export function CardRanker({ isLight, active }) {
                     </>
                   )}
                 </div>
-                <div className="min-h-0 flex-1" aria-hidden />
               </div>
               <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-white/[0.12] pt-4">
                 {!rankLoading ? (

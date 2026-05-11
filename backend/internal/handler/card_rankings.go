@@ -381,7 +381,7 @@ func (h *cardRankingsHTTP) listCardTeamRankings(w http.ResponseWriter, r *http.R
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	_, ok := h.sessionUser(w, r)
+	u, ok := h.sessionUser(w, r)
 	if !ok {
 		return
 	}
@@ -426,6 +426,9 @@ func (h *cardRankingsHTTP) listCardTeamRankings(w http.ResponseWriter, r *http.R
 	out := make([]cardTeamRankingRowJSON, 0, len(rows))
 	for i := range rows {
 		row := rows[i]
+		if row.UserID == u.ID {
+			continue
+		}
 		out = append(out, cardTeamRankingRowJSON{
 			UserName: teamRankingDisplayName(row.Username, row.Email),
 			Rank:     row.Rank,
