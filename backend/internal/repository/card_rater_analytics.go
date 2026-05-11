@@ -29,13 +29,14 @@ type CardRaterRatedCard struct {
 	VoteCount int
 }
 
-// CardRaterControversialCard is a card with strongly split ratings (low and high votes both present).
+// CardRaterControversialCard is a card with high population variance among its session ratings.
 type CardRaterControversialCard struct {
 	Card         Card
 	MinRating    int16
 	MaxRating    int16
 	Spread       int
 	StdDev       float64
+	Variance     float64 // VAR_POP of ratings (1–5 scale)
 	AvgRating    float64
 	VoteCount    int
 	LowRatings   int // ratings 1–2
@@ -110,7 +111,7 @@ func scanCardStatsRow(row pgx.Row) (CardRaterRatedCard, error) {
 func scanCardControversialRow(row pgx.Row) (CardRaterControversialCard, error) {
 	var e CardRaterControversialCard
 	c := &e.Card
-	var std sql.NullFloat64
+	var std, variance sql.NullFloat64
 	err := row.Scan(
 		&c.ID,
 		&c.SetID,
@@ -142,6 +143,7 @@ func scanCardControversialRow(row pgx.Row) (CardRaterControversialCard, error) {
 		&e.MaxRating,
 		&e.Spread,
 		&std,
+		&variance,
 		&e.AvgRating,
 		&e.VoteCount,
 		&e.LowRatings,
@@ -152,6 +154,9 @@ func scanCardControversialRow(row pgx.Row) (CardRaterControversialCard, error) {
 	}
 	if std.Valid {
 		e.StdDev = std.Float64
+	}
+	if variance.Valid {
+		e.Variance = variance.Float64
 	}
 	return e, nil
 }
@@ -365,6 +370,7 @@ SELECT ` + cardSelectColumnsFromC + `, MAX(s.name) AS set_name,
 	MAX(r.rating)::smallint AS max_rating,
 	(MAX(r.rating) - MIN(r.rating))::int AS spread,
 	STDDEV_POP(r.rating::double precision) AS stddev,
+	VAR_POP(r.rating::double precision) AS rating_variance,
 	AVG(r.rating)::float8 AS avg_rating,
 	COUNT(*)::int AS vote_count,
 	COUNT(*) FILTER (WHERE r.rating <= 2)::int AS low_ratings,
@@ -374,8 +380,8 @@ INNER JOIN cards c ON c.id = r.card_id
 INNER JOIN sets s ON s.id = c.set_id
 WHERE r.rater_id = $1
 GROUP BY c.id
-HAVING MIN(r.rating) <= 2 AND MAX(r.rating) >= 4 AND COUNT(*) >= 2
-ORDER BY spread DESC, stddev DESC NULLS LAST, vote_count DESC, c.id ASC
+HAVING COUNT(*) >= 2 AND VAR_POP(r.rating::double precision) IS NOT NULL
+ORDER BY rating_variance DESC NULLS LAST, vote_count DESC, c.id ASC
 LIMIT 10`
 	contRows, err := r.pool.Query(ctx, controversialQ, raterID)
 	if err != nil {

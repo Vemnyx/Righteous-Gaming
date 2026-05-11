@@ -12,6 +12,15 @@ function numOrNull(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+/** @param {unknown} card */
+function cardIdFromRecord(card) {
+  if (!card || typeof card !== "object") return null;
+  const c = /** @type {Record<string, unknown>} */ (card);
+  const id = c.id;
+  const n = typeof id === "number" ? id : Number(id);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 /** @param {string | undefined | null} iso */
 function formatDateTime(iso) {
   if (iso == null || iso === "") return "—";
@@ -36,13 +45,16 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
 
   const [resultsTab, setResultsTab] = useState(/** @type {'top_rated' | 'controversial' | 'talked'} */ ("top_rated"));
 
-  const [notesModal, setNotesModal] = useState({
+  const [cardDetailModal, setCardDetailModal] = useState({
     open: false,
-    cardId: 0,
-    cardName: "",
     loading: false,
-    error: null,
-    rows: [],
+    error: /** @type {string | null} */ (null),
+    /** @type {Record<string, unknown> | null} */
+    card: null,
+    avgRating: /** @type {number | null} */ (null),
+    voteCount: 0,
+    /** @type {{ user_id: number, user_label: string, rating: number, notes?: string | null }[]} */
+    ratings: [],
   });
 
   const idNum = useMemo(() => {
@@ -125,57 +137,86 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
 
   const distMax = useMemo(() => Math.max(1, ...Object.values(distMap)), [distMap]);
 
-  const openRatingNotes = useCallback(
-    async (cardId, cardName) => {
-      if (!user || idNum <= 0 || !Number.isFinite(cardId)) return;
-      setNotesModal({
+  const openCardSessionDetail = useCallback(
+    async (cardId) => {
+      if (!user || idNum <= 0 || !Number.isFinite(cardId) || cardId <= 0) return;
+      setCardDetailModal({
         open: true,
-        cardId,
-        cardName,
         loading: true,
         error: null,
-        rows: [],
+        card: null,
+        avgRating: null,
+        voteCount: 0,
+        ratings: [],
       });
       try {
         const token = await user.getIdToken();
-        const res = await fetch(`/api/card-raters/${idNum}/cards/${cardId}/rating-notes`, {
+        const res = await fetch(`/api/card-raters/${idNum}/cards/${cardId}/session-ratings`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         const text = await res.text();
-        if (!res.ok) throw new Error(text || "Failed to load notes");
+        if (!res.ok) throw new Error(text || "Failed to load card session");
         let body;
         try {
           body = JSON.parse(text);
         } catch {
           throw new Error("Invalid response");
         }
-        const notes = body && typeof body === "object" && Array.isArray(body.notes) ? body.notes : [];
-        const rows = notes
-          .filter((n) => n && typeof n === "object")
-          .map((n) => {
-            const r = /** @type {Record<string, unknown>} */ (n);
+        if (!body || typeof body !== "object") throw new Error("Invalid response");
+        const b = /** @type {Record<string, unknown>} */ (body);
+        const card = b.card && typeof b.card === "object" ? /** @type {Record<string, unknown>} */ (b.card) : null;
+        const voteCount = typeof b.vote_count === "number" ? b.vote_count : Number(b.vote_count);
+        const avgRaw = b.avg_rating;
+        const avgRating =
+          avgRaw != null && (typeof avgRaw === "number" || typeof avgRaw === "string")
+            ? Number(avgRaw)
+            : null;
+        const list = Array.isArray(b.ratings) ? b.ratings : [];
+        const ratings = list
+          .filter((x) => x && typeof x === "object")
+          .map((x) => {
+            const r = /** @type {Record<string, unknown>} */ (x);
             return {
               user_id: typeof r.user_id === "number" ? r.user_id : Number(r.user_id),
               user_label: r.user_label != null ? String(r.user_label) : "",
               rating: typeof r.rating === "number" ? r.rating : Number(r.rating),
-              notes: r.notes != null ? String(r.notes) : "",
+              notes: r.notes != null && r.notes !== "" ? String(r.notes) : null,
             };
           });
-        setNotesModal((prev) => ({ ...prev, loading: false, rows, error: null }));
+        setCardDetailModal({
+          open: true,
+          loading: false,
+          error: null,
+          card,
+          avgRating: Number.isFinite(avgRating) ? avgRating : null,
+          voteCount: Number.isFinite(voteCount) ? voteCount : 0,
+          ratings,
+        });
       } catch (e) {
-        setNotesModal((prev) => ({
+        setCardDetailModal((prev) => ({
           ...prev,
           loading: false,
-          rows: [],
-          error: e instanceof Error ? e.message : "Failed to load notes",
+          card: null,
+          avgRating: null,
+          voteCount: 0,
+          ratings: [],
+          error: e instanceof Error ? e.message : "Failed to load card session",
         }));
       }
     },
     [user, idNum],
   );
 
-  const closeNotesModal = useCallback(() => {
-    setNotesModal({ open: false, cardId: 0, cardName: "", loading: false, error: null, rows: [] });
+  const closeCardDetailModal = useCallback(() => {
+    setCardDetailModal({
+      open: false,
+      loading: false,
+      error: null,
+      card: null,
+      avgRating: null,
+      voteCount: 0,
+      ratings: [],
+    });
   }, []);
 
   const panel =
@@ -382,6 +423,7 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                   if (!row || typeof row !== "object") return null;
                   const r = /** @type {Record<string, unknown>} */ (row);
                   const card = r.card && typeof r.card === "object" ? /** @type {Record<string, unknown>} */ (r.card) : null;
+                  const cid = cardIdFromRecord(card);
                   const img = card && card.image_url != null ? String(card.image_url) : "";
                   const name = card && card.name != null ? String(card.name) : "Card";
                   const ident = card && card.card_identifier != null ? String(card.card_identifier).trim() : "";
@@ -389,7 +431,7 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                   const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
                   return (
                     <div
-                      key={card && typeof card.id === "number" ? card.id : idx}
+                      key={cid ?? idx}
                       className="flex flex-col gap-1.5 rounded-lg border border-white/[0.12] bg-black/25 p-2"
                     >
                       <div className="flex items-center justify-between gap-1">
@@ -400,10 +442,10 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                       </div>
                       <button
                         type="button"
-                        className="relative block aspect-[2.5/3.5] w-full overflow-hidden rounded-md border border-white/[0.1] bg-black/40 outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60 disabled:opacity-60"
-                        disabled={!ident}
-                        onClick={() => ident && onOpenCardDetail(ident)}
-                        title={ident ? "Open card in catalog" : "No catalog id"}
+                        className="relative block aspect-[2.5/3.5] w-full cursor-pointer overflow-hidden rounded-md border border-white/[0.1] bg-black/40 outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={cid == null}
+                        onClick={() => cid != null && void openCardSessionDetail(cid)}
+                        title={cid != null ? "View ratings for this session" : "Missing card id"}
                       >
                         {img ? (
                           <img src={img} alt="" className="h-full w-full object-cover" loading="lazy" />
@@ -416,6 +458,18 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                       <p className="m-0 line-clamp-2 text-center text-[0.72rem] font-semibold leading-tight text-[#f4f0fa]/90">
                         {name}
                       </p>
+                      {ident ? (
+                        <button
+                          type="button"
+                          className="mx-auto text-[0.68rem] font-semibold text-violet-200/90 underline-offset-2 hover:underline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenCardDetail(ident);
+                          }}
+                        >
+                          Open in catalog
+                        </button>
+                      ) : null}
                     </div>
                   );
                 })}
@@ -455,18 +509,27 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                           const avg = typeof r.avg_rating === "number" ? r.avg_rating : Number(r.avg_rating);
                           const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
                           const ident = card.card_identifier != null ? String(card.card_identifier).trim() : "";
+                          const cid = cardIdFromRecord(card);
                           return (
-                            <tr key={typeof card.id === "number" ? card.id : idx} className="border-b border-white/[0.06] last:border-b-0">
+                            <tr
+                              key={typeof card.id === "number" ? card.id : idx}
+                              className={`border-b border-white/[0.06] last:border-b-0 ${
+                                cid != null ? "cursor-pointer hover:bg-white/[0.04]" : ""
+                              }`}
+                              onClick={() => cid != null && void openCardSessionDetail(cid)}
+                              onKeyDown={(e) => {
+                                if (cid != null && (e.key === "Enter" || e.key === " ")) {
+                                  e.preventDefault();
+                                  void openCardSessionDetail(cid);
+                                }
+                              }}
+                              tabIndex={cid != null ? 0 : undefined}
+                              role={cid != null ? "button" : undefined}
+                            >
                               <td className="py-2 pr-3 tabular-nums text-[#f4f0fa]/55">{idx + 1}</td>
                               <td className="py-2 pr-3">
                                 {ident ? (
-                                  <button
-                                    type="button"
-                                    className="max-w-[16rem] cursor-pointer truncate text-left font-semibold text-violet-200/95 underline-offset-2 hover:underline"
-                                    onClick={() => onOpenCardDetail(ident)}
-                                  >
-                                    {name}
-                                  </button>
+                                  <span className="max-w-[16rem] truncate font-semibold text-violet-200/95">{name}</span>
                                 ) : (
                                   <span className="font-semibold">{name}</span>
                                 )}
@@ -506,21 +569,24 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
 
           {resultsTab === "controversial" ? (
             <div className="mt-6">
-              <p className={`m-0 ${labelMuted}`}>Highest rating spread (1–2 and 4–5 both present)</p>
+              <p className={`m-0 ${labelMuted}`}>
+                Population variance of ratings (VAR_POP); at least two votes per card. Higher means more disagreement.
+              </p>
               {parsed.controversial.length === 0 ? (
                 <p className="mt-3 text-[0.85rem] text-[#f4f0fa]/60">
-                  No cards yet with both low and high ratings in this session.
+                  No cards with at least two ratings in this session yet.
                 </p>
               ) : (
                 <div className="mt-3 overflow-x-auto">
-                  <table className="w-full min-w-[56rem] border-collapse text-left text-[0.78rem] text-[#f4f0fa]/88">
+                  <table className="w-full min-w-[58rem] border-collapse text-left text-[0.78rem] text-[#f4f0fa]/88">
                     <thead>
                       <tr className="border-b border-white/[0.12] text-[0.68rem] uppercase tracking-wide text-[#f4f0fa]/50">
                         <th className="py-2 pr-3 font-semibold">#</th>
                         <th className="py-2 pr-3 font-semibold">Card</th>
+                        <th className="py-2 pr-3 font-semibold">Variance</th>
+                        <th className="py-2 pr-3 font-semibold">Std dev</th>
                         <th className="py-2 pr-3 font-semibold">Min–max</th>
                         <th className="py-2 pr-3 font-semibold">Spread</th>
-                        <th className="py-2 pr-3 font-semibold">Std dev</th>
                         <th className="py-2 pr-3 font-semibold">Avg</th>
                         <th className="py-2 pr-3 font-semibold">Votes</th>
                         <th className="py-2 pr-3 font-semibold">1–2</th>
@@ -534,37 +600,45 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                         const card = r.card && typeof r.card === "object" ? /** @type {Record<string, unknown>} */ (r.card) : null;
                         if (!card) return null;
                         const name = card.name != null ? String(card.name) : "—";
-                        const ident = card.card_identifier != null ? String(card.card_identifier).trim() : "";
                         const minR = typeof r.min_rating === "number" ? r.min_rating : Number(r.min_rating);
                         const maxR = typeof r.max_rating === "number" ? r.max_rating : Number(r.max_rating);
                         const spread = typeof r.spread === "number" ? r.spread : Number(r.spread);
                         const std = typeof r.stddev === "number" ? r.stddev : Number(r.stddev);
+                        const variance =
+                          typeof r.rating_variance === "number" ? r.rating_variance : Number(r.rating_variance);
                         const avg = typeof r.avg_rating === "number" ? r.avg_rating : Number(r.avg_rating);
                         const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
                         const low = typeof r.low_ratings === "number" ? r.low_ratings : Number(r.low_ratings);
                         const high = typeof r.high_ratings === "number" ? r.high_ratings : Number(r.high_ratings);
-                        const cid = typeof card.id === "number" ? card.id : Number(card.id);
+                        const cid = cardIdFromRecord(card);
                         return (
-                          <tr key={Number.isFinite(cid) ? cid : idx} className="border-b border-white/[0.06] last:border-b-0">
+                          <tr
+                            key={cid ?? idx}
+                            className={`border-b border-white/[0.06] last:border-b-0 ${
+                              cid != null ? "cursor-pointer hover:bg-white/[0.04]" : ""
+                            }`}
+                            onClick={() => cid != null && void openCardSessionDetail(cid)}
+                            onKeyDown={(e) => {
+                              if (cid != null && (e.key === "Enter" || e.key === " ")) {
+                                e.preventDefault();
+                                void openCardSessionDetail(cid);
+                              }
+                            }}
+                            tabIndex={cid != null ? 0 : undefined}
+                            role={cid != null ? "button" : undefined}
+                          >
                             <td className="py-2 pr-3 tabular-nums text-[#f4f0fa]/55">{idx + 1}</td>
                             <td className="py-2 pr-3">
-                              {ident ? (
-                                <button
-                                  type="button"
-                                  className="max-w-[14rem] cursor-pointer truncate text-left font-semibold text-violet-200/95 underline-offset-2 hover:underline"
-                                  onClick={() => onOpenCardDetail(ident)}
-                                >
-                                  {name}
-                                </button>
-                              ) : (
-                                <span className="font-semibold">{name}</span>
-                              )}
+                              <span className="max-w-[14rem] truncate font-semibold text-violet-200/95">{name}</span>
                             </td>
+                            <td className="py-2 pr-3 tabular-nums font-semibold text-amber-100/90">
+                              {Number.isFinite(variance) ? variance.toFixed(3) : "—"}
+                            </td>
+                            <td className="py-2 pr-3 tabular-nums">{Number.isFinite(std) ? std.toFixed(2) : "—"}</td>
                             <td className="py-2 pr-3 tabular-nums text-[#f4f0fa]/75">
                               {Number.isFinite(minR) && Number.isFinite(maxR) ? `${minR}–${maxR}` : "—"}
                             </td>
                             <td className="py-2 pr-3 tabular-nums">{Number.isFinite(spread) ? spread : "—"}</td>
-                            <td className="py-2 pr-3 tabular-nums">{Number.isFinite(std) ? std.toFixed(2) : "—"}</td>
                             <td className="py-2 pr-3 tabular-nums">{Number.isFinite(avg) ? avg.toFixed(2) : "—"}</td>
                             <td className="py-2 pr-3 tabular-nums text-[#f4f0fa]/70">{Number.isFinite(votes) ? votes : "—"}</td>
                             <td className="py-2 pr-3 tabular-nums text-rose-200/80">{Number.isFinite(low) ? low : "—"}</td>
@@ -597,19 +671,24 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                     const avg = typeof r.avg_rating === "number" ? r.avg_rating : Number(r.avg_rating);
                     const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
                     const noteCount = typeof r.note_count === "number" ? r.note_count : Number(r.note_count);
-                    const cid = typeof card.id === "number" ? card.id : Number(card.id);
+                    const cid = cardIdFromRecord(card);
                     return (
                       <div
-                        key={Number.isFinite(cid) ? cid : idx}
-                        className="flex gap-3 rounded-lg border border-white/[0.12] bg-black/25 p-3"
+                        key={cid ?? idx}
+                        role={cid != null ? "button" : undefined}
+                        tabIndex={cid != null ? 0 : undefined}
+                        className={`flex gap-3 rounded-lg border border-white/[0.12] bg-black/25 p-3 outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60 ${
+                          cid != null ? "cursor-pointer hover:border-white/[0.2] hover:bg-black/35" : ""
+                        }`}
+                        onClick={() => cid != null && void openCardSessionDetail(cid)}
+                        onKeyDown={(e) => {
+                          if (cid != null && (e.key === "Enter" || e.key === " ")) {
+                            e.preventDefault();
+                            void openCardSessionDetail(cid);
+                          }
+                        }}
                       >
-                        <button
-                          type="button"
-                          className="relative h-24 w-[4.5rem] shrink-0 overflow-hidden rounded-md border border-white/[0.1] bg-black/40 outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60 disabled:opacity-60"
-                          disabled={!ident}
-                          onClick={() => ident && onOpenCardDetail(ident)}
-                          title={ident ? "Open card in catalog" : "No catalog id"}
-                        >
+                        <div className="relative h-24 w-[4.5rem] shrink-0 overflow-hidden rounded-md border border-white/[0.1] bg-black/40">
                           {img ? (
                             <img src={img} alt="" className="h-full w-full object-cover" loading="lazy" />
                           ) : (
@@ -617,7 +696,7 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                               No image
                             </span>
                           )}
-                        </button>
+                        </div>
                         <div className="flex min-w-0 flex-1 flex-col gap-1">
                           <div className="flex items-start justify-between gap-2">
                             <span className="text-[0.68rem] font-bold tabular-nums text-amber-200/90">#{idx + 1}</span>
@@ -629,14 +708,18 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                           <p className="m-0 text-[0.7rem] text-[#f4f0fa]/55">
                             Avg {Number.isFinite(avg) ? avg.toFixed(2) : "—"} · {Number.isFinite(votes) ? votes : "—"} votes
                           </p>
-                          <button
-                            type="button"
-                            className="mt-1 self-start rounded-md border border-violet-400/35 bg-violet-950/30 px-2.5 py-1 text-[0.72rem] font-semibold text-violet-100/95 hover:bg-violet-900/40"
-                            disabled={!Number.isFinite(cid)}
-                            onClick={() => Number.isFinite(cid) && void openRatingNotes(cid, name)}
-                          >
-                            View notes
-                          </button>
+                          {ident ? (
+                            <button
+                              type="button"
+                              className="mt-1 self-start text-[0.68rem] font-semibold text-violet-200/90 underline-offset-2 hover:underline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenCardDetail(ident);
+                              }}
+                            >
+                              Open in catalog
+                            </button>
+                          ) : null}
                         </div>
                       </div>
                     );
@@ -648,50 +731,110 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
         </div>
       ) : null}
 
-      {notesModal.open ? (
+      {cardDetailModal.open ? (
         <div
           className="fixed inset-0 z-[80] flex items-end justify-center bg-black/55 p-4 sm:items-center"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="rating-notes-title"
+          aria-labelledby="card-session-detail-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeCardDetailModal();
+          }}
         >
-          <div className="max-h-[min(85vh,32rem)] w-full max-w-lg overflow-hidden rounded-xl border border-white/[0.18] bg-[#1a1424] shadow-xl">
-            <div className="flex items-start justify-between gap-3 border-b border-white/[0.1] px-4 py-3">
+          <div className="max-h-[min(92vh,40rem)] w-full max-w-3xl overflow-hidden rounded-xl border border-white/[0.18] bg-[#1a1424] shadow-xl">
+            <div className="flex items-start justify-between gap-3 border-b border-white/[0.1] px-4 py-3 sm:px-5">
               <div className="min-w-0">
-                <p id="rating-notes-title" className="m-0 truncate text-[0.95rem] font-semibold text-[#f4f0fa]">
-                  Notes — {notesModal.cardName}
+                <p id="card-session-detail-title" className="m-0 truncate text-[0.95rem] font-semibold text-[#f4f0fa]">
+                  {cardDetailModal.card && cardDetailModal.card.name != null
+                    ? String(cardDetailModal.card.name)
+                    : "Card"}
                 </p>
                 <p className="m-0 mt-0.5 text-[0.72rem] text-[#f4f0fa]/50">Session #{idNum}</p>
               </div>
               <button
                 type="button"
                 className="shrink-0 rounded-lg border border-white/[0.15] bg-black/30 px-2.5 py-1 text-[0.75rem] font-semibold text-[#f4f0fa]/90 hover:bg-white/[0.06]"
-                onClick={closeNotesModal}
+                onClick={closeCardDetailModal}
               >
                 Close
               </button>
             </div>
-            <div className="max-h-[min(70vh,26rem)] overflow-y-auto px-4 py-3">
-              {notesModal.loading ? (
-                <p className="text-[0.85rem] text-[#f4f0fa]/65">Loading notes…</p>
-              ) : notesModal.error ? (
+            <div className="max-h-[min(78vh,34rem)] overflow-y-auto px-4 py-4 sm:px-5">
+              {cardDetailModal.loading ? (
+                <p className="text-[0.85rem] text-[#f4f0fa]/65">Loading…</p>
+              ) : cardDetailModal.error ? (
                 <p className="text-[0.85rem] text-red-200/90" role="alert">
-                  {notesModal.error}
+                  {cardDetailModal.error}
                 </p>
-              ) : notesModal.rows.length === 0 ? (
-                <p className="text-[0.85rem] text-[#f4f0fa]/60">No notes for this card.</p>
               ) : (
-                <ul className="m-0 flex list-none flex-col gap-3 p-0">
-                  {notesModal.rows.map((n, ni) => (
-                    <li key={`${n.user_id}-${ni}`} className="rounded-lg border border-white/[0.08] bg-black/25 px-3 py-2.5">
-                      <p className="m-0 text-[0.72rem] font-semibold text-[#f4f0fa]/85">
-                        {n.user_label || `User ${n.user_id}`}
-                        <span className="ml-2 tabular-nums font-normal text-[#f4f0fa]/50">Rated {n.rating}/5</span>
-                      </p>
-                      <p className="m-0 mt-1.5 whitespace-pre-wrap text-[0.8rem] leading-relaxed text-[#f4f0fa]/88">{n.notes}</p>
-                    </li>
-                  ))}
-                </ul>
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+                  <div className="mx-auto w-[min(100%,12rem)] shrink-0 sm:mx-0 sm:w-[11.5rem]">
+                    {cardDetailModal.card && cardDetailModal.card.image_url != null ? (
+                      <img
+                        src={String(cardDetailModal.card.image_url)}
+                        alt=""
+                        className="aspect-[2.5/3.5] w-full rounded-lg border border-white/[0.12] object-cover"
+                      />
+                    ) : (
+                      <div className="flex aspect-[2.5/3.5] w-full items-center justify-center rounded-lg border border-white/[0.12] bg-black/35 px-2 text-center text-[0.75rem] text-[#f4f0fa]/50">
+                        No image
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className={`m-0 ${labelMuted}`}>Session average</p>
+                    <p className="m-0 mt-1 text-lg font-semibold tabular-nums text-[#f4f0fa]">
+                      {cardDetailModal.avgRating != null && Number.isFinite(cardDetailModal.avgRating)
+                        ? cardDetailModal.avgRating.toFixed(2)
+                        : "—"}
+                      <span className="ml-2 text-[0.8rem] font-normal text-[#f4f0fa]/55">
+                        ({cardDetailModal.voteCount} {cardDetailModal.voteCount === 1 ? "rating" : "ratings"})
+                      </span>
+                    </p>
+                    {cardDetailModal.card &&
+                    cardDetailModal.card.card_identifier != null &&
+                    String(cardDetailModal.card.card_identifier).trim() !== "" ? (
+                      <button
+                        type="button"
+                        className="mt-3 text-[0.8rem] font-semibold text-violet-200/95 underline-offset-2 hover:underline"
+                        onClick={() =>
+                          onOpenCardDetail(String(cardDetailModal.card?.card_identifier).trim())
+                        }
+                      >
+                        Open in catalog
+                      </button>
+                    ) : null}
+                    <p className={`m-0 mt-5 ${labelMuted}`}>Ratings by user</p>
+                    {cardDetailModal.ratings.length === 0 ? (
+                      <p className="mt-2 text-[0.85rem] text-[#f4f0fa]/60">No ratings for this card in this session.</p>
+                    ) : (
+                      <div className="mt-2 overflow-x-auto rounded-lg border border-white/[0.1]">
+                        <table className="w-full min-w-[20rem] border-collapse text-left text-[0.78rem] text-[#f4f0fa]/88">
+                          <thead>
+                            <tr className="border-b border-white/[0.1] text-[0.68rem] uppercase tracking-wide text-[#f4f0fa]/45">
+                              <th className="py-2 pl-3 pr-2 font-semibold">User</th>
+                              <th className="py-2 pr-2 font-semibold">Rating</th>
+                              <th className="py-2 pr-3 font-semibold">Notes</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {cardDetailModal.ratings.map((row, ri) => (
+                              <tr key={`${row.user_id}-${ri}`} className="border-b border-white/[0.06] last:border-b-0">
+                                <td className="py-2 pl-3 pr-2 font-medium text-[#f4f0fa]/90">
+                                  {row.user_label || `User ${row.user_id}`}
+                                </td>
+                                <td className="py-2 pr-2 tabular-nums text-[#f4f0fa]/80">{row.rating}/5</td>
+                                <td className="max-w-[min(28rem,55vw)] py-2 pr-3 whitespace-pre-wrap text-[#f4f0fa]/75">
+                                  {row.notes != null && row.notes !== "" ? row.notes : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           </div>

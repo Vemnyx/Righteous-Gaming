@@ -820,28 +820,30 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 	}
 
 	type controversialJSON struct {
-		Card          cardJSON `json:"card"`
-		MinRating     int16    `json:"min_rating"`
-		MaxRating     int16    `json:"max_rating"`
-		Spread        int      `json:"spread"`
-		StdDev        float64  `json:"stddev"`
-		AvgRating     float64  `json:"avg_rating"`
-		VoteCount     int      `json:"vote_count"`
-		LowRatings    int      `json:"low_ratings"`
-		HighRatings   int      `json:"high_ratings"`
+		Card           cardJSON `json:"card"`
+		MinRating      int16    `json:"min_rating"`
+		MaxRating      int16    `json:"max_rating"`
+		Spread         int      `json:"spread"`
+		StdDev         float64  `json:"stddev"`
+		RatingVariance float64  `json:"rating_variance"`
+		AvgRating      float64  `json:"avg_rating"`
+		VoteCount      int      `json:"vote_count"`
+		LowRatings     int      `json:"low_ratings"`
+		HighRatings    int      `json:"high_ratings"`
 	}
 	cont := make([]controversialJSON, 0, len(analytics.MostControversial))
 	for _, e := range analytics.MostControversial {
 		cont = append(cont, controversialJSON{
-			Card:        cardToJSON(&e.Card),
-			MinRating:   e.MinRating,
-			MaxRating:   e.MaxRating,
-			Spread:      e.Spread,
-			StdDev:      e.StdDev,
-			AvgRating:   e.AvgRating,
-			VoteCount:   e.VoteCount,
-			LowRatings:  e.LowRatings,
-			HighRatings: e.HighRatings,
+			Card:           cardToJSON(&e.Card),
+			MinRating:      e.MinRating,
+			MaxRating:      e.MaxRating,
+			Spread:         e.Spread,
+			StdDev:         e.StdDev,
+			RatingVariance: e.Variance,
+			AvgRating:      e.AvgRating,
+			VoteCount:      e.VoteCount,
+			LowRatings:     e.LowRatings,
+			HighRatings:    e.HighRatings,
 		})
 	}
 
@@ -929,4 +931,78 @@ func (h *cardRatingsHTTP) getCardRaterCardRatingNotes(w http.ResponseWriter, r *
 		out = append(out, noteJSON{UserID: n.UserID, UserLabel: n.UserLabel, Rating: n.Rating, Notes: n.Notes})
 	}
 	writeCatalogJSON(w, http.StatusOK, map[string]any{"notes": out})
+}
+
+// GET /api/card-raters/{id}/cards/{cardId}/session-ratings
+func (h *cardRatingsHTTP) getCardRaterCardSessionRatings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := h.sessionUser(w, r); !ok {
+		return
+	}
+	raterStr := strings.TrimSpace(r.PathValue("id"))
+	cardStr := strings.TrimSpace(r.PathValue("cardId"))
+	raterID, err := strconv.Atoi(raterStr)
+	if err != nil || raterID <= 0 {
+		writeMessageError(w, http.StatusBadRequest, "invalid card rater id")
+		return
+	}
+	cardID, err := strconv.Atoi(cardStr)
+	if err != nil || cardID <= 0 {
+		writeMessageError(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	if _, err := h.app.Repo.GetCardRater(r.Context(), raterID); err != nil {
+		if errors.Is(err, repository.ErrCardRaterNotFound) {
+			writeMessageError(w, http.StatusNotFound, "card rater not found")
+			return
+		}
+		log.Error("session ratings get rater", "error", err, "rater_id", raterID)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	card, err := h.app.Repo.CardByID(r.Context(), cardID)
+	if err != nil {
+		if errors.Is(err, repository.ErrCardNotFound) {
+			writeMessageError(w, http.StatusNotFound, "card not found")
+			return
+		}
+		log.Error("session ratings card by id", "error", err, "card_id", cardID)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	breakdown, err := h.app.Repo.CardRaterSessionRatingsBreakdown(r.Context(), raterID, cardID)
+	if err != nil {
+		log.Error("session ratings breakdown", "error", err, "rater_id", raterID, "card_id", cardID)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	type rowJSON struct {
+		UserID    int     `json:"user_id"`
+		UserLabel string  `json:"user_label"`
+		Rating    int16   `json:"rating"`
+		Notes     *string `json:"notes,omitempty"`
+	}
+	rows := make([]rowJSON, 0, len(breakdown.Ratings))
+	for _, row := range breakdown.Ratings {
+		rows = append(rows, rowJSON{
+			UserID:    row.UserID,
+			UserLabel: row.UserLabel,
+			Rating:    row.Rating,
+			Notes:     row.Notes,
+		})
+	}
+	payload := map[string]any{
+		"card":        cardToJSON(card),
+		"vote_count":  breakdown.VoteCount,
+		"ratings":     rows,
+	}
+	if breakdown.AvgRating != nil {
+		payload["avg_rating"] = *breakdown.AvgRating
+	} else {
+		payload["avg_rating"] = nil
+	}
+	writeCatalogJSON(w, http.StatusOK, payload)
 }

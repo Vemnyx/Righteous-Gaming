@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -314,6 +316,77 @@ ORDER BY r.user_id ASC`
 		return nil, fmt.Errorf("repository: list card rater session notes rows: %w", err)
 	}
 	return out, nil
+}
+
+// CardRaterSessionRating is one user's rating and optional note for a card in one card_rater session.
+type CardRaterSessionRating struct {
+	UserID    int
+	UserLabel string
+	Rating    int16
+	Notes     *string // trimmed non-empty, or nil
+}
+
+// CardRaterSessionRatingsBreakdown is aggregate stats plus per-user rows for one card in a session.
+type CardRaterSessionRatingsBreakdown struct {
+	AvgRating *float64
+	VoteCount int
+	Ratings   []CardRaterSessionRating
+}
+
+// CardRaterSessionRatingsBreakdown loads average, vote count, and every user's row for this card in the session.
+func (r *Repository) CardRaterSessionRatingsBreakdown(ctx context.Context, raterID, cardID int) (*CardRaterSessionRatingsBreakdown, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	var out CardRaterSessionRatingsBreakdown
+	out.Ratings = make([]CardRaterSessionRating, 0, 32)
+
+	const aggQ = `
+SELECT COALESCE(AVG(rating)::float8, 0), COUNT(*)::int
+FROM user_card_ratings
+WHERE rater_id = $1 AND card_id = $2`
+	var avg float64
+	var n int
+	if err := r.pool.QueryRow(ctx, aggQ, raterID, cardID).Scan(&avg, &n); err != nil {
+		return nil, fmt.Errorf("repository: card rater session ratings aggregate: %w", err)
+	}
+	out.VoteCount = n
+	if n > 0 {
+		out.AvgRating = &avg
+	}
+
+	const listQ = `
+SELECT r.user_id,
+	COALESCE(NULLIF(TRIM(u.username), ''), NULLIF(TRIM(u.email), ''), 'User ' || u.id::text),
+	r.rating,
+	r.notes
+FROM user_card_ratings r
+INNER JOIN users u ON u.id = r.user_id
+WHERE r.rater_id = $1 AND r.card_id = $2
+ORDER BY 2 ASC, r.user_id ASC`
+	rows, err := r.pool.Query(ctx, listQ, raterID, cardID)
+	if err != nil {
+		return nil, fmt.Errorf("repository: card rater session ratings list: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var row CardRaterSessionRating
+		var notes sql.NullString
+		if err := rows.Scan(&row.UserID, &row.UserLabel, &row.Rating, &notes); err != nil {
+			return nil, fmt.Errorf("repository: card rater session ratings list scan: %w", err)
+		}
+		if notes.Valid {
+			t := strings.TrimSpace(notes.String)
+			if t != "" {
+				row.Notes = &t
+			}
+		}
+		out.Ratings = append(out.Ratings, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: card rater session ratings list rows: %w", err)
+	}
+	return &out, nil
 }
 
 // SetExists reports whether a set with the given id exists.
