@@ -715,3 +715,125 @@ func (h *cardRatingsHTTP) deleteCardRater(w http.ResponseWriter, r *http.Request
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// GET /api/card-raters/{id}/analytics?class=&talent=&type=&top_limit=&table_limit=
+func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := h.sessionUser(w, r); !ok {
+		return
+	}
+	idStr := strings.TrimSpace(r.PathValue("id"))
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id <= 0 {
+		writeMessageError(w, http.StatusBadRequest, "invalid card rater id")
+		return
+	}
+	cr, err := h.app.Repo.GetCardRater(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrCardRaterNotFound) {
+			writeMessageError(w, http.StatusNotFound, "card rater not found")
+			return
+		}
+		log.Error("card rater analytics get rater", "error", err, "id", id)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	var classF, talentF, typeF *int16
+	if s := strings.TrimSpace(r.URL.Query().Get("class")); s != "" {
+		v64, err := strconv.ParseInt(s, 10, 16)
+		if err != nil || !domain.CardClass(int16(v64)).Valid() {
+			writeFieldError(w, http.StatusBadRequest, "class", "invalid class id")
+			return
+		}
+		v := int16(v64)
+		classF = &v
+	}
+	if s := strings.TrimSpace(r.URL.Query().Get("talent")); s != "" {
+		v64, err := strconv.ParseInt(s, 10, 16)
+		if err != nil || !domain.CardTalent(int16(v64)).Valid() {
+			writeFieldError(w, http.StatusBadRequest, "talent", "invalid talent id")
+			return
+		}
+		v := int16(v64)
+		talentF = &v
+	}
+	if s := strings.TrimSpace(r.URL.Query().Get("type")); s != "" {
+		v64, err := strconv.ParseInt(s, 10, 16)
+		if err != nil || !domain.CardType(int16(v64)).Valid() {
+			writeFieldError(w, http.StatusBadRequest, "type", "invalid card type id")
+			return
+		}
+		v := int16(v64)
+		typeF = &v
+	}
+
+	topLimit := 10
+	if s := strings.TrimSpace(r.URL.Query().Get("top_limit")); s != "" {
+		v, err := strconv.Atoi(s)
+		if err != nil || v < 1 || v > 50 {
+			writeFieldError(w, http.StatusBadRequest, "top_limit", "must be between 1 and 50")
+			return
+		}
+		topLimit = v
+	}
+	tableLimit := 50
+	if s := strings.TrimSpace(r.URL.Query().Get("table_limit")); s != "" {
+		v, err := strconv.Atoi(s)
+		if err != nil || v < 1 || v > 200 {
+			writeFieldError(w, http.StatusBadRequest, "table_limit", "must be between 1 and 200")
+			return
+		}
+		tableLimit = v
+	}
+
+	analytics, err := h.app.Repo.CardRaterAnalytics(r.Context(), id, classF, talentF, typeF, topLimit, tableLimit)
+	if err != nil {
+		log.Error("card rater analytics", "error", err, "id", id)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	type rankedJSON struct {
+		Card      cardJSON `json:"card"`
+		AvgRating float64  `json:"avg_rating"`
+		VoteCount int      `json:"vote_count"`
+	}
+	type binJSON struct {
+		Rating int16 `json:"rating"`
+		Count  int   `json:"count"`
+	}
+	dist := make([]binJSON, 0, len(analytics.Distribution))
+	for _, b := range analytics.Distribution {
+		dist = append(dist, binJSON{Rating: b.Rating, Count: b.Count})
+	}
+	top := make([]rankedJSON, 0, len(analytics.TopCards))
+	for _, e := range analytics.TopCards {
+		top = append(top, rankedJSON{Card: cardToJSON(&e.Card), AvgRating: e.AvgRating, VoteCount: e.VoteCount})
+	}
+	tbl := make([]rankedJSON, 0, len(analytics.RankedTable))
+	for _, e := range analytics.RankedTable {
+		tbl = append(tbl, rankedJSON{Card: cardToJSON(&e.Card), AvgRating: e.AvgRating, VoteCount: e.VoteCount})
+	}
+
+	writeCatalogJSON(w, http.StatusOK, map[string]any{
+		"rater": cardRaterToJSON(*cr),
+		"summary": map[string]any{
+			"total_ratings":   analytics.Summary.TotalRatings,
+			"unique_users":    analytics.Summary.UniqueUsers,
+			"average_rating":  analytics.Summary.AvgRating,
+			"distinct_cards":  analytics.Summary.DistinctCards,
+		},
+		"rating_distribution": dist,
+		"filter_options": map[string]any{
+			"classes": analytics.FilterOptions.Classes,
+			"talents": analytics.FilterOptions.Talents,
+			"types":   analytics.FilterOptions.CardTypes,
+		},
+		"top_cards":    top,
+		"ranked_table": tbl,
+	})
+}

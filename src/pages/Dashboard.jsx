@@ -8,6 +8,8 @@ import { CardDetailPage } from "../components/CardDetailPage";
 import { AnnouncementsFeed } from "../components/AnnouncementsFeed";
 import { AnnouncementsAdmin } from "../components/AnnouncementsAdmin";
 import { CardRaterAdmin } from "../components/CardRaterAdmin";
+import { CardRaterRedirect } from "../components/CardRaterRedirect";
+import { CardRaterAnalytics } from "../components/CardRaterAnalytics";
 
 /** Persisted before opening Invite User so Back restores the dashboard URL (e.g. `/admin/users`). */
 const SESSION_INVITE_RETURN_KEY = "rg-dashboard-return-url";
@@ -30,7 +32,7 @@ const FALLBACK_TAB_ID = "announcements";
 /** @type {ResourceSubLink[]} */
 const RESOURCE_SUB_LINKS = [
   { segment: "cards", label: "Cards", path: "/resources/cards" },
-  { segment: "card-rater", label: "Card Rater", path: "/resources/card-rater" },
+  { segment: "card-rater-play", label: "Card Rater", path: "/resources/card-rater/play" },
 ];
 
 /** @type {ResourceSubLink[]} */
@@ -44,6 +46,7 @@ const ADMIN_SUB_LINKS = [
  * @param {string} tabId
  * @param {string | null} resourcesChild — segment after `/resources/`, e.g. `cards`
  * @param {string | null} [resourcesCardIdentifier] — Fab `card_identifier` for `/resources/cards/:id`
+ * @param {string | null} [resourcesCardRaterId] — numeric id for `/resources/card-rater/:id` analytics
  * @param {string | null} [adminChild] — segment after `/admin/`, e.g. `users`
  * @param {AnnouncementAdminForm} [announcementForm] — announcements list vs `/new` vs `/:id/edit`
  */
@@ -51,6 +54,7 @@ function buildDashboardPathname(
   tabId,
   resourcesChild,
   resourcesCardIdentifier,
+  resourcesCardRaterId,
   adminChild,
   announcementForm = null,
 ) {
@@ -69,7 +73,9 @@ function buildDashboardPathname(
   }
   if (tabId === RESOURCES_TAB_ID) {
     const seg =
-      resourcesChild === "cards" || resourcesChild === "card-rater"
+      resourcesChild === "cards" ||
+      resourcesChild === "card-rater" ||
+      resourcesChild === "card-rater-play"
         ? resourcesChild
         : DEFAULT_RESOURCES_SEGMENT;
     if (
@@ -78,6 +84,19 @@ function buildDashboardPathname(
       String(resourcesCardIdentifier).trim() !== ""
     ) {
       return `/resources/cards/${encodeURIComponent(String(resourcesCardIdentifier).trim())}`;
+    }
+    if (seg === "card-rater-play") {
+      return "/resources/card-rater/play";
+    }
+    if (seg === "card-rater") {
+      const rawId = resourcesCardRaterId != null ? String(resourcesCardRaterId).trim() : "";
+      if (rawId !== "") {
+        const rid = parseInt(rawId, 10);
+        if (Number.isFinite(rid) && rid > 0 && String(rid) === rawId) {
+          return `/resources/card-rater/${rid}`;
+        }
+      }
+      return "/resources/card-rater";
     }
     return `/resources/${seg}`;
   }
@@ -88,6 +107,7 @@ function replaceDashboardUrl(
   tabId,
   resourcesChild,
   resourcesCardIdentifier,
+  resourcesCardRaterId,
   adminChild,
   announcementForm = null,
 ) {
@@ -97,6 +117,7 @@ function replaceDashboardUrl(
       tabId,
       resourcesChild,
       resourcesCardIdentifier,
+      resourcesCardRaterId,
       adminChild,
       announcementForm,
     );
@@ -113,6 +134,7 @@ function pushDashboardUrl(
   tabId,
   resourcesChild,
   resourcesCardIdentifier,
+  resourcesCardRaterId,
   adminChild,
   announcementForm = null,
 ) {
@@ -122,6 +144,7 @@ function pushDashboardUrl(
       tabId,
       resourcesChild,
       resourcesCardIdentifier,
+      resourcesCardRaterId,
       adminChild,
       announcementForm,
     );
@@ -136,7 +159,7 @@ function pushDashboardUrl(
 
 /**
  * @param {string} pathname
- * @returns {{ kind: "empty" } | { kind: "invalid" } | { kind: "ok", tabId: string, resourcesChild: string | null, resourcesCardIdentifier: string | null, adminChild: string | null, adminAnnouncementForm: AnnouncementAdminForm }}
+ * @returns {{ kind: "empty" } | { kind: "invalid" } | { kind: "ok", tabId: string, resourcesChild: string | null, resourcesCardIdentifier: string | null, resourcesCardRaterId: string | null, adminChild: string | null, adminAnnouncementForm: AnnouncementAdminForm }}
  */
 function parseDashboardPathname(pathname) {
   const parts = pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
@@ -153,6 +176,7 @@ function parseDashboardPathname(pathname) {
           tabId: RESOURCES_TAB_ID,
           resourcesChild: "cards",
           resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
           adminChild: null,
           adminAnnouncementForm: null,
         };
@@ -162,20 +186,47 @@ function parseDashboardPathname(pathname) {
         tabId: RESOURCES_TAB_ID,
         resourcesChild: "cards",
         resourcesCardIdentifier: decodeURIComponent(c),
+        resourcesCardRaterId: null,
         adminChild: null,
         adminAnnouncementForm: null,
       };
     }
     if (b === "card-rater" || b === "card-ranker") {
-      if (c !== undefined) return { kind: "invalid" };
-      return {
-        kind: "ok",
-        tabId: RESOURCES_TAB_ID,
-        resourcesChild: "card-rater",
-        resourcesCardIdentifier: null,
-        adminChild: null,
-        adminAnnouncementForm: null,
-      };
+      if (c === undefined) {
+        return {
+          kind: "ok",
+          tabId: RESOURCES_TAB_ID,
+          resourcesChild: "card-rater",
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
+          adminChild: null,
+          adminAnnouncementForm: null,
+        };
+      }
+      if (c === "play") {
+        return {
+          kind: "ok",
+          tabId: RESOURCES_TAB_ID,
+          resourcesChild: "card-rater-play",
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
+          adminChild: null,
+          adminAnnouncementForm: null,
+        };
+      }
+      const rid = parseInt(String(c), 10);
+      if (Number.isFinite(rid) && rid > 0 && String(rid) === String(c)) {
+        return {
+          kind: "ok",
+          tabId: RESOURCES_TAB_ID,
+          resourcesChild: "card-rater",
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: String(rid),
+          adminChild: null,
+          adminAnnouncementForm: null,
+        };
+      }
+      return { kind: "invalid" };
     }
     return { kind: "invalid" };
   }
@@ -187,6 +238,7 @@ function parseDashboardPathname(pathname) {
         tabId: ADMIN_TAB_ID,
         resourcesChild: null,
         resourcesCardIdentifier: null,
+        resourcesCardRaterId: null,
         adminChild: "users",
         adminAnnouncementForm: null,
       };
@@ -198,6 +250,7 @@ function parseDashboardPathname(pathname) {
         tabId: ADMIN_TAB_ID,
         resourcesChild: null,
         resourcesCardIdentifier: null,
+        resourcesCardRaterId: null,
         adminChild: "users",
         adminAnnouncementForm: null,
       };
@@ -209,6 +262,7 @@ function parseDashboardPathname(pathname) {
         tabId: ADMIN_TAB_ID,
         resourcesChild: null,
         resourcesCardIdentifier: null,
+        resourcesCardRaterId: null,
         adminChild: "card-rater",
         adminAnnouncementForm: null,
       };
@@ -221,6 +275,7 @@ function parseDashboardPathname(pathname) {
           tabId: ADMIN_TAB_ID,
           resourcesChild: null,
           resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
           adminChild: "announcements",
           adminAnnouncementForm: null,
         };
@@ -231,6 +286,7 @@ function parseDashboardPathname(pathname) {
           tabId: ADMIN_TAB_ID,
           resourcesChild: null,
           resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
           adminChild: "announcements",
           adminAnnouncementForm: "new",
         };
@@ -250,6 +306,7 @@ function parseDashboardPathname(pathname) {
           tabId: ADMIN_TAB_ID,
           resourcesChild: null,
           resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
           adminChild: "announcements",
           adminAnnouncementForm: editId,
         };
@@ -266,6 +323,7 @@ function parseDashboardPathname(pathname) {
       tabId: ADMIN_TAB_ID,
       resourcesChild: null,
       resourcesCardIdentifier: null,
+      resourcesCardRaterId: null,
       adminChild: "users",
       adminAnnouncementForm: null,
     };
@@ -278,6 +336,7 @@ function parseDashboardPathname(pathname) {
     tabId: a,
     resourcesChild: null,
     resourcesCardIdentifier: null,
+    resourcesCardRaterId: null,
     adminChild: null,
     adminAnnouncementForm: null,
   };
@@ -287,7 +346,7 @@ function parseDashboardPathname(pathname) {
  * @param {string} pathname
  * @param {string} search
  * @param {{ id: string }[]} tabsAllowed
- * @returns {{ tabId: string, resourcesChild: string | null, resourcesCardIdentifier: string | null, adminChild: string | null, adminAnnouncementForm: AnnouncementAdminForm }}
+ * @returns {{ tabId: string, resourcesChild: string | null, resourcesCardIdentifier: string | null, resourcesCardRaterId: string | null, adminChild: string | null, adminAnnouncementForm: AnnouncementAdminForm }}
  */
 function resolveDashboardLocation(pathname, search, tabsAllowed) {
   const parsed = parseDashboardPathname(pathname);
@@ -297,6 +356,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
       tabId: FALLBACK_TAB_ID,
       resourcesChild: null,
       resourcesCardIdentifier: null,
+      resourcesCardRaterId: null,
       adminChild: null,
       adminAnnouncementForm: null,
     };
@@ -310,6 +370,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
           tabId: FALLBACK_TAB_ID,
           resourcesChild: null,
           resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
           adminChild: null,
           adminAnnouncementForm: null,
         };
@@ -319,6 +380,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
           tabId: raw,
           resourcesChild: null,
           resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
           adminChild: null,
           adminAnnouncementForm: null,
         };
@@ -330,24 +392,40 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
       tabId: FALLBACK_TAB_ID,
       resourcesChild: null,
       resourcesCardIdentifier: null,
+      resourcesCardRaterId: null,
       adminChild: null,
       adminAnnouncementForm: null,
     };
   }
 
-  let { tabId, resourcesChild, resourcesCardIdentifier, adminChild, adminAnnouncementForm } = parsed;
+  let {
+    tabId,
+    resourcesChild,
+    resourcesCardIdentifier,
+    resourcesCardRaterId,
+    adminChild,
+    adminAnnouncementForm,
+  } = parsed;
 
   if (!tabsAllowed.some((t) => t.id === tabId)) {
     return {
       tabId: FALLBACK_TAB_ID,
       resourcesChild: null,
       resourcesCardIdentifier: null,
+      resourcesCardRaterId: null,
       adminChild: null,
       adminAnnouncementForm: null,
     };
   }
 
-  return { tabId, resourcesChild, resourcesCardIdentifier, adminChild, adminAnnouncementForm };
+  return {
+    tabId,
+    resourcesChild,
+    resourcesCardIdentifier,
+    resourcesCardRaterId,
+    adminChild,
+    adminAnnouncementForm,
+  };
 }
 
 /** Matches backend/domain: RoleAdmin = 0, RoleMember = 1 */
@@ -530,6 +608,8 @@ export default function Dashboard({ onNavigate }) {
   const [resourcesCardIdentifier, setResourcesCardIdentifier] = useState(
     /** @type {string | null} */ (null),
   );
+  /** Numeric `card_rater.id` when URL is `/resources/card-rater/:id` (analytics). */
+  const [resourcesCardRaterId, setResourcesCardRaterId] = useState(/** @type {string | null} */ (null));
   /** When `activeTab === admin`, which sub-route is shown (`/admin/...`). */
   const [adminChild, setAdminChild] = useState(/** @type {string | null} */ (null));
   /** Sub-route under `/admin/announcements` (list vs create vs edit). */
@@ -551,7 +631,11 @@ export default function Dashboard({ onNavigate }) {
     if (activeTab !== RESOURCES_TAB_ID) {
       return ALL_TABS.find((t) => t.id === RESOURCES_TAB_ID)?.label ?? "Resources";
     }
-    const hit = RESOURCE_SUB_LINKS.find((l) => l.segment === resourcesChild);
+    const hit = RESOURCE_SUB_LINKS.find(
+      (l) =>
+        l.segment === resourcesChild ||
+        (l.segment === "card-rater-play" && resourcesChild === "card-rater"),
+    );
     return hit?.label ?? "Resources";
   }, [activeTab, resourcesChild]);
 
@@ -568,21 +652,24 @@ export default function Dashboard({ onNavigate }) {
     if (tabId === RESOURCES_TAB_ID) {
       setResourcesChild(DEFAULT_RESOURCES_SEGMENT);
       setResourcesCardIdentifier(null);
+      setResourcesCardRaterId(null);
       setAdminChild(null);
       setAdminAnnouncementForm(null);
-      replaceDashboardUrl(RESOURCES_TAB_ID, DEFAULT_RESOURCES_SEGMENT, null, null, null);
+      replaceDashboardUrl(RESOURCES_TAB_ID, DEFAULT_RESOURCES_SEGMENT, null, null, null, null);
     } else if (tabId === ADMIN_TAB_ID) {
       setAdminChild(DEFAULT_ADMIN_SEGMENT);
       setResourcesChild(null);
       setResourcesCardIdentifier(null);
+      setResourcesCardRaterId(null);
       setAdminAnnouncementForm(null);
-      replaceDashboardUrl(ADMIN_TAB_ID, null, null, DEFAULT_ADMIN_SEGMENT, null);
+      replaceDashboardUrl(ADMIN_TAB_ID, null, null, null, DEFAULT_ADMIN_SEGMENT, null);
     } else {
       setResourcesChild(null);
       setResourcesCardIdentifier(null);
+      setResourcesCardRaterId(null);
       setAdminChild(null);
       setAdminAnnouncementForm(null);
-      replaceDashboardUrl(tabId, null, null, null, null);
+      replaceDashboardUrl(tabId, null, null, null, null, null);
       setMobileResourcesOpen(false);
       setMobileAdminOpen(false);
     }
@@ -592,9 +679,10 @@ export default function Dashboard({ onNavigate }) {
     setActiveTab(RESOURCES_TAB_ID);
     setResourcesChild(segment);
     setResourcesCardIdentifier(null);
+    setResourcesCardRaterId(null);
     setAdminChild(null);
     setAdminAnnouncementForm(null);
-    replaceDashboardUrl(RESOURCES_TAB_ID, segment, null, null, null);
+    replaceDashboardUrl(RESOURCES_TAB_ID, segment, null, null, null, null);
   }, []);
 
   const goAdminSub = useCallback((segment) => {
@@ -602,8 +690,9 @@ export default function Dashboard({ onNavigate }) {
     setAdminChild(segment);
     setResourcesChild(null);
     setResourcesCardIdentifier(null);
+    setResourcesCardRaterId(null);
     setAdminAnnouncementForm(null);
-    replaceDashboardUrl(ADMIN_TAB_ID, null, null, segment, null);
+    replaceDashboardUrl(ADMIN_TAB_ID, null, null, null, segment, null);
   }, []);
 
   const navigateAdminAnnouncementForm = useCallback(
@@ -611,9 +700,9 @@ export default function Dashboard({ onNavigate }) {
       setAdminAnnouncementForm(next);
       const useReplace = options?.replace === true;
       if (useReplace) {
-        replaceDashboardUrl(ADMIN_TAB_ID, null, null, "announcements", next);
+        replaceDashboardUrl(ADMIN_TAB_ID, null, null, null, "announcements", next);
       } else {
-        pushDashboardUrl(ADMIN_TAB_ID, null, null, "announcements", next);
+        pushDashboardUrl(ADMIN_TAB_ID, null, null, null, "announcements", next);
       }
     },
     [],
@@ -625,9 +714,34 @@ export default function Dashboard({ onNavigate }) {
     setActiveTab(RESOURCES_TAB_ID);
     setResourcesChild("cards");
     setResourcesCardIdentifier(id);
+    setResourcesCardRaterId(null);
     setAdminChild(null);
     setAdminAnnouncementForm(null);
-    pushDashboardUrl(RESOURCES_TAB_ID, "cards", id, null, null);
+    pushDashboardUrl(RESOURCES_TAB_ID, "cards", id, null, null, null);
+  }, []);
+
+  const openCardRaterAnalytics = useCallback((raterId) => {
+    const sid = String(raterId).trim();
+    if (!/^\d+$/.test(sid)) return;
+    setActiveTab(RESOURCES_TAB_ID);
+    setResourcesChild("card-rater");
+    setResourcesCardIdentifier(null);
+    setResourcesCardRaterId(sid);
+    setAdminChild(null);
+    setAdminAnnouncementForm(null);
+    pushDashboardUrl(RESOURCES_TAB_ID, "card-rater", null, sid, null, null);
+    setMobileNavOpen(false);
+  }, []);
+
+  const openCardRaterPlay = useCallback(() => {
+    setActiveTab(RESOURCES_TAB_ID);
+    setResourcesChild("card-rater-play");
+    setResourcesCardIdentifier(null);
+    setResourcesCardRaterId(null);
+    setAdminChild(null);
+    setAdminAnnouncementForm(null);
+    pushDashboardUrl(RESOURCES_TAB_ID, "card-rater-play", null, null, null, null);
+    setMobileNavOpen(false);
   }, []);
 
   useEffect(() => {
@@ -641,6 +755,8 @@ export default function Dashboard({ onNavigate }) {
       const nextChild = nextTab === RESOURCES_TAB_ID ? resolved.resourcesChild : null;
       const nextCardId =
         nextTab === RESOURCES_TAB_ID ? resolved.resourcesCardIdentifier : null;
+      const nextRaterId =
+        nextTab === RESOURCES_TAB_ID ? resolved.resourcesCardRaterId : null;
       const nextAdminChild = nextTab === ADMIN_TAB_ID ? resolved.adminChild : null;
       const nextAnnouncementForm =
         nextTab === ADMIN_TAB_ID && nextAdminChild === "announcements"
@@ -649,12 +765,14 @@ export default function Dashboard({ onNavigate }) {
       setActiveTab(nextTab);
       setResourcesChild(nextChild);
       setResourcesCardIdentifier(nextCardId);
+      setResourcesCardRaterId(nextRaterId);
       setAdminChild(nextAdminChild);
       setAdminAnnouncementForm(nextAnnouncementForm);
       replaceDashboardUrl(
         nextTab,
         nextTab === RESOURCES_TAB_ID ? nextChild : null,
         nextTab === RESOURCES_TAB_ID ? nextCardId : null,
+        nextTab === RESOURCES_TAB_ID ? nextRaterId : null,
         nextTab === ADMIN_TAB_ID ? nextAdminChild : null,
         nextAnnouncementForm,
       );
@@ -818,7 +936,9 @@ export default function Dashboard({ onNavigate }) {
                           const subActive =
                             tab.id === RESOURCES_TAB_ID
                               ? activeTab === RESOURCES_TAB_ID &&
-                                resourcesChild === link.segment
+                                (resourcesChild === link.segment ||
+                                  (link.segment === "card-rater-play" &&
+                                    resourcesChild === "card-rater"))
                               : activeTab === ADMIN_TAB_ID && adminChild === link.segment;
                           return (
                             <button
@@ -928,7 +1048,9 @@ export default function Dashboard({ onNavigate }) {
                           aria-label="Resources pages"
                         >
                           {RESOURCE_SUB_LINKS.map((link) => {
-                            const subSel = resourcesChild === link.segment;
+                            const subSel =
+                              resourcesChild === link.segment ||
+                              (link.segment === "card-rater-play" && resourcesChild === "card-rater");
                             return (
                               <button
                                 key={link.segment}
@@ -1038,7 +1160,7 @@ export default function Dashboard({ onNavigate }) {
             key={tab.id}
             value={tab.id}
             className={`relative z-0 flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl border outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 ${
-              tab.id === RESOURCES_TAB_ID && resourcesChild === "card-rater"
+              tab.id === RESOURCES_TAB_ID && resourcesChild === "card-rater-play"
                 ? "p-0 sm:p-0"
                 : "p-8 sm:p-10"
             } ${
@@ -1079,6 +1201,7 @@ export default function Dashboard({ onNavigate }) {
                 <CardRaterAdmin
                   isLight={isLight}
                   active={activeTab === ADMIN_TAB_ID && adminChild === "card-rater"}
+                  onOpenCardRaterAnalytics={openCardRaterAnalytics}
                 />
               ) : (
                 <div
@@ -1109,10 +1232,27 @@ export default function Dashboard({ onNavigate }) {
                   }
                   onOpenCardDetail={openCardDetail}
                 />
-              ) : resourcesChild === "card-rater" ? (
+              ) : resourcesChild === "card-rater-play" ? (
                 <CardRanker
                   isLight={isLight}
+                  active={activeTab === RESOURCES_TAB_ID && resourcesChild === "card-rater-play"}
+                />
+              ) : resourcesChild === "card-rater" && resourcesCardRaterId ? (
+                <CardRaterAnalytics
+                  isLight={isLight}
+                  raterId={resourcesCardRaterId}
+                  active={
+                    activeTab === RESOURCES_TAB_ID &&
+                    resourcesChild === "card-rater" &&
+                    Boolean(resourcesCardRaterId)
+                  }
+                  onOpenCardDetail={openCardDetail}
+                  onOpenRanker={openCardRaterPlay}
+                />
+              ) : resourcesChild === "card-rater" ? (
+                <CardRaterRedirect
                   active={activeTab === RESOURCES_TAB_ID && resourcesChild === "card-rater"}
+                  onResolvedTarget={openCardRaterAnalytics}
                 />
               ) : (
                 <div

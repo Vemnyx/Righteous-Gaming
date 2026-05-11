@@ -23,9 +23,9 @@ function rowIsActive(row) {
 }
 
 /**
- * @param {{ isLight: boolean, active: boolean }} props
+ * @param {{ isLight: boolean, active: boolean, onOpenCardRaterAnalytics?: (id: number) => void }} props
  */
-export function CardRaterAdmin({ isLight, active }) {
+export function CardRaterAdmin({ isLight, active, onOpenCardRaterAnalytics }) {
   const { user } = useAuth();
   const [rows, setRows] = useState(/** @type {CardRaterRow[]} */ ([]));
   const [sets, setSets] = useState(/** @type {CatalogSetLite[]} */ ([]));
@@ -378,7 +378,6 @@ export function CardRaterAdmin({ isLight, active }) {
         <table className="w-full min-w-[64rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
           <thead>
             <tr className={`border-b text-[0.68rem] uppercase tracking-wider text-[#f4f0fa]/55 ${tableHeadBorder}`}>
-              <th className="px-3 py-2.5 font-semibold sm:px-4">ID</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Label</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Set</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Format</th>
@@ -391,13 +390,13 @@ export function CardRaterAdmin({ isLight, active }) {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={8} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
+                <td colSpan={7} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
+                <td colSpan={7} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
                   No card rater sessions yet.
                 </td>
               </tr>
@@ -409,7 +408,6 @@ export function CardRaterAdmin({ isLight, active }) {
                 const labelText = row.label != null && String(row.label).trim() !== "" ? String(row.label).trim() : null;
                 return (
                   <tr key={row.id} className={`border-b ${tableRowBorder} last:border-b-0`}>
-                    <td className="px-3 py-2.5 tabular-nums sm:px-4">{row.id}</td>
                     <td className="max-w-[14rem] truncate px-3 py-2.5 text-[#f4f0fa]/85 sm:px-4" title={labelText ?? undefined}>
                       {labelText ?? <span className="text-[#f4f0fa]/40">—</span>}
                     </td>
@@ -431,6 +429,16 @@ export function CardRaterAdmin({ isLight, active }) {
                     </td>
                     <td className="px-3 py-2.5 text-right sm:px-4">
                       <div className="flex flex-wrap items-center justify-end gap-1.5">
+                        {typeof onOpenCardRaterAnalytics === "function" ? (
+                          <button
+                            type="button"
+                            className={`${btnBase} ${btnTheme}`}
+                            disabled={!user || deleteSubmitting}
+                            onClick={() => onOpenCardRaterAnalytics(row.id)}
+                          >
+                            View results
+                          </button>
+                        ) : null}
                         {active ? (
                           <button
                             type="button"
