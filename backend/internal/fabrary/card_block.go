@@ -35,7 +35,7 @@ var (
 	reSetIdentifiers  = regexp.MustCompile(`(?m)\bsetIdentifiers:\s*\[([^\]]+)\]`)
 )
 
-// BlockMatchesRelease returns true if block contains the substring (e.g. "Release.OmensOfTheStars").
+// BlockMatchesRelease returns true if block contains the substring (e.g. "Release.OmensOfTheThirdAge").
 // If token is empty, any block matches.
 func BlockMatchesRelease(block, token string) bool {
 	token = strings.TrimSpace(token)

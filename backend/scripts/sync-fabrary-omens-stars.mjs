@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Calls POST /api/admin/catalog/sync-fabrary-latest-set to import missing cards
- * from fabrary's latest-set TypeScript dump into the DB set "Omens of the Stars".
+ * from fabrary's latest-set TypeScript dump into the DB set "Omens of the Third Age".
  *
  * Prerequisites:
  *   - Backend running (default http://127.0.0.1:8080)
@@ -10,8 +10,8 @@
  * Environment:
  *   RG_API_BASE       — API origin (default http://127.0.0.1:8080)
  *   RG_ID_TOKEN       — Bearer ID token (required)
- *   RG_SET_NAME       — sets.name match, case-insensitive (default Omens of the Stars)
- *   RG_FAB_RELEASE    — substring filter on each card object (default Release.OmensOfTheStars)
+ *   RG_SET_NAME       — sets.name match, case-insensitive (default Omens of the Third Age)
+ *   RG_FAB_RELEASE    — substring filter on each card object (default Release.OmensOfTheThirdAge)
  *   RG_FAB_URL        — override fabrary raw TS URL
  *
  * Usage:

@@ -4,7 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 /** @typedef {{ id: number, name: string, code: string, image_url?: string | null }} CatalogSetRow */
 
 /**
- * Omens of the Stars / Omen of the Stars — fabrary sync is only offered for this set name.
+ * Omens of the Third Age / Omen of the Third Age — fabrary sync is only offered for this set name.
  * @param {CatalogSetRow} row
  */
 function rowShowsFabrarySync(row) {
@@ -12,7 +12,7 @@ function rowShowsFabrarySync(row) {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
-  return n === "omens of the stars" || n === "omen of the stars";
+  return n === "omens of the third age" || n === "omen of the third age";
 }
 
 /**
@@ -144,9 +144,9 @@ export function SetsAdmin({ isLight, active }) {
         <div>
           <h2 className="m-0 text-left text-lg font-semibold tracking-tight text-[#f4f0fa]">Sets</h2>
           <p className="m-0 mt-1 max-w-2xl text-[0.85rem] leading-snug text-[#f4f0fa]/70">
-            Catalog sets stored in the database. For{" "}
-            <span className="font-semibold text-[#f4f0fa]/88">Omens of the Stars</span> (or{" "}
-            <span className="font-semibold text-[#f4f0fa]/88">Omen of the Stars</span>), use Sync to pull new cards
+            Catalog sets stored in the database.             For{" "}
+            <span className="font-semibold text-[#f4f0fa]/88">Omens of the Third Age</span> (or{" "}
+            <span className="font-semibold text-[#f4f0fa]/88">Omen of the Third Age</span>), use Sync to pull new cards
             from fabrary’s published latest-set file.
           </p>
         </div>
@@ -234,7 +234,7 @@ export function SetsAdmin({ isLight, active }) {
 
       {fabrarySyncRows.length === 0 && !loading && rows.length > 0 ? (
         <p className="m-0 text-[0.8rem] text-amber-200/85">
-          No set named “Omens of the Stars” or “Omen of the Stars” was found. Add or rename a set to enable Sync.
+          No set named “Omens of the Third Age” or “Omen of the Third Age” was found. Add or rename a set to enable Sync.
         </p>
       ) : null}
     </div>

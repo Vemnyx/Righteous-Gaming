@@ -54,7 +54,7 @@ func (h *catalogHTTP) requireAdmin(w http.ResponseWriter, r *http.Request) (*dom
 	return u, true
 }
 
-// POST /api/admin/catalog/sync-fabrary-latest-set?set_name=Omens+of+the+Stars&fab_release=Release.OmensOfTheStars&url=...
+// POST /api/admin/catalog/sync-fabrary-latest-set?set_name=Omens+of+the+Third+Age&fab_release=Release.OmensOfTheThirdAge&url=...
 func (h *catalogHTTP) postAdminSyncFabraryLatestSet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -66,11 +66,11 @@ func (h *catalogHTTP) postAdminSyncFabraryLatestSet(w http.ResponseWriter, r *ht
 
 	setName := strings.TrimSpace(r.URL.Query().Get("set_name"))
 	if setName == "" {
-		setName = "Omens of the Stars"
+		setName = "Omens of the Third Age"
 	}
 	releaseTok := strings.TrimSpace(r.URL.Query().Get("fab_release"))
 	if releaseTok == "" {
-		releaseTok = "Release.OmensOfTheStars"
+		releaseTok = "Release.OmensOfTheThirdAge"
 	}
 	srcURL := strings.TrimSpace(r.URL.Query().Get("url"))
 	if srcURL == "" {

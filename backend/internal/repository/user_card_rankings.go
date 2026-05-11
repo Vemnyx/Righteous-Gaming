@@ -274,6 +274,48 @@ ORDER BY r.card_id ASC, COALESCE(NULLIF(TRIM(u.username), ''), u.email) ASC, r.u
 	return out, nil
 }
 
+// CardRaterSessionNote is a non-empty note for one card in one card_rater session.
+type CardRaterSessionNote struct {
+	UserID    int
+	UserLabel string
+	Rating    int16
+	Notes     string
+}
+
+// ListCardRaterSessionNotes returns trimmed non-empty notes for a card in a rater session.
+func (r *Repository) ListCardRaterSessionNotes(ctx context.Context, raterID, cardID int) ([]CardRaterSessionNote, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	const q = `
+SELECT r.user_id,
+	COALESCE(NULLIF(TRIM(u.username), ''), NULLIF(TRIM(u.email), ''), 'User ' || u.id::text),
+	r.rating,
+	TRIM(r.notes)
+FROM user_card_ratings r
+INNER JOIN users u ON u.id = r.user_id
+WHERE r.rater_id = $1 AND r.card_id = $2
+	AND r.notes IS NOT NULL AND btrim(r.notes) <> ''
+ORDER BY r.user_id ASC`
+	rows, err := r.pool.Query(ctx, q, raterID, cardID)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list card rater session notes: %w", err)
+	}
+	defer rows.Close()
+	out := make([]CardRaterSessionNote, 0, 32)
+	for rows.Next() {
+		var n CardRaterSessionNote
+		if err := rows.Scan(&n.UserID, &n.UserLabel, &n.Rating, &n.Notes); err != nil {
+			return nil, fmt.Errorf("repository: list card rater session notes scan: %w", err)
+		}
+		out = append(out, n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: list card rater session notes rows: %w", err)
+	}
+	return out, nil
+}
+
 // SetExists reports whether a set with the given id exists.
 func (r *Repository) SetExists(ctx context.Context, setID int) (bool, error) {
 	if r.pool == nil {

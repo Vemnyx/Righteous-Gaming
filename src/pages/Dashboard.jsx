@@ -33,7 +33,7 @@ const FALLBACK_TAB_ID = "announcements";
 /** @type {ResourceSubLink[]} */
 const RESOURCE_SUB_LINKS = [
   { segment: "cards", label: "Cards", path: "/resources/cards" },
-  { segment: "card-rater-play", label: "Card Rater", path: "/resources/card-rater/play" },
+  { segment: "card-rater", label: "Card Rater", path: "/resources/card-rater" },
 ];
 
 /** @type {ResourceSubLink[]} */
@@ -651,7 +651,7 @@ export default function Dashboard({ onNavigate }) {
     const hit = RESOURCE_SUB_LINKS.find(
       (l) =>
         l.segment === resourcesChild ||
-        (l.segment === "card-rater-play" && resourcesChild === "card-rater"),
+        (l.segment === "card-rater" && resourcesChild === "card-rater-play"),
     );
     return hit?.label ?? "Resources";
   }, [activeTab, resourcesChild]);
@@ -747,17 +747,6 @@ export default function Dashboard({ onNavigate }) {
     setAdminChild(null);
     setAdminAnnouncementForm(null);
     pushDashboardUrl(RESOURCES_TAB_ID, "card-rater", null, sid, null, null);
-    setMobileNavOpen(false);
-  }, []);
-
-  const openCardRaterPlay = useCallback(() => {
-    setActiveTab(RESOURCES_TAB_ID);
-    setResourcesChild("card-rater-play");
-    setResourcesCardIdentifier(null);
-    setResourcesCardRaterId(null);
-    setAdminChild(null);
-    setAdminAnnouncementForm(null);
-    pushDashboardUrl(RESOURCES_TAB_ID, "card-rater-play", null, null, null, null);
     setMobileNavOpen(false);
   }, []);
 
@@ -954,8 +943,8 @@ export default function Dashboard({ onNavigate }) {
                             tab.id === RESOURCES_TAB_ID
                               ? activeTab === RESOURCES_TAB_ID &&
                                 (resourcesChild === link.segment ||
-                                  (link.segment === "card-rater-play" &&
-                                    resourcesChild === "card-rater"))
+                                  (link.segment === "card-rater" &&
+                                    resourcesChild === "card-rater-play"))
                               : activeTab === ADMIN_TAB_ID && adminChild === link.segment;
                           return (
                             <button
@@ -1067,7 +1056,7 @@ export default function Dashboard({ onNavigate }) {
                           {RESOURCE_SUB_LINKS.map((link) => {
                             const subSel =
                               resourcesChild === link.segment ||
-                              (link.segment === "card-rater-play" && resourcesChild === "card-rater");
+                              (link.segment === "card-rater" && resourcesChild === "card-rater-play");
                             return (
                               <button
                                 key={link.segment}
@@ -1266,7 +1255,6 @@ export default function Dashboard({ onNavigate }) {
                     Boolean(resourcesCardRaterId)
                   }
                   onOpenCardDetail={openCardDetail}
-                  onOpenRanker={openCardRaterPlay}
                 />
               ) : resourcesChild === "card-rater" ? (
                 <CardRaterRedirect

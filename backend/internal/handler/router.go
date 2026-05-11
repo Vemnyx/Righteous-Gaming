@@ -26,6 +26,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("GET /api/me/card-team-ratings", rh.listCardTeamRatings)
 	mux.HandleFunc("GET /api/me/card-team-ratings-batch", rh.listCardTeamRatingsBatch)
 	mux.HandleFunc("GET /api/card-raters", rh.listCardRaters)
+	mux.HandleFunc("GET /api/card-raters/{id}/cards/{cardId}/rating-notes", rh.getCardRaterCardRatingNotes)
 	mux.HandleFunc("GET /api/card-raters/{id}/analytics", rh.getCardRaterAnalytics)
 	mux.HandleFunc("POST /api/card-raters", rh.createCardRater)
 	mux.HandleFunc("PATCH /api/card-raters/active/complete", rh.completeActiveCardRater)

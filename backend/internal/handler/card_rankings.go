@@ -814,9 +814,51 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 	for _, e := range analytics.TopCards {
 		top = append(top, rankedJSON{Card: cardToJSON(&e.Card), AvgRating: e.AvgRating, VoteCount: e.VoteCount})
 	}
-	tbl := make([]rankedJSON, 0, len(analytics.RankedTable))
-	for _, e := range analytics.RankedTable {
+	tbl := make([]rankedJSON, 0, len(analytics.RatedTable))
+	for _, e := range analytics.RatedTable {
 		tbl = append(tbl, rankedJSON{Card: cardToJSON(&e.Card), AvgRating: e.AvgRating, VoteCount: e.VoteCount})
+	}
+
+	type controversialJSON struct {
+		Card          cardJSON `json:"card"`
+		MinRating     int16    `json:"min_rating"`
+		MaxRating     int16    `json:"max_rating"`
+		Spread        int      `json:"spread"`
+		StdDev        float64  `json:"stddev"`
+		AvgRating     float64  `json:"avg_rating"`
+		VoteCount     int      `json:"vote_count"`
+		LowRatings    int      `json:"low_ratings"`
+		HighRatings   int      `json:"high_ratings"`
+	}
+	cont := make([]controversialJSON, 0, len(analytics.MostControversial))
+	for _, e := range analytics.MostControversial {
+		cont = append(cont, controversialJSON{
+			Card:        cardToJSON(&e.Card),
+			MinRating:   e.MinRating,
+			MaxRating:   e.MaxRating,
+			Spread:      e.Spread,
+			StdDev:      e.StdDev,
+			AvgRating:   e.AvgRating,
+			VoteCount:   e.VoteCount,
+			LowRatings:  e.LowRatings,
+			HighRatings: e.HighRatings,
+		})
+	}
+
+	type notedJSON struct {
+		Card      cardJSON `json:"card"`
+		AvgRating float64  `json:"avg_rating"`
+		VoteCount int      `json:"vote_count"`
+		NoteCount int      `json:"note_count"`
+	}
+	noted := make([]notedJSON, 0, len(analytics.MostTalkedAboutCards))
+	for _, e := range analytics.MostTalkedAboutCards {
+		noted = append(noted, notedJSON{
+			Card:      cardToJSON(&e.Card),
+			AvgRating: e.AvgRating,
+			VoteCount: e.VoteCount,
+			NoteCount: e.NoteCount,
+		})
 	}
 
 	writeCatalogJSON(w, http.StatusOK, map[string]any{
@@ -833,7 +875,58 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 			"talents": analytics.FilterOptions.Talents,
 			"types":   analytics.FilterOptions.CardTypes,
 		},
-		"top_cards":    top,
-		"ranked_table": tbl,
+		"top_cards":             top,
+		"rated_table":           tbl,
+		"most_controversial":    cont,
+		"most_talked_about_cards": noted,
 	})
+}
+
+// GET /api/card-raters/{id}/cards/{cardId}/rating-notes
+func (h *cardRatingsHTTP) getCardRaterCardRatingNotes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := h.sessionUser(w, r); !ok {
+		return
+	}
+	raterStr := strings.TrimSpace(r.PathValue("id"))
+	cardStr := strings.TrimSpace(r.PathValue("cardId"))
+	raterID, err := strconv.Atoi(raterStr)
+	if err != nil || raterID <= 0 {
+		writeMessageError(w, http.StatusBadRequest, "invalid card rater id")
+		return
+	}
+	cardID, err := strconv.Atoi(cardStr)
+	if err != nil || cardID <= 0 {
+		writeMessageError(w, http.StatusBadRequest, "invalid card id")
+		return
+	}
+	if _, err := h.app.Repo.GetCardRater(r.Context(), raterID); err != nil {
+		if errors.Is(err, repository.ErrCardRaterNotFound) {
+			writeMessageError(w, http.StatusNotFound, "card rater not found")
+			return
+		}
+		log.Error("rating notes get rater", "error", err, "rater_id", raterID)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	rows, err := h.app.Repo.ListCardRaterSessionNotes(r.Context(), raterID, cardID)
+	if err != nil {
+		log.Error("rating notes list", "error", err, "rater_id", raterID, "card_id", cardID)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	type noteJSON struct {
+		UserID    int    `json:"user_id"`
+		UserLabel string `json:"user_label"`
+		Rating    int16  `json:"rating"`
+		Notes     string `json:"notes"`
+	}
+	out := make([]noteJSON, 0, len(rows))
+	for _, n := range rows {
+		out = append(out, noteJSON{UserID: n.UserID, UserLabel: n.UserLabel, Rating: n.Rating, Notes: n.Notes})
+	}
+	writeCatalogJSON(w, http.StatusOK, map[string]any{"notes": out})
 }

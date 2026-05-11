@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
@@ -21,11 +22,32 @@ type CardRaterRatingBin struct {
 	Count  int
 }
 
-// CardRaterRankedCard is a card with aggregate vote stats for a session.
-type CardRaterRankedCard struct {
+// CardRaterRatedCard is a card with aggregate vote stats for a session.
+type CardRaterRatedCard struct {
 	Card      Card
 	AvgRating float64
 	VoteCount int
+}
+
+// CardRaterControversialCard is a card with strongly split ratings (low and high votes both present).
+type CardRaterControversialCard struct {
+	Card         Card
+	MinRating    int16
+	MaxRating    int16
+	Spread       int
+	StdDev       float64
+	AvgRating    float64
+	VoteCount    int
+	LowRatings   int // ratings 1–2
+	HighRatings  int // ratings 4–5
+}
+
+// CardRaterNotedCard is a card with many non-empty notes in the session.
+type CardRaterNotedCard struct {
+	Card      Card
+	AvgRating float64
+	VoteCount int
+	NoteCount int
 }
 
 // CardRaterFilterOptions lists distinct class / talent / type values present among rated cards.
@@ -37,15 +59,17 @@ type CardRaterFilterOptions struct {
 
 // CardRaterAnalytics aggregates analytics for one card_rater id.
 type CardRaterAnalytics struct {
-	Summary       CardRaterSummaryStats
-	Distribution  []CardRaterRatingBin
-	FilterOptions CardRaterFilterOptions
-	TopCards      []CardRaterRankedCard
-	RankedTable   []CardRaterRankedCard
+	Summary            CardRaterSummaryStats
+	Distribution       []CardRaterRatingBin
+	FilterOptions        CardRaterFilterOptions
+	TopCards             []CardRaterRatedCard
+	RatedTable           []CardRaterRatedCard
+	MostControversial    []CardRaterControversialCard
+	MostTalkedAboutCards []CardRaterNotedCard
 }
 
-func scanCardStatsRow(row pgx.Row) (CardRaterRankedCard, error) {
-	var e CardRaterRankedCard
+func scanCardStatsRow(row pgx.Row) (CardRaterRatedCard, error) {
+	var e CardRaterRatedCard
 	c := &e.Card
 	err := row.Scan(
 		&c.ID,
@@ -78,12 +102,101 @@ func scanCardStatsRow(row pgx.Row) (CardRaterRankedCard, error) {
 		&e.VoteCount,
 	)
 	if err != nil {
-		return CardRaterRankedCard{}, err
+		return CardRaterRatedCard{}, err
 	}
 	return e, nil
 }
 
-const rankedCardsFromSession = `
+func scanCardControversialRow(row pgx.Row) (CardRaterControversialCard, error) {
+	var e CardRaterControversialCard
+	c := &e.Card
+	var std sql.NullFloat64
+	err := row.Scan(
+		&c.ID,
+		&c.SetID,
+		&c.Name,
+		&c.CardIdentifier,
+		&c.ImageURL,
+		&c.FunctionalText,
+		&c.Rarity,
+		&c.SetCode,
+		&c.SetNum,
+		&c.Type,
+		&c.Subtypes,
+		&c.Classes,
+		&c.Hybrid,
+		&c.Talents,
+		&c.Pitch,
+		&c.Cost,
+		&c.Power,
+		&c.Block,
+		&c.Heroes,
+		&c.Life,
+		&c.Intellect,
+		&c.Keywords,
+		&c.Formats,
+		&c.Specializations,
+		&c.Fusions,
+		&c.SetName,
+		&e.MinRating,
+		&e.MaxRating,
+		&e.Spread,
+		&std,
+		&e.AvgRating,
+		&e.VoteCount,
+		&e.LowRatings,
+		&e.HighRatings,
+	)
+	if err != nil {
+		return CardRaterControversialCard{}, err
+	}
+	if std.Valid {
+		e.StdDev = std.Float64
+	}
+	return e, nil
+}
+
+func scanCardNotedRow(row pgx.Row) (CardRaterNotedCard, error) {
+	var e CardRaterNotedCard
+	c := &e.Card
+	err := row.Scan(
+		&c.ID,
+		&c.SetID,
+		&c.Name,
+		&c.CardIdentifier,
+		&c.ImageURL,
+		&c.FunctionalText,
+		&c.Rarity,
+		&c.SetCode,
+		&c.SetNum,
+		&c.Type,
+		&c.Subtypes,
+		&c.Classes,
+		&c.Hybrid,
+		&c.Talents,
+		&c.Pitch,
+		&c.Cost,
+		&c.Power,
+		&c.Block,
+		&c.Heroes,
+		&c.Life,
+		&c.Intellect,
+		&c.Keywords,
+		&c.Formats,
+		&c.Specializations,
+		&c.Fusions,
+		&c.SetName,
+		&e.AvgRating,
+		&e.VoteCount,
+		&e.NoteCount,
+	)
+	if err != nil {
+		return CardRaterNotedCard{}, err
+	}
+	return e, nil
+}
+
+const ratedCardsFromSession = `
 SELECT ` + cardSelectColumnsFromC + `, MAX(s.name) AS set_name,
 	AVG(r.rating)::float8 AS avg_rating,
 	COUNT(*)::int AS vote_count
@@ -130,9 +243,11 @@ func (r *Repository) CardRaterAnalytics(ctx context.Context, raterID int, classF
 	}
 
 	out := &CardRaterAnalytics{
-		Distribution: []CardRaterRatingBin{},
-		TopCards:     []CardRaterRankedCard{},
-		RankedTable:  []CardRaterRankedCard{},
+		Distribution:         []CardRaterRatingBin{},
+		TopCards:               []CardRaterRatedCard{},
+		RatedTable:             []CardRaterRatedCard{},
+		MostControversial:      []CardRaterControversialCard{},
+		MostTalkedAboutCards:   []CardRaterNotedCard{},
 	}
 
 	const summaryQ = `
@@ -210,7 +325,7 @@ ORDER BY 1`
 		return nil, err
 	}
 
-	topQ := rankedCardsFromSession + ` LIMIT $5`
+	topQ := ratedCardsFromSession + ` LIMIT $5`
 	topRows, err := r.pool.Query(ctx, topQ, raterID, classArg, talentArg, typeArg, topLimit)
 	if err != nil {
 		return nil, fmt.Errorf("repository: card rater analytics top cards: %w", err)
@@ -227,21 +342,84 @@ ORDER BY 1`
 		return nil, fmt.Errorf("repository: card rater analytics top cards rows: %w", err)
 	}
 
-	tableQ := rankedCardsFromSession + ` LIMIT $5`
+	tableQ := ratedCardsFromSession + ` LIMIT $5`
 	tableRows, err := r.pool.Query(ctx, tableQ, raterID, classArg, talentArg, typeArg, tableLimit)
 	if err != nil {
-		return nil, fmt.Errorf("repository: card rater analytics ranked table: %w", err)
+		return nil, fmt.Errorf("repository: card rater analytics rated table: %w", err)
 	}
 	defer tableRows.Close()
 	for tableRows.Next() {
 		e, err := scanCardStatsRow(tableRows)
 		if err != nil {
-			return nil, fmt.Errorf("repository: card rater analytics ranked table scan: %w", err)
+			return nil, fmt.Errorf("repository: card rater analytics rated table scan: %w", err)
 		}
-		out.RankedTable = append(out.RankedTable, e)
+		out.RatedTable = append(out.RatedTable, e)
 	}
 	if err := tableRows.Err(); err != nil {
-		return nil, fmt.Errorf("repository: card rater analytics ranked table rows: %w", err)
+		return nil, fmt.Errorf("repository: card rater analytics rated table rows: %w", err)
+	}
+
+	const controversialQ = `
+SELECT ` + cardSelectColumnsFromC + `, MAX(s.name) AS set_name,
+	MIN(r.rating)::smallint AS min_rating,
+	MAX(r.rating)::smallint AS max_rating,
+	(MAX(r.rating) - MIN(r.rating))::int AS spread,
+	STDDEV_POP(r.rating::double precision) AS stddev,
+	AVG(r.rating)::float8 AS avg_rating,
+	COUNT(*)::int AS vote_count,
+	COUNT(*) FILTER (WHERE r.rating <= 2)::int AS low_ratings,
+	COUNT(*) FILTER (WHERE r.rating >= 4)::int AS high_ratings
+FROM user_card_ratings r
+INNER JOIN cards c ON c.id = r.card_id
+INNER JOIN sets s ON s.id = c.set_id
+WHERE r.rater_id = $1
+GROUP BY c.id
+HAVING MIN(r.rating) <= 2 AND MAX(r.rating) >= 4 AND COUNT(*) >= 2
+ORDER BY spread DESC, stddev DESC NULLS LAST, vote_count DESC, c.id ASC
+LIMIT 10`
+	contRows, err := r.pool.Query(ctx, controversialQ, raterID)
+	if err != nil {
+		return nil, fmt.Errorf("repository: card rater analytics controversial: %w", err)
+	}
+	defer contRows.Close()
+	for contRows.Next() {
+		e, err := scanCardControversialRow(contRows)
+		if err != nil {
+			return nil, fmt.Errorf("repository: card rater analytics controversial scan: %w", err)
+		}
+		out.MostControversial = append(out.MostControversial, e)
+	}
+	if err := contRows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: card rater analytics controversial rows: %w", err)
+	}
+
+	const notedQ = `
+SELECT ` + cardSelectColumnsFromC + `, MAX(s.name) AS set_name,
+	AVG(r.rating)::float8 AS avg_rating,
+	COUNT(*)::int AS vote_count,
+	COUNT(*) FILTER (WHERE r.notes IS NOT NULL AND btrim(r.notes) <> '')::int AS note_count
+FROM user_card_ratings r
+INNER JOIN cards c ON c.id = r.card_id
+INNER JOIN sets s ON s.id = c.set_id
+WHERE r.rater_id = $1
+GROUP BY c.id
+HAVING COUNT(*) FILTER (WHERE r.notes IS NOT NULL AND btrim(r.notes) <> '') > 0
+ORDER BY note_count DESC, vote_count DESC, c.id ASC
+LIMIT 10`
+	noteRows, err := r.pool.Query(ctx, notedQ, raterID)
+	if err != nil {
+		return nil, fmt.Errorf("repository: card rater analytics noted cards: %w", err)
+	}
+	defer noteRows.Close()
+	for noteRows.Next() {
+		e, err := scanCardNotedRow(noteRows)
+		if err != nil {
+			return nil, fmt.Errorf("repository: card rater analytics noted cards scan: %w", err)
+		}
+		out.MostTalkedAboutCards = append(out.MostTalkedAboutCards, e)
+	}
+	if err := noteRows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: card rater analytics noted cards rows: %w", err)
 	}
 
 	return out, nil
