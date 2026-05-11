@@ -116,7 +116,8 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
     const tbl = ratedTbl.length ? ratedTbl : legacyTbl;
     const controversial = Array.isArray(o.most_controversial) ? o.most_controversial : [];
     const talked = Array.isArray(o.most_talked_about_cards) ? o.most_talked_about_cards : [];
-    return { rater, summary, dist, fo, top, tbl, controversial, talked };
+    const userAvg = Array.isArray(o.user_avg_ratings) ? o.user_avg_ratings : [];
+    return { rater, summary, dist, fo, top, tbl, controversial, talked, userAvg };
   }, [raw]);
 
   const distMap = useMemo(() => {
@@ -320,6 +321,51 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
               );
             })}
           </div>
+        </div>
+      ) : null}
+
+      {parsed?.summary ? (
+        <div className={panel}>
+          <p className={`m-0 ${labelMuted}`}>Rater averages</p>
+          <p className="mt-1 text-[0.8rem] text-[#f4f0fa]/60">
+            Each user’s mean rating across every card they rated in this session.
+          </p>
+          {parsed.userAvg.length === 0 ? (
+            <p className="mt-3 text-[0.85rem] text-[#f4f0fa]/60">No ratings recorded yet.</p>
+          ) : (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[20rem] border-collapse text-left text-[0.78rem] text-[#f4f0fa]/88">
+                <thead>
+                  <tr className="border-b border-white/[0.12] text-[0.68rem] uppercase tracking-wide text-[#f4f0fa]/50">
+                    <th className="py-2 pr-3 font-semibold">User</th>
+                    <th className="py-2 pr-3 font-semibold">Average</th>
+                    <th className="py-2 font-semibold">Ratings given</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parsed.userAvg.map((row, idx) => {
+                    if (!row || typeof row !== "object") return null;
+                    const r = /** @type {Record<string, unknown>} */ (row);
+                    const uid = typeof r.user_id === "number" ? r.user_id : Number(r.user_id);
+                    const label = r.user_label != null ? String(r.user_label) : "";
+                    const avg = typeof r.avg_rating === "number" ? r.avg_rating : Number(r.avg_rating);
+                    const cnt = typeof r.rating_count === "number" ? r.rating_count : Number(r.rating_count);
+                    return (
+                      <tr key={Number.isFinite(uid) ? uid : idx} className="border-b border-white/[0.06] last:border-b-0">
+                        <td className="py-2 pr-3 font-medium text-[#f4f0fa]/90">
+                          {label || (Number.isFinite(uid) ? `User ${uid}` : "—")}
+                        </td>
+                        <td className="py-2 pr-3 tabular-nums font-semibold text-amber-100/90">
+                          {Number.isFinite(avg) ? avg.toFixed(2) : "—"}
+                        </td>
+                        <td className="py-2 tabular-nums text-[#f4f0fa]/70">{Number.isFinite(cnt) ? cnt : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       ) : null}
 

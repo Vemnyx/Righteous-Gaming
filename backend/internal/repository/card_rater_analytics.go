@@ -53,16 +53,25 @@ type CardRaterNotedCard struct {
 
 // CardRaterFilterOptions lists distinct class / talent / type values present among rated cards.
 type CardRaterFilterOptions struct {
-	Classes  []int16
-	Talents  []int16
+	Classes   []int16
+	Talents   []int16
 	CardTypes []int16
+}
+
+// CardRaterUserAvgRating is one user's mean rating across all cards they rated in a session.
+type CardRaterUserAvgRating struct {
+	UserID       int
+	UserLabel    string
+	AvgRating    float64
+	RatingCount  int
 }
 
 // CardRaterAnalytics aggregates analytics for one card_rater id.
 type CardRaterAnalytics struct {
-	Summary            CardRaterSummaryStats
-	Distribution       []CardRaterRatingBin
+	Summary              CardRaterSummaryStats
+	Distribution         []CardRaterRatingBin
 	FilterOptions        CardRaterFilterOptions
+	UserAvgRatings       []CardRaterUserAvgRating
 	TopCards             []CardRaterRatedCard
 	RatedTable           []CardRaterRatedCard
 	MostControversial    []CardRaterControversialCard
@@ -249,10 +258,11 @@ func (r *Repository) CardRaterAnalytics(ctx context.Context, raterID int, classF
 
 	out := &CardRaterAnalytics{
 		Distribution:         []CardRaterRatingBin{},
-		TopCards:               []CardRaterRatedCard{},
-		RatedTable:             []CardRaterRatedCard{},
-		MostControversial:      []CardRaterControversialCard{},
-		MostTalkedAboutCards:   []CardRaterNotedCard{},
+		UserAvgRatings:        []CardRaterUserAvgRating{},
+		TopCards:             []CardRaterRatedCard{},
+		RatedTable:           []CardRaterRatedCard{},
+		MostControversial:    []CardRaterControversialCard{},
+		MostTalkedAboutCards: []CardRaterNotedCard{},
 	}
 
 	const summaryQ = `
@@ -293,6 +303,32 @@ ORDER BY rating ASC`
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("repository: card rater analytics distribution rows: %w", err)
+	}
+
+	const userAvgQ = `
+SELECT r.user_id,
+	COALESCE(NULLIF(TRIM(u.username), ''), NULLIF(TRIM(u.email), ''), 'User ' || u.id::text),
+	AVG(r.rating)::float8,
+	COUNT(*)::int
+FROM user_card_ratings r
+INNER JOIN users u ON u.id = r.user_id
+WHERE r.rater_id = $1
+GROUP BY r.user_id, u.username, u.email, u.id
+ORDER BY COALESCE(NULLIF(TRIM(u.username), ''), NULLIF(TRIM(u.email), ''), 'User ' || u.id::text) ASC, r.user_id ASC`
+	userAvgRows, err := r.pool.Query(ctx, userAvgQ, raterID)
+	if err != nil {
+		return nil, fmt.Errorf("repository: card rater analytics user averages: %w", err)
+	}
+	defer userAvgRows.Close()
+	for userAvgRows.Next() {
+		var row CardRaterUserAvgRating
+		if err := userAvgRows.Scan(&row.UserID, &row.UserLabel, &row.AvgRating, &row.RatingCount); err != nil {
+			return nil, fmt.Errorf("repository: card rater analytics user averages scan: %w", err)
+		}
+		out.UserAvgRatings = append(out.UserAvgRatings, row)
+	}
+	if err := userAvgRows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: card rater analytics user averages rows: %w", err)
 	}
 
 	const classesQ = `

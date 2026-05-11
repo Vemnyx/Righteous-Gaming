@@ -863,6 +863,22 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 		})
 	}
 
+	type userAvgJSON struct {
+		UserID       int     `json:"user_id"`
+		UserLabel    string  `json:"user_label"`
+		AvgRating    float64 `json:"avg_rating"`
+		RatingCount  int     `json:"rating_count"`
+	}
+	userAvgs := make([]userAvgJSON, 0, len(analytics.UserAvgRatings))
+	for _, u := range analytics.UserAvgRatings {
+		userAvgs = append(userAvgs, userAvgJSON{
+			UserID:      u.UserID,
+			UserLabel:   u.UserLabel,
+			AvgRating:   u.AvgRating,
+			RatingCount: u.RatingCount,
+		})
+	}
+
 	writeCatalogJSON(w, http.StatusOK, map[string]any{
 		"rater": cardRaterToJSON(*cr),
 		"summary": map[string]any{
@@ -872,6 +888,7 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 			"distinct_cards":  analytics.Summary.DistinctCards,
 		},
 		"rating_distribution": dist,
+		"user_avg_ratings":      userAvgs,
 		"filter_options": map[string]any{
 			"classes": analytics.FilterOptions.Classes,
 			"talents": analytics.FilterOptions.Talents,

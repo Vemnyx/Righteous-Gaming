@@ -188,7 +188,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
   const { user } = useAuth();
   const narrow = useMediaNarrow();
   /** @type {['table' | 'grid-sm' | 'grid-md' | 'grid-lg', (v: 'table' | 'grid-sm' | 'grid-md' | 'grid-lg') => void]} */
-  const [view, setView] = useState("table");
+  const [view, setView] = useState("grid-sm");
   const [gridPage, setGridPage] = useState(1);
   const [tablePage, setTablePage] = useState(1);
   const [cards, setCards] = useState(/** @type {CatalogCard[]} */ ([]));
