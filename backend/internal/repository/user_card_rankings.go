@@ -191,6 +191,54 @@ ORDER BY c.set_num ASC, c.id ASC`
 	return out, nil
 }
 
+// CardTeamRankingRow is one user's ranking for a card in a set+format (for team aggregate UI).
+type CardTeamRankingRow struct {
+	UserID   int
+	Username *string
+	Email    string
+	Rank     int16
+	Notes    *string
+}
+
+// ListCardTeamRankings returns all users' rankings for one card/set/format, ordered for display.
+// When len(rows) > 0, avg is the arithmetic mean of rank; otherwise avg is nil.
+func (r *Repository) ListCardTeamRankings(ctx context.Context, setID, cardID int, format int16) ([]CardTeamRankingRow, *float64, error) {
+	if r.pool == nil {
+		return nil, nil, fmt.Errorf("repository: pool is closed")
+	}
+	const q = `
+SELECT r.user_id, u.username, u.email, r.rank, r.notes
+FROM user_card_rankings r
+INNER JOIN users u ON u.id = r.user_id
+WHERE r.set_id = $1 AND r.card_id = $2 AND r.format = $3
+ORDER BY COALESCE(NULLIF(TRIM(u.username), ''), u.email) ASC, r.user_id ASC`
+	rows, err := r.pool.Query(ctx, q, setID, cardID, format)
+	if err != nil {
+		return nil, nil, fmt.Errorf("repository: list card team rankings: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]CardTeamRankingRow, 0, 32)
+	var sum float64
+	for rows.Next() {
+		var row CardTeamRankingRow
+		if err := rows.Scan(&row.UserID, &row.Username, &row.Email, &row.Rank, &row.Notes); err != nil {
+			return nil, nil, fmt.Errorf("repository: list card team rankings scan: %w", err)
+		}
+		out = append(out, row)
+		sum += float64(row.Rank)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, fmt.Errorf("repository: list card team rankings rows: %w", err)
+	}
+	var avg *float64
+	if len(out) > 0 {
+		v := sum / float64(len(out))
+		avg = &v
+	}
+	return out, avg, nil
+}
+
 // SetExists reports whether a set with the given id exists.
 func (r *Repository) SetExists(ctx context.Context, setID int) (bool, error) {
 	if r.pool == nil {

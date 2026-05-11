@@ -23,6 +23,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("GET /api/me/card-rankings", rh.listMyRankings)
 	mux.HandleFunc("POST /api/me/card-rankings", rh.saveMyRanking)
 	mux.HandleFunc("GET /api/me/cards-to-rank", rh.listMyCardsToRank)
+	mux.HandleFunc("GET /api/me/card-team-rankings", rh.listCardTeamRankings)
 	mux.HandleFunc("GET /api/registration", uh.registrationByCode)
 	mux.HandleFunc("POST /api/admin/user/register", uh.adminRegisterUser)
 	mux.HandleFunc("GET /api/admin/users", uh.adminListUsers)

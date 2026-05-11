@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"slices"
 	"strconv"
@@ -142,6 +143,43 @@ func parseSetIDFormatQuery(w http.ResponseWriter, r *http.Request) (setID int, f
 		return 0, 0, false
 	}
 	return sid, f, true
+}
+
+func parseSetIDFormatCardQuery(w http.ResponseWriter, r *http.Request) (setID int, cardID int, format int16, ok bool) {
+	setID, format, ok = parseSetIDFormatQuery(w, r)
+	if !ok {
+		return 0, 0, 0, false
+	}
+	cardStr := strings.TrimSpace(r.URL.Query().Get("card_id"))
+	if cardStr == "" {
+		writeFieldError(w, http.StatusBadRequest, "card_id", "required")
+		return 0, 0, 0, false
+	}
+	cid, err := strconv.Atoi(cardStr)
+	if err != nil || cid <= 0 {
+		writeFieldError(w, http.StatusBadRequest, "card_id", "must be a positive integer")
+		return 0, 0, 0, false
+	}
+	return setID, cid, format, true
+}
+
+type cardTeamRankingRowJSON struct {
+	UserName string  `json:"user_name"`
+	Rank     int16   `json:"rank"`
+	Notes    *string `json:"notes,omitempty"`
+}
+
+func teamRankingDisplayName(username *string, email string) string {
+	if username != nil {
+		s := strings.TrimSpace(*username)
+		if s != "" {
+			return s
+		}
+	}
+	if s := strings.TrimSpace(email); s != "" {
+		return s
+	}
+	return "User"
 }
 
 // GET /api/me/card-rankings?set_id=&format=
@@ -335,4 +373,68 @@ func (h *cardRankingsHTTP) listMyCardsToRank(w http.ResponseWriter, r *http.Requ
 		out = append(out, cardToJSON(&cards[i]))
 	}
 	writeCatalogJSON(w, http.StatusOK, map[string]any{"cards": out})
+}
+
+// GET /api/me/card-team-rankings?set_id=&format=&card_id=
+func (h *cardRankingsHTTP) listCardTeamRankings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	_, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	setID, cardID, format, ok := parseSetIDFormatCardQuery(w, r)
+	if !ok {
+		return
+	}
+	exists, err := h.app.Repo.SetExists(r.Context(), setID)
+	if err != nil {
+		log.Error("card team rankings set exists", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	if !exists {
+		writeFieldError(w, http.StatusNotFound, "set_id", "set not found")
+		return
+	}
+	card, err := h.app.Repo.CardByID(r.Context(), cardID)
+	if err != nil {
+		if errors.Is(err, repository.ErrCardNotFound) {
+			writeFieldError(w, http.StatusNotFound, "card_id", "card not found")
+			return
+		}
+		log.Error("card team rankings card by id", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	if card.SetID != setID {
+		writeFieldError(w, http.StatusBadRequest, "card_id", "card does not belong to this set")
+		return
+	}
+	if !cardPlaysFormat(card, format) {
+		writeFieldError(w, http.StatusBadRequest, "format", "card is not legal in this format")
+		return
+	}
+	rows, avgPtr, err := h.app.Repo.ListCardTeamRankings(r.Context(), setID, cardID, format)
+	if err != nil {
+		log.Error("list card team rankings", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	out := make([]cardTeamRankingRowJSON, 0, len(rows))
+	for i := range rows {
+		row := rows[i]
+		out = append(out, cardTeamRankingRowJSON{
+			UserName: teamRankingDisplayName(row.Username, row.Email),
+			Rank:     row.Rank,
+			Notes:    row.Notes,
+		})
+	}
+	payload := map[string]any{"rankings": out}
+	if avgPtr != nil {
+		payload["average_rank"] = math.Round(*avgPtr*100) / 100
+	}
+	writeCatalogJSON(w, http.StatusOK, payload)
 }

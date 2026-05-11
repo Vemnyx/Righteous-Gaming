@@ -12,6 +12,11 @@ import { CardFormat } from "../constants/cardFormat";
  * @typedef {PendingEntry | RankedEntry} QueueEntry
  */
 
+/**
+ * @typedef {{ user_name: string, rank: number, notes?: string | null }} TeamRankingRow
+ * @typedef {{ averageRank: number | null, rows: TeamRankingRow[] }} TeamRankingsState
+ */
+
 function notesFromServer(/** @type {string | null | undefined} */ n) {
   if (n == null) return "";
   return String(n);
@@ -45,6 +50,10 @@ export function CardRanker({ isLight, active }) {
   const [draftNotes, setDraftNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
+
+  const [teamRankings, setTeamRankings] = useState(/** @type {TeamRankingsState | null} */ (null));
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [teamLoadError, setTeamLoadError] = useState(/** @type {string | null} */ (null));
 
   useEffect(() => {
     if (!active) return undefined;
@@ -151,6 +160,13 @@ export function CardRanker({ isLight, active }) {
   const current = queue[cardIndex] ?? null;
 
   useEffect(() => {
+    setCardIndex((i) => {
+      const max = Math.max(0, queue.length - 1);
+      return Math.min(max, Math.max(0, i));
+    });
+  }, [queue.length]);
+
+  useEffect(() => {
     if (!current) {
       setDraftRank(null);
       setDraftNotes("");
@@ -165,6 +181,56 @@ export function CardRanker({ isLight, active }) {
     }
   }, [current]);
 
+  useEffect(() => {
+    if (!active || !user || !rankerSet || !current || current.kind !== "ranked") {
+      setTeamRankings(null);
+      setTeamLoadError(null);
+      setTeamLoading(false);
+      return undefined;
+    }
+    const cardId = current.card.id;
+    let cancelled = false;
+    (async () => {
+      setTeamLoading(true);
+      setTeamLoadError(null);
+      try {
+        const token = await user.getIdToken();
+        const qs = new URLSearchParams({
+          set_id: String(rankerSet.id),
+          format: String(RANKER_FORMAT_ID),
+          card_id: String(cardId),
+        });
+        const res = await fetch(`/api/me/card-team-rankings?${qs}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        if (cancelled) return;
+        const rawRows = Array.isArray(data.rankings) ? data.rankings : [];
+        /** @type {TeamRankingRow[]} */
+        const rows = rawRows
+          .filter((r) => r && typeof r.user_name === "string" && typeof r.rank === "number")
+          .map((r) => ({
+            user_name: String(r.user_name),
+            rank: Number(r.rank),
+            notes: r.notes != null ? String(r.notes) : null,
+          }));
+        const averageRank = typeof data.average_rank === "number" && Number.isFinite(data.average_rank) ? data.average_rank : null;
+        setTeamRankings({ averageRank, rows });
+      } catch (e) {
+        if (!cancelled) {
+          setTeamRankings(null);
+          setTeamLoadError(e instanceof Error ? e.message : "Failed to load team rankings");
+        }
+      } finally {
+        if (!cancelled) setTeamLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [active, user, rankerSet, current?.kind, current?.card?.id]);
+
   const setBgUrl =
     rankerSet?.image_url != null && String(rankerSet.image_url).trim() !== ""
       ? String(rankerSet.image_url).trim()
@@ -178,6 +244,14 @@ export function CardRanker({ isLight, active }) {
     ? "min-h-[8rem] w-full max-w-full resize-y rounded-lg border border-white/[0.32] bg-black/70 px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/45 backdrop-blur-[2px] focus:border-purple-400/55"
     : "min-h-[8rem] w-full max-w-full resize-y rounded-lg border border-white/[0.28] bg-black/70 px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 backdrop-blur-[2px] focus:border-purple-400/55";
 
+  const teamPanelCls = isLight
+    ? "flex min-h-[11rem] shrink-0 flex-col gap-2 rounded-lg border border-white/[0.24] bg-black/35 px-3 py-3 text-[0.9rem] text-[#f4f0fa] shadow-sm"
+    : "flex min-h-[11rem] shrink-0 flex-col gap-2 rounded-lg border border-white/[0.16] bg-black/45 px-3 py-3 text-[0.9rem] text-[#f4f0fa] shadow-sm";
+
+  const cardJumpSelectCls = isLight
+    ? "mb-1 w-full max-w-md rounded-lg border border-white/[0.24] bg-[#4a4658]/95 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55"
+    : "mb-1 w-full max-w-md rounded-lg border border-white/[0.22] bg-black/50 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55";
+
   const btnPrimary =
     "rounded-lg border border-white/[0.28] bg-violet-600/90 px-4 py-2.5 text-[0.875rem] font-semibold text-white shadow-md transition-colors hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-45";
 
@@ -188,7 +262,7 @@ export function CardRanker({ isLight, active }) {
   const starDisabled = `${starBase} cursor-default border-white/[0.18] bg-black/45 text-amber-200/55`;
 
   const arrowNavCls =
-    "flex h-[min(14rem,52vh)] min-h-[10.5rem] w-12 shrink-0 items-center justify-center self-center rounded-xl border-2 border-yellow-400/85 bg-yellow-400/18 text-xl font-semibold text-yellow-200 shadow-[0_0_18px_rgba(250,204,21,0.35)] transition-colors hover:border-yellow-300 hover:bg-yellow-400/28 hover:text-yellow-50 disabled:cursor-not-allowed disabled:border-white/20 disabled:bg-black/30 disabled:text-[#f4f0fa]/40 disabled:shadow-none sm:w-14 sm:text-2xl";
+    "flex h-[min(14rem,52vh)] min-h-[10.5rem] w-12 shrink-0 items-center justify-center rounded-xl border-2 border-yellow-400/85 bg-yellow-400/18 text-xl font-semibold text-yellow-200 shadow-[0_0_18px_rgba(250,204,21,0.35)] transition-colors hover:border-yellow-300 hover:bg-yellow-400/28 hover:text-yellow-50 disabled:cursor-not-allowed disabled:border-white/20 disabled:bg-black/30 disabled:text-[#f4f0fa]/40 disabled:shadow-none sm:w-14 sm:text-2xl";
 
   const canSubmit = useMemo(() => {
     if (!user || !current || submitting) return false;
@@ -388,12 +462,12 @@ export function CardRanker({ isLight, active }) {
           <p className="text-[0.9rem] text-[#f4f0fa]/75">Sign in to rank cards for this set and format.</p>
         ) : rankerSet ? (
           <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row lg:items-stretch lg:gap-6">
-            <div className="relative flex min-h-[min(18rem,40vh)] min-w-0 flex-1 flex-col items-stretch justify-start lg:basis-0">
+            <div className="relative flex min-h-[min(18rem,40vh)] min-w-0 flex-1 flex-col items-stretch justify-center lg:basis-0">
               {!rankLoading && queue.length === 0 ? (
                 <p className="text-center text-[0.9rem] text-[#f4f0fa]/70">No cards to show for this set and format.</p>
               ) : null}
               {current ? (
-                <div className="flex min-h-0 w-full flex-1 items-start justify-center gap-0.5 sm:gap-1">
+                <div className="flex w-full min-h-0 items-center justify-center gap-0.5 sm:gap-1">
                   <button
                     type="button"
                     onClick={goPrev}
@@ -403,7 +477,32 @@ export function CardRanker({ isLight, active }) {
                   >
                     <span aria-hidden>←</span>
                   </button>
-                  <div className="flex min-h-0 min-w-0 max-w-[min(100%,22rem)] flex-1 flex-col items-center justify-start gap-1.5 px-0.5 sm:max-w-sm sm:gap-2 sm:px-1">
+                  <div className="flex min-h-0 min-w-0 max-w-[min(100%,22rem)] shrink-0 flex-col items-center justify-center gap-1.5 px-0.5 sm:max-w-sm sm:gap-2 sm:px-1">
+                    <label className="sr-only" htmlFor="card-ranker-jump-select">
+                      Jump to card
+                    </label>
+                    <select
+                      id="card-ranker-jump-select"
+                      className={cardJumpSelectCls}
+                      value={queue.length > 0 ? String(Math.min(cardIndex, queue.length - 1)) : ""}
+                      onChange={(e) => {
+                        const next = Number.parseInt(e.target.value, 10);
+                        if (Number.isFinite(next) && next >= 0 && next < queue.length) {
+                          setCardIndex(next);
+                        }
+                      }}
+                      disabled={rankLoading || queue.length === 0}
+                    >
+                      {queue.map((entry, i) => {
+                        const raw = String(entry.card.name ?? "").trim() || `Card ${entry.card.id}`;
+                        const label = queue.length > 1 ? `${i + 1}. ${raw}` : raw;
+                        return (
+                          <option key={`jump-${entry.card.id}-${i}`} value={String(i)}>
+                            {label}
+                          </option>
+                        );
+                      })}
+                    </select>
                     <div className="flex w-full max-w-md justify-center gap-2.5 sm:gap-3" role="group" aria-label="Star rating 1 to 5">
                       {[1, 2, 3, 4, 5].map((n) => {
                         const locked = current.kind === "ranked";
@@ -433,7 +532,7 @@ export function CardRanker({ isLight, active }) {
                       })}
                     </div>
                     <div
-                      className="mt-2 flex min-h-0 w-full max-w-xs flex-1 touch-pan-y select-none items-center justify-center sm:mt-3 sm:max-w-sm"
+                      className="mt-2 flex min-h-0 w-full max-w-xs touch-pan-y select-none items-center justify-center sm:mt-3 sm:max-w-sm"
                       onPointerDown={onCardSwipePointerDown}
                       onPointerUp={onCardSwipePointerUpOrCancel}
                       onPointerCancel={onCardSwipePointerUpOrCancel}
@@ -470,6 +569,52 @@ export function CardRanker({ isLight, active }) {
             <div className="flex min-h-0 min-w-0 flex-1 flex-col lg:basis-0">
               <div className="flex min-h-0 flex-1 flex-col gap-3">
                 {rankLoading ? <p className="text-[0.9rem] text-[#f4f0fa]/80">Loading cards…</p> : null}
+                <div className={teamPanelCls} aria-live="polite">
+                  {!current ? (
+                    <p className="m-0 text-[0.88rem] leading-snug text-[#f4f0fa]/65">Team rankings will appear here for the current card.</p>
+                  ) : current.kind === "pending" ? (
+                    <p className="m-0 text-[0.88rem] leading-snug text-[#f4f0fa]/80">
+                      Team rankings are hidden until you submit your ranking for this card.
+                    </p>
+                  ) : (
+                    <>
+                      {teamLoading ? <p className="m-0 text-[0.88rem] text-[#f4f0fa]/75">Loading team rankings…</p> : null}
+                      {teamLoadError ? (
+                        <p className="m-0 rounded-md border border-red-400/35 bg-red-950/35 px-2 py-1.5 text-[0.82rem] text-red-100">
+                          {teamLoadError}
+                        </p>
+                      ) : null}
+                      {!teamLoading && !teamLoadError && teamRankings ? (
+                        <>
+                          <p className="m-0 text-[0.92rem] font-semibold leading-snug text-[#f4f0fa]">
+                            Avg Team Ranking -{" "}
+                            {teamRankings.averageRank != null ? teamRankings.averageRank.toFixed(2) : "—"}
+                          </p>
+                          <div className="max-h-[14rem] min-h-[5rem] overflow-y-auto overscroll-contain rounded-md border border-white/[0.12] bg-black/30 px-2 py-1">
+                            {teamRankings.rows.length === 0 ? (
+                              <p className="m-0 py-2 text-center text-[0.85rem] text-[#f4f0fa]/65">No team ratings yet.</p>
+                            ) : (
+                              teamRankings.rows.map((row, idx) => (
+                                <div
+                                  key={`${row.user_name}-${idx}`}
+                                  className="border-b border-white/[0.08] py-2.5 last:border-b-0"
+                                >
+                                  <p className="m-0 text-[0.875rem] font-semibold text-[#f4f0fa]">{row.user_name}</p>
+                                  <p className="m-0 mt-0.5 text-[0.82rem] text-[#f4f0fa]/85">Rating: {row.rank} / 5</p>
+                                  {row.notes != null && String(row.notes).trim() !== "" ? (
+                                    <p className="m-0 mt-1 whitespace-pre-wrap text-[0.8rem] leading-snug text-[#f4f0fa]/72">
+                                      Notes: {row.notes}
+                                    </p>
+                                  ) : null}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </>
+                      ) : null}
+                    </>
+                  )}
+                </div>
                 <div className="min-h-0 flex-1" aria-hidden />
               </div>
               <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-white/[0.12] pt-4">
