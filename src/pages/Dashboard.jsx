@@ -1086,10 +1086,12 @@ export default function Dashboard({ onNavigate }) {
                   onOpenCardDetail={openCardDetail}
                 />
               ) : resourcesChild === "card-ranker" ? (
-                <CardRanker
-                  isLight={isLight}
-                  active={activeTab === RESOURCES_TAB_ID && resourcesChild === "card-ranker"}
-                />
+                <div className="-m-8 flex min-h-0 flex-1 flex-col sm:-m-10">
+                  <CardRanker
+                    isLight={isLight}
+                    active={activeTab === RESOURCES_TAB_ID && resourcesChild === "card-ranker"}
+                  />
+                </div>
               ) : (
                 <div
                   className="flex min-h-[min(40vh,18rem)] flex-1 flex-col items-center justify-center px-4 text-center"
