@@ -1,7 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAuth } from "../auth/AuthContext";
 import { CARD_FORMAT_NAMES, CardFormat, isValidCardFormatId } from "../constants/cardFormat";
 
 /** @typedef {{ id: number, name: string, code: string, image_url?: string | null }} CatalogSet */
+
+/** @typedef {{ id: number, name?: string, image_url?: string | null, [key: string]: unknown }} RankerCard */
+
+/**
+ * @typedef {{ kind: 'pending', card: RankerCard }} PendingEntry
+ * @typedef {{ kind: 'ranked', card: RankerCard, rank: number, notes: string | null }} RankedEntry
+ * @typedef {PendingEntry | RankedEntry} QueueEntry
+ */
 
 /** Prefer "Omens of the Stars" / "Omen of the Stars" (or set code OMN); else first set. */
 function defaultSetIdForRanker(/** @type {CatalogSet[]} */ list) {
@@ -14,23 +23,37 @@ function defaultSetIdForRanker(/** @type {CatalogSet[]} */ list) {
   return String(list[0].id);
 }
 
+function notesFromServer(/** @type {string | null | undefined} */ n) {
+  if (n == null) return "";
+  return String(n);
+}
+
 /**
  * @param {{ isLight: boolean, active: boolean }} props
  */
 export function CardRanker({ isLight, active }) {
+  const { user, configured } = useAuth();
   const [sets, setSets] = useState(/** @type {CatalogSet[]} */ ([]));
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(/** @type {string | null} */ (null));
-  /** Empty string only before sets load or if list empty. */
+  const [setsLoading, setSetsLoading] = useState(false);
+  const [setsError, setSetsError] = useState(/** @type {string | null} */ (null));
   const [selectedSetId, setSelectedSetId] = useState("");
   const [selectedFormatId, setSelectedFormatId] = useState(CardFormat.Limited);
+
+  const [queue, setQueue] = useState(/** @type {QueueEntry[]} */ ([]));
+  const [cardIndex, setCardIndex] = useState(0);
+  const [rankLoading, setRankLoading] = useState(false);
+  const [rankError, setRankError] = useState(/** @type {string | null} */ (null));
+  const [draftRank, setDraftRank] = useState(/** @type {number | null} */ (null));
+  const [draftNotes, setDraftNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
 
   useEffect(() => {
     if (!active) return undefined;
     let cancelled = false;
     (async () => {
-      setLoading(true);
-      setError(null);
+      setSetsLoading(true);
+      setSetsError(null);
       try {
         const res = await fetch("/api/sets");
         if (!res.ok) throw new Error(await res.text());
@@ -53,15 +76,94 @@ export function CardRanker({ isLight, active }) {
           });
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load sets");
+        if (!cancelled) setSetsError(e instanceof Error ? e.message : "Failed to load sets");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setSetsLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [active]);
+
+  const loadRankQueue = useCallback(async () => {
+    if (!user || !selectedSetId || !isValidCardFormatId(selectedFormatId)) {
+      setQueue([]);
+      setCardIndex(0);
+      return;
+    }
+    setRankLoading(true);
+    setRankError(null);
+    try {
+      const token = await user.getIdToken();
+      const qs = new URLSearchParams({
+        set_id: selectedSetId,
+        format: String(selectedFormatId),
+      });
+      const headers = { Authorization: `Bearer ${token}` };
+      const [resRanked, resPending] = await Promise.all([
+        fetch(`/api/me/card-rankings?${qs}`, { headers }),
+        fetch(`/api/me/cards-to-rank?${qs}`, { headers }),
+      ]);
+      if (!resRanked.ok) throw new Error(await resRanked.text());
+      if (!resPending.ok) throw new Error(await resPending.text());
+      const rankedData = await resRanked.json();
+      const pendingData = await resPending.json();
+      const rankedRows = Array.isArray(rankedData.rankings) ? rankedData.rankings : [];
+      const pendingCards = Array.isArray(pendingData.cards) ? pendingData.cards : [];
+
+      /** @type {QueueEntry[]} */
+      const next = [];
+      for (const c of pendingCards) {
+        if (c && typeof c.id === "number") next.push({ kind: "pending", card: /** @type {RankerCard} */ (c) });
+      }
+      for (const r of rankedRows) {
+        if (r && r.card && typeof r.card.id === "number" && typeof r.rank === "number") {
+          next.push({
+            kind: "ranked",
+            card: /** @type {RankerCard} */ (r.card),
+            rank: Number(r.rank),
+            notes: r.notes != null ? String(r.notes) : null,
+          });
+        }
+      }
+      setQueue(next);
+      setCardIndex(0);
+    } catch (e) {
+      setRankError(e instanceof Error ? e.message : "Failed to load rankings");
+      setQueue([]);
+      setCardIndex(0);
+    } finally {
+      setRankLoading(false);
+    }
+  }, [user, selectedSetId, selectedFormatId]);
+
+  useEffect(() => {
+    if (!active || !user) {
+      setQueue([]);
+      setCardIndex(0);
+      return undefined;
+    }
+    void loadRankQueue();
+    return undefined;
+  }, [active, user, loadRankQueue]);
+
+  const current = queue[cardIndex] ?? null;
+
+  useEffect(() => {
+    if (!current) {
+      setDraftRank(null);
+      setDraftNotes("");
+      return;
+    }
+    if (current.kind === "ranked") {
+      setDraftRank(current.rank);
+      setDraftNotes(notesFromServer(current.notes));
+    } else {
+      setDraftRank(null);
+      setDraftNotes("");
+    }
+  }, [current]);
 
   const selectedSet = useMemo(() => {
     if (!selectedSetId) return null;
@@ -75,12 +177,6 @@ export function CardRanker({ isLight, active }) {
       ? String(selectedSet.image_url).trim()
       : null;
 
-  /** Match Resources tab / Cards catalog body text on the purple panel (readable in light & dark). */
-  const labelCls =
-    setBgUrl != null
-      ? "text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/85"
-      : "text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/80";
-
   const selectCls = isLight
     ? "min-w-[10rem] max-w-full rounded-lg border border-white/[0.22] bg-[#4a4658] px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none focus:border-purple-400/55 sm:min-w-[12rem]"
     : "min-w-[10rem] max-w-full rounded-lg border border-white/[0.22] bg-black/35 px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none focus:border-purple-400/55 sm:min-w-[12rem]";
@@ -89,64 +185,250 @@ export function CardRanker({ isLight, active }) {
     ? "bg-gradient-to-b from-[#2d2a38]/88 via-[#2d2a38]/72 to-[#2d2a38]/85"
     : "bg-gradient-to-b from-[rgba(12,6,22,0.88)] via-[rgba(12,6,22,0.72)] to-[rgba(12,6,22,0.9)]";
 
+  const inputCls =
+    "min-h-[8rem] w-full max-w-full resize-y rounded-lg border border-white/[0.22] bg-black/40 px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/35 focus:border-purple-400/55";
+
+  const btnPrimary =
+    "rounded-lg border border-white/[0.28] bg-violet-600/90 px-4 py-2.5 text-[0.875rem] font-semibold text-white shadow-md transition-colors hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-45";
+
+  const starBase =
+    "flex size-11 items-center justify-center rounded-lg border text-lg leading-none transition-colors sm:size-12 sm:text-xl";
+  const starIdle = `${starBase} border-white/[0.2] bg-black/30 text-amber-200/80 hover:border-amber-300/40 hover:bg-black/45`;
+  const starOn = `${starBase} border-amber-300/60 bg-amber-500/25 text-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.35)]`;
+  const starDisabled = `${starBase} cursor-default border-white/[0.12] bg-black/25 text-amber-200/50`;
+
+  const canSubmit = useMemo(() => {
+    if (!user || !current || submitting) return false;
+    if (current.kind === "pending") return draftRank != null && draftRank >= 1 && draftRank <= 5;
+    return true;
+  }, [user, current, draftRank, submitting]);
+
+  const submitRanking = useCallback(async () => {
+    if (!user || !current || !canSubmit) return;
+    setSaveError(null);
+    setSubmitting(true);
+    try {
+      const token = await user.getIdToken();
+      const setId = Number.parseInt(selectedSetId, 10);
+      const rankVal = current.kind === "ranked" ? current.rank : draftRank;
+      if (rankVal == null || rankVal < 1 || rankVal > 5) {
+        setSaveError("Choose a star rating (1–5).");
+        setSubmitting(false);
+        return;
+      }
+      const notesTrim = draftNotes.trim();
+      const body = {
+        set_id: setId,
+        card_id: current.card.id,
+        format: selectedFormatId,
+        rank: rankVal,
+        notes: notesTrim === "" ? null : notesTrim,
+      };
+      const res = await fetch("/api/me/card-rankings", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(t?.trim() || res.statusText);
+      }
+      await loadRankQueue();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }, [user, current, canSubmit, draftNotes, selectedSetId, selectedFormatId, draftRank, loadRankQueue]);
+
+  const goPrev = useCallback(() => {
+    setCardIndex((i) => Math.max(0, i - 1));
+  }, []);
+
+  const goNext = useCallback(() => {
+    setCardIndex((i) => Math.min(Math.max(0, queue.length - 1), i + 1));
+  }, [queue.length]);
+
+  const imgUrl =
+    current?.card?.image_url != null && String(current.card.image_url).trim() !== ""
+      ? String(current.card.image_url).trim()
+      : null;
+
   return (
-    <div className="relative flex min-h-0 w-full min-h-[min(52vh,28rem)] flex-1 flex-col overflow-hidden text-left">
+    <div className="relative flex min-h-0 w-full min-h-[min(52vh,28rem)] flex-1 flex-col overflow-hidden rounded-xl text-left">
       {setBgUrl ? (
         <>
           <div
             aria-hidden
-            className="pointer-events-none absolute inset-0 z-0 bg-center bg-no-repeat"
+            className="pointer-events-none absolute inset-0 z-0 rounded-xl bg-center bg-no-repeat"
             style={{
               backgroundImage: `url(${JSON.stringify(setBgUrl)})`,
               backgroundSize: "100% 100%",
             }}
           />
-          <div aria-hidden className={`pointer-events-none absolute inset-0 z-0 ${bgScrim}`} />
+          <div
+            aria-hidden
+            className={`pointer-events-none absolute inset-0 z-0 rounded-xl ${bgScrim}`}
+          />
         </>
       ) : null}
-      <div className="relative z-[1] flex min-h-0 w-full flex-1 flex-col gap-4">
-        <div className="flex flex-wrap items-end gap-4 self-start">
-          <label className="flex flex-col gap-1.5">
-            <span className={labelCls}>Set</span>
-            <select
-              className={selectCls}
-              value={selectedSetId}
-              onChange={(e) => setSelectedSetId(e.target.value)}
-              disabled={loading || sets.length === 0}
-              aria-busy={loading}
-            >
-            {loading ? <option value="">Loading…</option> : null}
-            {!loading &&
+      <div className="relative z-[1] flex min-h-0 w-full flex-1 flex-col gap-4 px-4 py-4 sm:px-5 sm:py-5">
+        <div className="flex flex-wrap items-center gap-3 self-start">
+          <select
+            className={selectCls}
+            value={selectedSetId}
+            onChange={(e) => setSelectedSetId(e.target.value)}
+            disabled={setsLoading || sets.length === 0}
+            aria-busy={setsLoading}
+            aria-label="Card set"
+          >
+            {setsLoading ? <option value="">Loading…</option> : null}
+            {!setsLoading &&
               sets.map((s) => (
                 <option key={s.id} value={String(s.id)}>
                   {s.code ? `${s.name} (${s.code})` : s.name}
                 </option>
               ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className={labelCls}>Format</span>
-            <select
-              className={selectCls}
-              value={String(selectedFormatId)}
-              onChange={(e) => {
-                const v = Number.parseInt(e.target.value, 10);
-                setSelectedFormatId(isValidCardFormatId(v) ? v : CardFormat.Limited);
-              }}
-            >
-              {CARD_FORMAT_NAMES.map((name, id) => (
-                <option key={id} value={String(id)}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
+          </select>
+          <select
+            className={selectCls}
+            value={String(selectedFormatId)}
+            onChange={(e) => {
+              const v = Number.parseInt(e.target.value, 10);
+              setSelectedFormatId(isValidCardFormatId(v) ? v : CardFormat.Limited);
+            }}
+            aria-label="Format"
+          >
+            {CARD_FORMAT_NAMES.map((name, id) => (
+              <option key={id} value={String(id)}>
+                {name}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {error ? (
-          <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">{error}</p>
+        {setsError ? (
+          <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">{setsError}</p>
         ) : null}
-        {loading ? <p className="text-[0.9rem] text-[#f4f0fa]/80">Loading sets…</p> : null}
+        {setsLoading ? <p className="text-[0.9rem] text-[#f4f0fa]/80">Loading sets…</p> : null}
+
+        {!configured || !user ? (
+          <p className="text-[0.9rem] text-[#f4f0fa]/75">Sign in to rank cards for this set and format.</p>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row lg:items-stretch lg:gap-6">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 lg:basis-0">
+              <label className="flex flex-col gap-2">
+                <span className="sr-only">Notes</span>
+                <textarea
+                  className={inputCls}
+                  value={draftNotes}
+                  onChange={(e) => setDraftNotes(e.target.value)}
+                  placeholder="Notes (optional)"
+                  maxLength={2048}
+                  rows={6}
+                  disabled={!current}
+                />
+              </label>
+              <button type="button" className={btnPrimary} disabled={!canSubmit} onClick={() => void submitRanking()}>
+                {submitting ? "Saving…" : current?.kind === "ranked" ? "Save notes" : "Submit ranking"}
+              </button>
+              {saveError ? (
+                <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">
+                  {saveError}
+                </p>
+              ) : null}
+              {rankError ? (
+                <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">
+                  {rankError}
+                </p>
+              ) : null}
+              {rankLoading ? <p className="text-[0.9rem] text-[#f4f0fa]/80">Loading cards…</p> : null}
+            </div>
+
+            <div className="relative flex min-h-[min(18rem,40vh)] min-w-0 flex-1 flex-col items-stretch justify-center lg:basis-0">
+              {!rankLoading && queue.length === 0 ? (
+                <p className="text-center text-[0.9rem] text-[#f4f0fa]/70">No cards to show for this set and format.</p>
+              ) : null}
+              {current ? (
+                <div className="flex min-h-0 w-full flex-1 items-stretch gap-2 sm:gap-3">
+                  <button
+                    type="button"
+                    onClick={goPrev}
+                    disabled={cardIndex <= 0 || rankLoading}
+                    className="flex shrink-0 items-center justify-center self-center rounded-lg border border-white/[0.2] bg-black/35 px-2 py-6 text-[#f4f0fa] transition-colors hover:bg-black/50 disabled:cursor-not-allowed disabled:opacity-35 sm:px-3"
+                    aria-label="Previous card"
+                  >
+                    <span className="text-lg" aria-hidden>
+                      ←
+                    </span>
+                  </button>
+                  <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-4">
+                    <div className="flex w-full max-w-md justify-center gap-2 sm:gap-2.5" role="group" aria-label="Star rating 1 to 5">
+                      {[1, 2, 3, 4, 5].map((n) => {
+                        const selected = draftRank === n;
+                        const locked = current.kind === "ranked";
+                        const starClass = locked
+                          ? selected
+                            ? `${starOn} cursor-default opacity-95`
+                            : `${starDisabled} opacity-40`
+                          : selected
+                            ? starOn
+                            : starIdle;
+                        return (
+                          <button
+                            key={n}
+                            type="button"
+                            disabled={locked || rankLoading}
+                            aria-pressed={selected}
+                            aria-label={`${n} star${n === 1 ? "" : "s"}`}
+                            className={starClass}
+                            onClick={() => setDraftRank(n)}
+                          >
+                            ★
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="flex min-h-0 w-full max-w-xs flex-1 items-center justify-center sm:max-w-sm">
+                      {imgUrl ? (
+                        <img
+                          src={imgUrl}
+                          alt={String(current.card.name ?? "Card")}
+                          className="max-h-[min(52vh,22rem)] w-full max-w-full object-contain"
+                          draggable={false}
+                        />
+                      ) : (
+                        <div className="rounded-lg border border-dashed border-white/[0.2] px-6 py-12 text-center text-[0.85rem] text-[#f4f0fa]/55">
+                          No image
+                        </div>
+                      )}
+                    </div>
+                    <p className="m-0 max-w-full truncate text-center text-[0.85rem] text-[#f4f0fa]/80">
+                      {String(current.card.name ?? "").trim() || "Card"}
+                      {queue.length > 1 ? (
+                        <span className="text-[#f4f0fa]/50"> · {cardIndex + 1} / {queue.length}</span>
+                      ) : null}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={goNext}
+                    disabled={cardIndex >= queue.length - 1 || rankLoading}
+                    className="flex shrink-0 items-center justify-center self-center rounded-lg border border-white/[0.2] bg-black/35 px-2 py-6 text-[#f4f0fa] transition-colors hover:bg-black/50 disabled:cursor-not-allowed disabled:opacity-35 sm:px-3"
+                    aria-label="Next card"
+                  >
+                    <span className="text-lg" aria-hidden>
+                      →
+                    </span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
