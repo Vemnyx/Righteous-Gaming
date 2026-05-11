@@ -295,62 +295,73 @@ export function CardRanker({ isLight, active }) {
     return true;
   }, [user, current, draftRank, submitting]);
 
-  const submitRanking = useCallback(async () => {
-    if (!user || !current || !canSubmit) return;
-    setSaveError(null);
-    setSubmitting(true);
-    try {
-      const token = await user.getIdToken();
-      if (!rankerSet) return;
-      const setId = rankerSet.id;
-      const ratingVal = current.kind === "rated" ? current.rating : draftRank;
-      if (ratingVal == null || ratingVal < 1 || ratingVal > 5) {
-        setSaveError("Choose a star rating (1–5).");
-        setSubmitting(false);
+  const submitRanking = useCallback(
+    /** @param {{ background?: boolean }} [opts] */
+    async (opts) => {
+      const background = opts?.background === true;
+      if (!user || !current) return;
+      if (background) {
+        if (current.kind !== "pending") return;
+        if (draftRank == null || draftRank < 1 || draftRank > 5) return;
+      } else if (!canSubmit) {
         return;
       }
-      const notesTrim = draftNotes.trim();
-      const body = {
-        set_id: setId,
-        card_id: current.card.id,
-        format: RANKER_FORMAT_ID,
-        rating: ratingVal,
-        notes: notesTrim === "" ? null : notesTrim,
-      };
-      const res = await fetch("/api/me/card-ratings", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const t = await res.text();
-        throw new Error(t?.trim() || res.statusText);
-      }
-      // Keep the in-session queue order stable: mark/update current entry in place
-      // instead of reloading and rebuilding pending->ranked order after each submit.
-      setQueue((prev) => {
-        if (cardIndex < 0 || cardIndex >= prev.length) return prev;
-        const next = prev.slice();
-        const entry = next[cardIndex];
-        if (!entry) return prev;
-        const notesVal = notesTrim === "" ? null : notesTrim;
-        next[cardIndex] = {
-          kind: "rated",
-          card: entry.card,
+      setSaveError(null);
+      if (!background) setSubmitting(true);
+      try {
+        const token = await user.getIdToken();
+        if (!rankerSet) return;
+        const setId = rankerSet.id;
+        const ratingVal = current.kind === "rated" ? current.rating : draftRank;
+        if (ratingVal == null || ratingVal < 1 || ratingVal > 5) {
+          if (!background) setSaveError("Choose a star rating (1–5).");
+          return;
+        }
+        const notesTrim = draftNotes.trim();
+        const body = {
+          set_id: setId,
+          card_id: current.card.id,
+          format: RANKER_FORMAT_ID,
           rating: ratingVal,
-          notes: notesVal,
+          notes: notesTrim === "" ? null : notesTrim,
         };
-        return next;
-      });
-    } catch (e) {
-      setSaveError(e instanceof Error ? e.message : "Save failed");
-    } finally {
-      setSubmitting(false);
-    }
-  }, [user, current, canSubmit, draftNotes, rankerSet, draftRank, cardIndex]);
+        const res = await fetch("/api/me/card-ratings", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const t = await res.text();
+          throw new Error(t?.trim() || res.statusText);
+        }
+        // Keep the in-session queue order stable: mark/update current entry in place
+        // instead of reloading and rebuilding pending->ranked order after each submit.
+        const idxAtSave = cardIndex;
+        setQueue((prev) => {
+          if (idxAtSave < 0 || idxAtSave >= prev.length) return prev;
+          const next = prev.slice();
+          const entry = next[idxAtSave];
+          if (!entry) return prev;
+          const notesVal = notesTrim === "" ? null : notesTrim;
+          next[idxAtSave] = {
+            kind: "rated",
+            card: entry.card,
+            rating: ratingVal,
+            notes: notesVal,
+          };
+          return next;
+        });
+      } catch (e) {
+        setSaveError(e instanceof Error ? e.message : "Save failed");
+      } finally {
+        if (!background) setSubmitting(false);
+      }
+    },
+    [user, current, canSubmit, draftNotes, rankerSet, draftRank, cardIndex],
+  );
 
   const goPrev = useCallback(() => {
     setCardIndex((i) => Math.max(0, i - 1));
@@ -435,7 +446,7 @@ export function CardRanker({ isLight, active }) {
             draftRank >= 1 &&
             draftRank <= 5;
           if (hasPendingSelectedRank) {
-            await submitRanking();
+            void submitRanking({ background: true });
           }
           if (direction < 0) {
             goPrev();
