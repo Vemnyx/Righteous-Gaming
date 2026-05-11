@@ -5,7 +5,9 @@ import { CARD_FORMAT_NAMES, cardFormatName } from "../constants/cardFormat";
 
 /** @typedef {{ id: number, name: string, code?: string }} CatalogSetLite */
 
-/** @typedef {{ id: number, set_id: number, format: number, started_at: string, completed_at?: string | null }} CardRaterRow */
+/** @typedef {{ id: number, set_id: number, format: number, label?: string | null, started_at: string, completed_at?: string | null }} CardRaterRow */
+
+const MAX_LABEL_LEN = 512;
 
 /** @param {string | undefined | null} iso */
 function formatDateTime(iso) {
@@ -35,10 +37,16 @@ export function CardRaterAdmin({ isLight, active }) {
   const [setsModalLoading, setSetsModalLoading] = useState(false);
   const [modalSetId, setModalSetId] = useState(/** @type {number | ""} */ (""));
   const [modalFormat, setModalFormat] = useState(0);
+  const [modalLabel, setModalLabel] = useState("");
   const [modalSubmitting, setModalSubmitting] = useState(false);
   const [modalError, setModalError] = useState(/** @type {string | null} */ (null));
 
   const [completing, setCompleting] = useState(false);
+
+  /** Row pending delete confirmation; null when dialog closed. */
+  const [deleteTarget, setDeleteTarget] = useState(/** @type {CardRaterRow | null} */ (null));
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState(/** @type {string | null} */ (null));
 
   const hasActiveRater = useMemo(() => rows.some((r) => rowIsActive(r)), [rows]);
 
@@ -76,6 +84,7 @@ export function CardRaterAdmin({ isLight, active }) {
           id: r.id,
           set_id: r.set_id,
           format: r.format,
+          label: r.label != null && String(r.label).trim() !== "" ? String(r.label).trim() : null,
           started_at: typeof r.started_at === "string" ? r.started_at : "",
           completed_at: r.completed_at != null ? String(r.completed_at) : null,
         });
@@ -119,6 +128,7 @@ export function CardRaterAdmin({ isLight, active }) {
     setModalError(null);
     setModalOpen(true);
     setModalSubmitting(false);
+    setModalLabel("");
     const first = sets[0];
     if (first) {
       setModalSetId(first.id);
@@ -148,6 +158,7 @@ export function CardRaterAdmin({ isLight, active }) {
       const f = normalized[0];
       setModalSetId(f ? f.id : "");
       setModalFormat(0);
+      setModalLabel("");
     } catch (e) {
       setModalError(e instanceof Error ? e.message : "Failed to load sets");
       setSets([]);
@@ -162,15 +173,56 @@ export function CardRaterAdmin({ isLight, active }) {
     setModalError(null);
   }, []);
 
+  const closeDeleteModal = useCallback(() => {
+    setDeleteTarget(null);
+    setDeleteError(null);
+  }, []);
+
   useEffect(() => {
-    if (!modalOpen) return undefined;
+    if (!modalOpen && !deleteTarget) return undefined;
     /** @param {KeyboardEvent} e */
     function onKeyDown(e) {
-      if (e.key === "Escape" && !modalSubmitting) closeModal();
+      if (e.key !== "Escape") return;
+      if (deleteTarget && !deleteSubmitting) {
+        closeDeleteModal();
+        return;
+      }
+      if (modalOpen && !modalSubmitting) closeModal();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [modalOpen, modalSubmitting, closeModal]);
+  }, [modalOpen, deleteTarget, modalSubmitting, deleteSubmitting, closeModal, closeDeleteModal]);
+
+  const confirmDeleteSession = useCallback(async () => {
+    if (!user || !deleteTarget) return;
+    setDeleteSubmitting(true);
+    setDeleteError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/card-raters/${deleteTarget.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const errText = (await res.text())?.trim() || res.statusText;
+      if (!res.ok) {
+        let msg = errText || `HTTP ${res.status}`;
+        try {
+          const j = JSON.parse(errText);
+          if (j && typeof j.message === "string" && j.message.trim() !== "") msg = j.message.trim();
+        } catch {
+          /* use msg as-is */
+        }
+        throw new Error(msg);
+      }
+      setDeleteTarget(null);
+      setDeleteError(null);
+      setReloadSeq((n) => n + 1);
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  }, [user, deleteTarget]);
 
   const submitNewRater = useCallback(async () => {
     if (!user || modalSetId === "") return;
@@ -184,7 +236,11 @@ export function CardRaterAdmin({ isLight, active }) {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ set_id: modalSetId, format: modalFormat }),
+        body: JSON.stringify({
+          set_id: modalSetId,
+          format: modalFormat,
+          ...(modalLabel.trim() !== "" ? { label: modalLabel.trim() } : {}),
+        }),
       });
       if (res.status === 409) {
         const t = await res.text();
@@ -198,7 +254,7 @@ export function CardRaterAdmin({ isLight, active }) {
     } finally {
       setModalSubmitting(false);
     }
-  }, [user, modalSetId, modalFormat, closeModal]);
+  }, [user, modalSetId, modalFormat, modalLabel, closeModal]);
 
   const completeActive = useCallback(async () => {
     if (!user) return;
@@ -228,6 +284,9 @@ export function CardRaterAdmin({ isLight, active }) {
   const btnPrimary =
     "rounded-lg border border-white/[0.22] bg-gradient-to-br from-[#7b4cb8] to-[#5a2f8f] px-4 py-2 text-[0.8125rem] font-semibold text-white shadow-[0_3px_14px_rgba(90,47,143,0.38)] hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-45";
 
+  const btnDanger =
+    "rounded-lg border border-red-400/45 bg-red-950/50 px-3 py-1.5 text-[0.8125rem] font-medium text-red-100 transition-colors hover:border-red-300/55 hover:bg-red-900/45 disabled:cursor-not-allowed disabled:opacity-45";
+
   const tableChromeBorder = isLight
     ? "border-white/[0.12]"
     : "border-white/[0.24] ring-1 ring-white/[0.05]";
@@ -241,6 +300,10 @@ export function CardRaterAdmin({ isLight, active }) {
   const selectCls = isLight
     ? "w-full rounded-lg border border-white/[0.22] bg-black/30 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55"
     : "w-full rounded-lg border border-white/[0.22] bg-black/40 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55";
+
+  const inputCls = isLight
+    ? "w-full rounded-lg border border-white/[0.22] bg-black/30 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/55"
+    : "w-full rounded-lg border border-white/[0.22] bg-black/40 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/35 focus:border-purple-400/55";
 
   return (
     <div className="flex w-full flex-1 flex-col gap-4 px-1 py-2 sm:px-2">
@@ -273,10 +336,11 @@ export function CardRaterAdmin({ isLight, active }) {
       ) : null}
 
       <div className={`overflow-x-auto rounded-xl border bg-black/20 ${tableChromeBorder}`}>
-        <table className="w-full min-w-[44rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
+        <table className="w-full min-w-[58rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
           <thead>
             <tr className={`border-b text-[0.68rem] uppercase tracking-wider text-[#f4f0fa]/55 ${tableHeadBorder}`}>
               <th className="px-3 py-2.5 font-semibold sm:px-4">ID</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Label</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Set</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Format</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Started</th>
@@ -288,13 +352,13 @@ export function CardRaterAdmin({ isLight, active }) {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
+                <td colSpan={8} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
+                <td colSpan={8} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
                   No card rater sessions yet.
                 </td>
               </tr>
@@ -303,9 +367,13 @@ export function CardRaterAdmin({ isLight, active }) {
                 const active = rowIsActive(row);
                 const fmtLabel = cardFormatName(row.format) ?? String(row.format);
                 const setLabel = setNameById[row.set_id] ?? `Set #${row.set_id}`;
+                const labelText = row.label != null && String(row.label).trim() !== "" ? String(row.label).trim() : null;
                 return (
                   <tr key={row.id} className={`border-b ${tableRowBorder} last:border-b-0`}>
                     <td className="px-3 py-2.5 tabular-nums sm:px-4">{row.id}</td>
+                    <td className="max-w-[14rem] truncate px-3 py-2.5 text-[#f4f0fa]/85 sm:px-4" title={labelText ?? undefined}>
+                      {labelText ?? <span className="text-[#f4f0fa]/40">—</span>}
+                    </td>
                     <td className="px-3 py-2.5 sm:px-4">
                       <span className="text-[#f4f0fa]/88">{setLabel}</span>
                       <span className="ml-1.5 text-[0.72rem] text-[#f4f0fa]/45">({row.set_id})</span>
@@ -323,18 +391,29 @@ export function CardRaterAdmin({ isLight, active }) {
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-right sm:px-4">
-                      {active ? (
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
+                        {active ? (
+                          <button
+                            type="button"
+                            className={`${btnBase} ${btnTheme}`}
+                            disabled={completing || !user || deleteSubmitting}
+                            onClick={() => void completeActive()}
+                          >
+                            {completing ? "Completing…" : "Complete"}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
-                          className={`${btnBase} ${btnTheme}`}
-                          disabled={completing || !user}
-                          onClick={() => void completeActive()}
+                          className={btnDanger}
+                          disabled={!user || deleteSubmitting || completing}
+                          onClick={() => {
+                            setDeleteError(null);
+                            setDeleteTarget(row);
+                          }}
                         >
-                          {completing ? "Completing…" : "Complete"}
+                          Delete
                         </button>
-                      ) : (
-                        <span className="text-[#f4f0fa]/35">—</span>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -343,6 +422,64 @@ export function CardRaterAdmin({ isLight, active }) {
           </tbody>
         </table>
       </div>
+
+      {deleteTarget && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[210] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
+              role="presentation"
+              onClick={(e) => {
+                if (e.target === e.currentTarget && !deleteSubmitting) closeDeleteModal();
+              }}
+            >
+              <div
+                className={`relative w-full max-w-md rounded-xl p-5 sm:p-6 ${modalPanel}`}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="card-rater-delete-title"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 id="card-rater-delete-title" className="m-0 text-lg font-semibold text-[#f4f0fa]">
+                  Delete this session?
+                </h3>
+                <p className="mt-2 text-[0.85rem] leading-snug text-[#f4f0fa]/75">
+                  This removes the session record{" "}
+                  <span className="font-mono text-[#f4f0fa]/90">#{deleteTarget.id}</span>
+                  {deleteTarget.label != null && String(deleteTarget.label).trim() !== "" ? (
+                    <>
+                      {" "}
+                      <span className="text-[#f4f0fa]/90">({String(deleteTarget.label).trim()})</span>
+                    </>
+                  ) : null}{" "}
+                  permanently. You cannot delete a session that still has user card ratings; remove or migrate those
+                  first.
+                </p>
+                <ul className="mt-3 list-inside list-disc text-[0.82rem] leading-snug text-[#f4f0fa]/70">
+                  <li>
+                    Set: {setNameById[deleteTarget.set_id] ?? `Set #${deleteTarget.set_id}`} (id {deleteTarget.set_id})
+                  </li>
+                  <li>Format: {cardFormatName(deleteTarget.format) ?? deleteTarget.format}</li>
+                  <li>Started: {formatDateTime(deleteTarget.started_at)}</li>
+                  <li>Completed: {formatDateTime(deleteTarget.completed_at)}</li>
+                </ul>
+                {deleteError ? (
+                  <p className="mt-3 rounded-lg border border-red-400/35 bg-red-950/35 px-3 py-2 text-[0.82rem] text-red-100">
+                    {deleteError}
+                  </p>
+                ) : null}
+                <div className="mt-6 flex flex-wrap justify-end gap-2">
+                  <button type="button" className={`${btnBase} ${btnTheme}`} disabled={deleteSubmitting} onClick={closeDeleteModal}>
+                    Cancel
+                  </button>
+                  <button type="button" className={btnDanger} disabled={deleteSubmitting} onClick={() => void confirmDeleteSession()}>
+                    {deleteSubmitting ? "Deleting…" : "Delete session"}
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
 
       {modalOpen && typeof document !== "undefined"
         ? createPortal(
@@ -363,12 +500,26 @@ export function CardRaterAdmin({ isLight, active }) {
                 <h3 id="card-rater-admin-modal-title" className="m-0 text-lg font-semibold text-[#f4f0fa]">
                   New card rater session
                 </h3>
-                <p className="mt-2 text-[0.85rem] leading-snug text-[#f4f0fa]/70">Choose the set and format for this session.</p>
+                <p className="mt-2 text-[0.85rem] leading-snug text-[#f4f0fa]/70">Choose the set, format, and an optional label for this session.</p>
 
                 {setsModalLoading ? (
                   <p className="mt-4 text-[0.875rem] text-[#f4f0fa]/75">Loading sets…</p>
                 ) : (
                   <div className="mt-4 flex flex-col gap-4">
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">Label</span>
+                      <input
+                        type="text"
+                        className={inputCls}
+                        value={modalLabel}
+                        onChange={(e) => setModalLabel(e.target.value)}
+                        placeholder="e.g. Omens Limited — March 2026"
+                        maxLength={MAX_LABEL_LEN}
+                        disabled={modalSubmitting}
+                        autoComplete="off"
+                      />
+                      <span className="text-[0.72rem] text-[#f4f0fa]/45">Optional. Max {MAX_LABEL_LEN} characters.</span>
+                    </label>
                     <label className="flex flex-col gap-1.5">
                       <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">Set</span>
                       <select

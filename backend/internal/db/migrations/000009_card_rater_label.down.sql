@@ -1,0 +1,1 @@
+ALTER TABLE card_rater DROP COLUMN IF EXISTS label;

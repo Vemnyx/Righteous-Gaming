@@ -518,6 +518,7 @@ type cardRaterJSON struct {
 	ID          int        `json:"id"`
 	SetID       int        `json:"set_id"`
 	Format      int16      `json:"format"`
+	Label       *string    `json:"label,omitempty"`
 	StartedAt   time.Time  `json:"started_at"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 }
@@ -527,15 +528,19 @@ func cardRaterToJSON(cr repository.CardRater) cardRaterJSON {
 		ID:          cr.ID,
 		SetID:       cr.SetID,
 		Format:      cr.Format,
+		Label:       cr.Label,
 		StartedAt:   cr.StartedAt,
 		CompletedAt: cr.CompletedAt,
 	}
 }
 
 type createCardRaterRequest struct {
-	SetID  int   `json:"set_id"`
-	Format int16 `json:"format"`
+	SetID  int     `json:"set_id"`
+	Format int16   `json:"format"`
+	Label  *string `json:"label,omitempty"`
 }
+
+const maxCardRaterLabelRunes = 512
 
 // GET /api/card-raters?active=true
 func (h *cardRatingsHTTP) listCardRaters(w http.ResponseWriter, r *http.Request) {
@@ -583,6 +588,17 @@ func (h *cardRatingsHTTP) createCardRater(w http.ResponseWriter, r *http.Request
 		writeFieldError(w, http.StatusBadRequest, "format", "unknown format")
 		return
 	}
+	var labelPtr *string
+	if body.Label != nil {
+		t := strings.TrimSpace(*body.Label)
+		if len([]rune(t)) > maxCardRaterLabelRunes {
+			writeFieldError(w, http.StatusBadRequest, "label", "exceeds maximum length")
+			return
+		}
+		if t != "" {
+			labelPtr = &t
+		}
+	}
 	exists, err := h.app.Repo.SetExists(r.Context(), body.SetID)
 	if err != nil {
 		log.Error("create card rater set exists", "error", err)
@@ -593,7 +609,7 @@ func (h *cardRatingsHTTP) createCardRater(w http.ResponseWriter, r *http.Request
 		writeFieldError(w, http.StatusNotFound, "set_id", "set not found")
 		return
 	}
-	cr, err := h.app.Repo.InsertCardRater(r.Context(), body.SetID, body.Format)
+	cr, err := h.app.Repo.InsertCardRater(r.Context(), body.SetID, body.Format, labelPtr)
 	if err != nil {
 		if errors.Is(err, repository.ErrActiveCardRaterExists) {
 			writeMessageError(w, http.StatusConflict, "an active card rater already exists")
@@ -626,4 +642,35 @@ func (h *cardRatingsHTTP) completeActiveCardRater(w http.ResponseWriter, r *http
 		return
 	}
 	writeCatalogJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// DELETE /api/card-raters/{id}
+func (h *cardRatingsHTTP) deleteCardRater(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := h.sessionUser(w, r); !ok {
+		return
+	}
+	idStr := strings.TrimSpace(r.PathValue("id"))
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id <= 0 {
+		writeMessageError(w, http.StatusBadRequest, "invalid card rater id")
+		return
+	}
+	if err := h.app.Repo.DeleteCardRater(r.Context(), id); err != nil {
+		if errors.Is(err, repository.ErrCardRaterNotFound) {
+			writeMessageError(w, http.StatusNotFound, "card rater not found")
+			return
+		}
+		if errors.Is(err, repository.ErrCardRaterHasDependentRatings) {
+			writeMessageError(w, http.StatusConflict, "cannot delete: user ratings still reference this session")
+			return
+		}
+		log.Error("delete card rater", "error", err, "id", id)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

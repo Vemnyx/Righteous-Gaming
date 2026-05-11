@@ -15,6 +15,7 @@ type CardRater struct {
 	ID          int
 	SetID       int
 	Format      int16
+	Label       *string
 	StartedAt   time.Time
 	CompletedAt *time.Time
 }
@@ -25,6 +26,9 @@ var ErrCardRaterNotFound = errors.New("repository: card rater not found")
 // ErrActiveCardRaterExists is returned when inserting a new active rater while one is already open.
 var ErrActiveCardRaterExists = errors.New("repository: active card rater already exists")
 
+// ErrCardRaterHasDependentRatings is returned when DELETE is blocked by user_card_ratings FK.
+var ErrCardRaterHasDependentRatings = errors.New("repository: card rater has dependent user ratings")
+
 // ListCardRaters returns card_rater rows, newest first. When activeOnly, only rows with completed_at IS NULL.
 func (r *Repository) ListCardRaters(ctx context.Context, activeOnly bool) ([]CardRater, error) {
 	if r.pool == nil {
@@ -32,9 +36,9 @@ func (r *Repository) ListCardRaters(ctx context.Context, activeOnly bool) ([]Car
 	}
 	var q string
 	if activeOnly {
-		q = `SELECT id, set_id, format, started_at, completed_at FROM card_rater WHERE completed_at IS NULL ORDER BY id DESC`
+		q = `SELECT id, set_id, format, label, started_at, completed_at FROM card_rater WHERE completed_at IS NULL ORDER BY id DESC`
 	} else {
-		q = `SELECT id, set_id, format, started_at, completed_at FROM card_rater ORDER BY id DESC`
+		q = `SELECT id, set_id, format, label, started_at, completed_at FROM card_rater ORDER BY id DESC`
 	}
 	rows, err := r.pool.Query(ctx, q)
 	if err != nil {
@@ -45,7 +49,7 @@ func (r *Repository) ListCardRaters(ctx context.Context, activeOnly bool) ([]Car
 	out := make([]CardRater, 0, 8)
 	for rows.Next() {
 		var row CardRater
-		if err := rows.Scan(&row.ID, &row.SetID, &row.Format, &row.StartedAt, &row.CompletedAt); err != nil {
+		if err := rows.Scan(&row.ID, &row.SetID, &row.Format, &row.Label, &row.StartedAt, &row.CompletedAt); err != nil {
 			return nil, fmt.Errorf("repository: list card raters scan: %w", err)
 		}
 		out = append(out, row)
@@ -61,10 +65,10 @@ func (r *Repository) GetCardRater(ctx context.Context, id int) (*CardRater, erro
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
-	const q = `SELECT id, set_id, format, started_at, completed_at FROM card_rater WHERE id = $1`
+	const q = `SELECT id, set_id, format, label, started_at, completed_at FROM card_rater WHERE id = $1`
 	row := r.pool.QueryRow(ctx, q, id)
 	var cr CardRater
-	err := row.Scan(&cr.ID, &cr.SetID, &cr.Format, &cr.StartedAt, &cr.CompletedAt)
+	err := row.Scan(&cr.ID, &cr.SetID, &cr.Format, &cr.Label, &cr.StartedAt, &cr.CompletedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrCardRaterNotFound
@@ -75,17 +79,18 @@ func (r *Repository) GetCardRater(ctx context.Context, id int) (*CardRater, erro
 }
 
 // InsertCardRater inserts a new row with completed_at NULL. Fails if another active row exists.
-func (r *Repository) InsertCardRater(ctx context.Context, setID int, format int16) (*CardRater, error) {
+// label may be nil for no label.
+func (r *Repository) InsertCardRater(ctx context.Context, setID int, format int16, label *string) (*CardRater, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-INSERT INTO card_rater (set_id, format)
-VALUES ($1, $2)
-RETURNING id, set_id, format, started_at, completed_at`
-	row := r.pool.QueryRow(ctx, q, setID, format)
+INSERT INTO card_rater (set_id, format, label)
+VALUES ($1, $2, $3)
+RETURNING id, set_id, format, label, started_at, completed_at`
+	row := r.pool.QueryRow(ctx, q, setID, format, label)
 	var cr CardRater
-	err := row.Scan(&cr.ID, &cr.SetID, &cr.Format, &cr.StartedAt, &cr.CompletedAt)
+	err := row.Scan(&cr.ID, &cr.SetID, &cr.Format, &cr.Label, &cr.StartedAt, &cr.CompletedAt)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -106,4 +111,24 @@ func (r *Repository) CompleteActiveCardRater(ctx context.Context) (bool, error) 
 		return false, fmt.Errorf("repository: complete active card rater: %w", err)
 	}
 	return tag.RowsAffected() > 0, nil
+}
+
+// DeleteCardRater removes one card_rater row by id. Fails with ErrCardRaterNotFound if no row,
+// or ErrCardRaterHasDependentRatings when user_card_ratings still reference this rater.
+func (r *Repository) DeleteCardRater(ctx context.Context, id int) error {
+	if r.pool == nil {
+		return fmt.Errorf("repository: pool is closed")
+	}
+	tag, err := r.pool.Exec(ctx, `DELETE FROM card_rater WHERE id = $1`, id)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return ErrCardRaterHasDependentRatings
+		}
+		return fmt.Errorf("repository: delete card rater: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrCardRaterNotFound
+	}
+	return nil
 }
