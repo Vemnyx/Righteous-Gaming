@@ -67,6 +67,8 @@ export function CardRanker({ isLight, active }) {
   const [draftNotes, setDraftNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [saveError, setSaveError] = useState(/** @type {string | null} */ (null));
+  const [cardDragX, setCardDragX] = useState(0);
+  const [cardDragActive, setCardDragActive] = useState(false);
 
   const [teamRankings, setTeamRankings] = useState(/** @type {TeamRankingsState | null} */ (null));
   const [teamLoading, setTeamLoading] = useState(false);
@@ -279,7 +281,7 @@ export function CardRanker({ isLight, active }) {
   const starDisabled = `${starBase} cursor-default border-white/[0.18] bg-black/45 text-amber-200/55`;
 
   const arrowNavCls =
-    "mt-14 flex h-[min(14rem,52vh)] min-h-[10.5rem] w-12 shrink-0 items-center justify-center rounded-xl border-2 border-yellow-400/85 bg-yellow-400/18 text-xl font-semibold text-yellow-200 shadow-[0_0_18px_rgba(250,204,21,0.35)] transition-colors hover:border-yellow-300 hover:bg-yellow-400/28 hover:text-yellow-50 disabled:cursor-not-allowed disabled:border-white/20 disabled:bg-black/30 disabled:text-[#f4f0fa]/40 disabled:shadow-none sm:mt-16 sm:w-14 sm:text-2xl";
+    "mt-9 flex h-[min(14rem,52vh)] min-h-[10.5rem] w-12 shrink-0 items-center justify-center rounded-xl border-2 border-yellow-400/85 bg-yellow-400/18 text-xl font-semibold text-yellow-200 shadow-[0_0_18px_rgba(250,204,21,0.35)] transition-colors hover:border-yellow-300 hover:bg-yellow-400/28 hover:text-yellow-50 disabled:cursor-not-allowed disabled:border-white/20 disabled:bg-black/30 disabled:text-[#f4f0fa]/40 disabled:shadow-none sm:mt-11 sm:w-14 sm:text-2xl";
 
   const canSubmit = useMemo(() => {
     if (!user || !current || submitting) return false;
@@ -354,10 +356,20 @@ export function CardRanker({ isLight, active }) {
 
   /** @type {React.MutableRefObject<{ active: boolean, id: number, x0: number, y0: number }>} */
   const cardSwipeRef = useRef({ active: false, id: 0, x0: 0, y0: 0 });
+  /** @type {React.MutableRefObject<number | null>} */
+  const cardSwipeAnimTimerRef = useRef(null);
 
   const resetCardSwipe = useCallback(() => {
+    if (cardSwipeAnimTimerRef.current != null) {
+      window.clearTimeout(cardSwipeAnimTimerRef.current);
+      cardSwipeAnimTimerRef.current = null;
+    }
     cardSwipeRef.current = { active: false, id: 0, x0: 0, y0: 0 };
+    setCardDragActive(false);
+    setCardDragX(0);
   }, []);
+
+  useEffect(() => () => resetCardSwipe(), [resetCardSwipe]);
 
   const onCardSwipePointerDown = useCallback(
     /** @param {React.PointerEvent<HTMLDivElement>} e */
@@ -365,6 +377,8 @@ export function CardRanker({ isLight, active }) {
       if (rankLoading || queue.length <= 1) return;
       if (e.pointerType === "mouse" && e.button !== 0) return;
       cardSwipeRef.current = { active: true, id: e.pointerId, x0: e.clientX, y0: e.clientY };
+      setCardDragActive(true);
+      setCardDragX(0);
       try {
         e.currentTarget.setPointerCapture(e.pointerId);
       } catch {
@@ -372,6 +386,20 @@ export function CardRanker({ isLight, active }) {
       }
     },
     [rankLoading, queue.length],
+  );
+
+  const onCardSwipePointerMove = useCallback(
+    /** @param {React.PointerEvent<HTMLDivElement>} e */
+    (e) => {
+      const s = cardSwipeRef.current;
+      if (!s.active || s.id !== e.pointerId) return;
+      const dx = e.clientX - s.x0;
+      const dy = e.clientY - s.y0;
+      if (Math.abs(dy) > Math.abs(dx) * 1.4) return;
+      const clamped = Math.max(-220, Math.min(220, dx));
+      setCardDragX(clamped);
+    },
+    [],
   );
 
   const onCardSwipePointerUpOrCancel = useCallback(
@@ -390,13 +418,27 @@ export function CardRanker({ isLight, active }) {
       const dx = e.clientX - x0;
       const dy = e.clientY - y0;
       const minDist = 52;
-      if (Math.abs(dx) < minDist) return;
-      if (Math.abs(dy) > Math.abs(dx) * 0.72) return;
-      if (dx < 0) {
-        setCardIndex((i) => Math.min(Math.max(0, queue.length - 1), i + 1));
-      } else {
-        setCardIndex((i) => Math.max(0, i - 1));
+      const mostlyHorizontal = Math.abs(dy) <= Math.abs(dx) * 0.72;
+      if (Math.abs(dx) < minDist || !mostlyHorizontal) {
+        setCardDragActive(false);
+        setCardDragX(0);
+        return;
       }
+      const direction = dx < 0 ? -1 : 1;
+      setCardDragActive(false);
+      setCardDragX(direction * 560);
+      if (cardSwipeAnimTimerRef.current != null) {
+        window.clearTimeout(cardSwipeAnimTimerRef.current);
+      }
+      cardSwipeAnimTimerRef.current = window.setTimeout(() => {
+        cardSwipeAnimTimerRef.current = null;
+        if (direction < 0) {
+          setCardIndex((i) => Math.min(Math.max(0, queue.length - 1), i + 1));
+        } else {
+          setCardIndex((i) => Math.max(0, i - 1));
+        }
+        setCardDragX(0);
+      }, 165);
     },
     [rankLoading, queue.length, resetCardSwipe],
   );
@@ -500,6 +542,15 @@ export function CardRanker({ isLight, active }) {
 
   const showRankCompleteMessage =
     !rankLoading && rankStats.total > 0 && rankStats.unranked === 0;
+
+  const cardSwipeVisualStyle = useMemo(
+    () => ({
+      transform: `translateX(${cardDragX}px) rotate(${cardDragX * 0.025}deg)`,
+      opacity: Math.max(0.72, 1 - Math.abs(cardDragX) / 540),
+      transition: cardDragActive ? "none" : "transform 180ms ease, opacity 180ms ease",
+    }),
+    [cardDragX, cardDragActive],
+  );
 
   const cardJumpGroups = useMemo(() => {
     /** @type {{ idx: number, entry: QueueEntry, label: string }[]} */
@@ -623,8 +674,10 @@ export function CardRanker({ isLight, active }) {
                       })}
                     </div>
                     <div
-                      className="mt-3 flex min-h-0 w-full max-w-xs touch-pan-y select-none items-center justify-center sm:mt-4 sm:max-w-sm"
+                      className="mt-3 flex min-h-0 w-full max-w-xs touch-pan-y select-none items-center justify-center will-change-transform sm:mt-4 sm:max-w-sm"
+                      style={cardSwipeVisualStyle}
                       onPointerDown={onCardSwipePointerDown}
+                      onPointerMove={onCardSwipePointerMove}
                       onPointerUp={onCardSwipePointerUpOrCancel}
                       onPointerCancel={onCardSwipePointerUpOrCancel}
                       onLostPointerCapture={resetCardSwipe}
