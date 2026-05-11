@@ -425,6 +425,12 @@ export function CardRaterAdmin({ isLight, active }) {
 
       {deleteTarget && typeof document !== "undefined"
         ? createPortal(
+            (() => {
+              const deleteLabelTrim =
+                deleteTarget.label != null && String(deleteTarget.label).trim() !== ""
+                  ? String(deleteTarget.label).trim()
+                  : null;
+              return (
             <div
               className="fixed inset-0 z-[210] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
               role="presentation"
@@ -440,19 +446,21 @@ export function CardRaterAdmin({ isLight, active }) {
                 onClick={(e) => e.stopPropagation()}
               >
                 <h3 id="card-rater-delete-title" className="m-0 text-lg font-semibold text-[#f4f0fa]">
-                  Delete this session?
+                  {deleteLabelTrim ? `Delete “${deleteLabelTrim}”?` : `Delete session #${deleteTarget.id}?`}
                 </h3>
                 <p className="mt-2 text-[0.85rem] leading-snug text-[#f4f0fa]/75">
-                  This removes the session record{" "}
-                  <span className="font-mono text-[#f4f0fa]/90">#{deleteTarget.id}</span>
-                  {deleteTarget.label != null && String(deleteTarget.label).trim() !== "" ? (
+                  {deleteLabelTrim ? (
                     <>
-                      {" "}
-                      <span className="text-[#f4f0fa]/90">({String(deleteTarget.label).trim()})</span>
+                      This will permanently remove the rating session{" "}
+                      <span className="font-semibold text-[#f4f0fa]/92">{deleteLabelTrim}</span>
+                      <span className="text-[#f4f0fa]/55"> (id {deleteTarget.id})</span>.
                     </>
-                  ) : null}{" "}
-                  permanently. You cannot delete a session that still has user card ratings; remove or migrate those
-                  first.
+                  ) : (
+                    <>
+                      This will permanently remove this rating session{" "}
+                      <span className="font-mono text-[#f4f0fa]/90">#{deleteTarget.id}</span>.
+                    </>
+                  )}
                 </p>
                 <ul className="mt-3 list-inside list-disc text-[0.82rem] leading-snug text-[#f4f0fa]/70">
                   <li>
@@ -476,7 +484,9 @@ export function CardRaterAdmin({ isLight, active }) {
                   </button>
                 </div>
               </div>
-            </div>,
+            </div>
+              );
+            })(),
             document.body,
           )
         : null}

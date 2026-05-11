@@ -26,9 +26,6 @@ var ErrCardRaterNotFound = errors.New("repository: card rater not found")
 // ErrActiveCardRaterExists is returned when inserting a new active rater while one is already open.
 var ErrActiveCardRaterExists = errors.New("repository: active card rater already exists")
 
-// ErrCardRaterHasDependentRatings is returned when DELETE is blocked by user_card_ratings FK.
-var ErrCardRaterHasDependentRatings = errors.New("repository: card rater has dependent user ratings")
-
 // ListCardRaters returns card_rater rows, newest first. When activeOnly, only rows with completed_at IS NULL.
 func (r *Repository) ListCardRaters(ctx context.Context, activeOnly bool) ([]CardRater, error) {
 	if r.pool == nil {
@@ -113,18 +110,13 @@ func (r *Repository) CompleteActiveCardRater(ctx context.Context) (bool, error) 
 	return tag.RowsAffected() > 0, nil
 }
 
-// DeleteCardRater removes one card_rater row by id. Fails with ErrCardRaterNotFound if no row,
-// or ErrCardRaterHasDependentRatings when user_card_ratings still reference this rater.
+// DeleteCardRater removes one card_rater row by id (user_card_ratings cascade per FK). Fails with ErrCardRaterNotFound if no row.
 func (r *Repository) DeleteCardRater(ctx context.Context, id int) error {
 	if r.pool == nil {
 		return fmt.Errorf("repository: pool is closed")
 	}
 	tag, err := r.pool.Exec(ctx, `DELETE FROM card_rater WHERE id = $1`, id)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
-			return ErrCardRaterHasDependentRatings
-		}
 		return fmt.Errorf("repository: delete card rater: %w", err)
 	}
 	if tag.RowsAffected() == 0 {

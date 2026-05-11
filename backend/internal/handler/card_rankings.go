@@ -664,10 +664,6 @@ func (h *cardRatingsHTTP) deleteCardRater(w http.ResponseWriter, r *http.Request
 			writeMessageError(w, http.StatusNotFound, "card rater not found")
 			return
 		}
-		if errors.Is(err, repository.ErrCardRaterHasDependentRatings) {
-			writeMessageError(w, http.StatusConflict, "cannot delete: user ratings still reference this session")
-			return
-		}
 		log.Error("delete card rater", "error", err, "id", id)
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
 		return
