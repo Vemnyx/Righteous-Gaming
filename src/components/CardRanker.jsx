@@ -74,6 +74,8 @@ export function CardRanker({ isLight, active }) {
   const [teamRatingsByCard, setTeamRatingsByCard] = useState(/** @type {TeamRatingsByCard} */ ({}));
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamLoadError, setTeamLoadError] = useState(/** @type {string | null} */ (null));
+  /** Bumps after a successful rating save so team batch refetches (queue length alone may not change). */
+  const [teamRefreshKey, setTeamRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!active) return undefined;
@@ -254,7 +256,7 @@ export function CardRanker({ isLight, active }) {
     return () => {
       cancelled = true;
     };
-  }, [active, user, rankerSet, queue.length]);
+  }, [active, user, rankerSet, queue.length, teamRefreshKey]);
 
   const setBgUrl =
     rankerSet?.image_url != null && String(rankerSet.image_url).trim() !== ""
@@ -337,6 +339,7 @@ export function CardRanker({ isLight, active }) {
           const t = await res.text();
           throw new Error(t?.trim() || res.statusText);
         }
+        setTeamRefreshKey((k) => k + 1);
         // Keep the in-session queue order stable: mark/update current entry in place
         // instead of reloading and rebuilding pending->ranked order after each submit.
         const idxAtSave = cardIndex;
@@ -647,7 +650,24 @@ export function CardRanker({ isLight, active }) {
     return { pending, ranked };
   }, [queue]);
 
-  const currentTeamRatings = current ? (teamRatingsByCard[current.card.id] ?? null) : null;
+  const currentTeamRatingsView = useMemo(() => {
+    if (!current || current.kind !== "rated") return null;
+    const myRating = current.rating >= 1 && current.rating <= 5 ? current.rating : null;
+    const api = teamRatingsByCard[current.card.id];
+    if (api) {
+      const rows = api.rows;
+      let averageRating =
+        api.averageRating != null && Number.isFinite(api.averageRating) ? api.averageRating : null;
+      if (averageRating == null && rows.length === 0 && myRating != null) {
+        averageRating = myRating;
+      }
+      return { averageRating, rows };
+    }
+    if (myRating != null) {
+      return { averageRating: myRating, rows: [] };
+    }
+    return null;
+  }, [current, teamRatingsByCard]);
 
   return (
     <div className="relative flex min-h-0 w-full min-h-[min(52vh,28rem)] flex-1 flex-col overflow-hidden rounded-2xl text-left">
@@ -806,17 +826,23 @@ export function CardRanker({ isLight, active }) {
                           {teamLoadError}
                         </p>
                       ) : null}
-                      {!teamLoading && !teamLoadError && currentTeamRatings ? (
+                      {!teamLoading && !teamLoadError && currentTeamRatingsView ? (
                         <>
                           <p className="m-0 text-[0.92rem] font-semibold leading-snug text-[#f4f0fa]">
                             Avg Team Rating -{" "}
-                            {currentTeamRatings.averageRating != null ? `${currentTeamRatings.averageRating.toFixed(2)}★` : "—"}
+                            {currentTeamRatingsView.averageRating != null
+                              ? `${currentTeamRatingsView.averageRating.toFixed(2)}★`
+                              : "—"}
                           </p>
                           <div className="max-h-[14rem] min-h-[5rem] overflow-y-auto overscroll-contain rounded-md border border-white/[0.12] bg-black/30 px-2 py-1 [scrollbar-gutter:stable]">
-                            {currentTeamRatings.rows.length === 0 ? (
-                              <p className="m-0 py-2 text-center text-[0.85rem] text-[#f4f0fa]/65">No team ratings yet.</p>
+                            {currentTeamRatingsView.rows.length === 0 ? (
+                              <p className="m-0 py-2 text-center text-[0.85rem] text-[#f4f0fa]/65">
+                                {currentTeamRatingsView.averageRating != null
+                                  ? "No other team ratings yet."
+                                  : "No team ratings yet."}
+                              </p>
                             ) : (
-                              currentTeamRatings.rows.map((row, idx) => (
+                              currentTeamRatingsView.rows.map((row, idx) => (
                                 <div
                                   key={`${row.user_name}-${idx}`}
                                   className="border-b border-white/[0.08] py-2.5 last:border-b-0"
