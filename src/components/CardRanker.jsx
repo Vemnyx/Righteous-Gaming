@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { CardFormat } from "../constants/cardFormat";
 
 /** @typedef {{ id: number, name: string, code: string, image_url?: string | null }} CatalogSet */
+
+/** @typedef {{ id: number, set_id: number, format: number }} ActiveCardRater */
 
 /** @typedef {{ id: number, name?: string, image_url?: string | null, [key: string]: unknown }} RankerCard */
 
@@ -21,17 +22,6 @@ import { CardFormat } from "../constants/cardFormat";
 function notesFromServer(/** @type {string | null | undefined} */ n) {
   if (n == null) return "";
   return String(n);
-}
-
-/** Card ranker always uses Limited format. */
-const RANKER_FORMAT_ID = CardFormat.Limited;
-
-/** Matches catalog names like "Omen of the Third Age" / "Omens of the Third Age". */
-const RANKER_SET_NAME_RE = /omens?\s+of\s+the\s+third\s+age/i;
-
-/** @param {CatalogSet[]} list */
-function matchRankerCatalogSet(list) {
-  return list.find((s) => RANKER_SET_NAME_RE.test(String(s.name ?? "").trim())) ?? null;
 }
 
 /** @param {{ card: RankerCard }} entry */
@@ -56,9 +46,12 @@ function pitchDot(card) {
  */
 export function CardRanker({ isLight, active }) {
   const { user, configured } = useAuth();
+  const [activeRater, setActiveRater] = useState(/** @type {ActiveCardRater | null} */ (null));
   const [rankerSet, setRankerSet] = useState(/** @type {CatalogSet | null} */ (null));
-  const [setsLoading, setSetsLoading] = useState(false);
-  const [setsError, setSetsError] = useState(/** @type {string | null} */ (null));
+  const [sessionLoading, setSessionLoading] = useState(false);
+  const [sessionError, setSessionError] = useState(/** @type {string | null} */ (null));
+  /** True when signed in and the API reports no active card_rater (not a load failure). */
+  const [ratingInactive, setRatingInactive] = useState(false);
 
   const [queue, setQueue] = useState(/** @type {QueueEntry[]} */ ([]));
   const [cardIndex, setCardIndex] = useState(0);
@@ -79,46 +72,67 @@ export function CardRanker({ isLight, active }) {
 
   useEffect(() => {
     if (!active) return undefined;
+    if (!configured || !user) {
+      setActiveRater(null);
+      setRankerSet(null);
+      setSessionError(null);
+      setRatingInactive(false);
+      setSessionLoading(false);
+      return undefined;
+    }
     let cancelled = false;
     (async () => {
-      setSetsLoading(true);
-      setSetsError(null);
+      setSessionLoading(true);
+      setSessionError(null);
+      setRatingInactive(false);
+      setActiveRater(null);
+      setRankerSet(null);
       try {
-        const res = await fetch("/api/sets");
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
+        const token = await user.getIdToken();
+        const resRaters = await fetch("/api/card-raters?active=true", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resRaters.ok) throw new Error(await resRaters.text());
+        const raterPayload = await resRaters.json();
         if (cancelled) return;
-        const list = Array.isArray(data) ? data : [];
-        const normalized = list
-          .filter((s) => s && typeof s.id === "number")
-          .map((s) => ({
-            id: s.id,
-            name: String(s.name ?? "").trim() || `Set ${s.id}`,
-            code: String(s.code ?? "").trim(),
-            image_url: s.image_url ?? null,
-          }));
-        const hit = matchRankerCatalogSet(normalized);
-        if (!cancelled) {
-          if (!hit) {
-            setSetsError('Could not find set "Omen of the Third Age" in the catalog.');
-            setRankerSet(null);
-          } else {
-            setRankerSet(hit);
-          }
+        const raters = Array.isArray(raterPayload.raters) ? raterPayload.raters : [];
+        const r = raters[0];
+        if (!r || typeof r.id !== "number" || typeof r.set_id !== "number" || typeof r.format !== "number") {
+          setRatingInactive(true);
+          return;
         }
+        setActiveRater({ id: r.id, set_id: r.set_id, format: r.format });
+        const resSet = await fetch(`/api/sets/${r.set_id}`);
+        if (!resSet.ok) throw new Error(await resSet.text());
+        const s = await resSet.json();
+        if (cancelled) return;
+        if (!s || typeof s.id !== "number") {
+          throw new Error("Invalid set response");
+        }
+        setRankerSet({
+          id: s.id,
+          name: String(s.name ?? "").trim() || `Set ${s.id}`,
+          code: String(s.code ?? "").trim(),
+          image_url: s.image_url ?? null,
+        });
       } catch (e) {
-        if (!cancelled) setSetsError(e instanceof Error ? e.message : "Failed to load sets");
+        if (!cancelled) {
+          setRatingInactive(false);
+          setSessionError(e instanceof Error ? e.message : "Failed to load rating session");
+          setActiveRater(null);
+          setRankerSet(null);
+        }
       } finally {
-        if (!cancelled) setSetsLoading(false);
+        if (!cancelled) setSessionLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [active]);
+  }, [active, configured, user]);
 
   const loadRankQueue = useCallback(async () => {
-    if (!user || !rankerSet) {
+    if (!user || !activeRater) {
       setQueue([]);
       setCardIndex(0);
       return;
@@ -127,10 +141,7 @@ export function CardRanker({ isLight, active }) {
     setRankError(null);
     try {
       const token = await user.getIdToken();
-      const qs = new URLSearchParams({
-        set_id: String(rankerSet.id),
-        format: String(RANKER_FORMAT_ID),
-      });
+      const qs = new URLSearchParams({ rater_id: String(activeRater.id) });
       const headers = { Authorization: `Bearer ${token}` };
       const [resRanked, resPending] = await Promise.all([
         fetch(`/api/me/card-ratings?${qs}`, { headers }),
@@ -167,17 +178,17 @@ export function CardRanker({ isLight, active }) {
     } finally {
       setRankLoading(false);
     }
-  }, [user, rankerSet]);
+  }, [user, activeRater]);
 
   useEffect(() => {
-    if (!active || !user || !rankerSet) {
+    if (!active || !user || !activeRater) {
       setQueue([]);
       setCardIndex(0);
       return undefined;
     }
     void loadRankQueue();
     return undefined;
-  }, [active, user, rankerSet, loadRankQueue]);
+  }, [active, user, activeRater, loadRankQueue]);
 
   const current = queue[cardIndex] ?? null;
 
@@ -204,7 +215,7 @@ export function CardRanker({ isLight, active }) {
   }, [current]);
 
   useEffect(() => {
-    if (!active || !user || !rankerSet || queue.length === 0) {
+    if (!active || !user || !activeRater || queue.length === 0) {
       setTeamRatingsByCard({});
       setTeamLoadError(null);
       setTeamLoading(false);
@@ -217,8 +228,8 @@ export function CardRanker({ isLight, active }) {
       try {
         const token = await user.getIdToken();
         const qs = new URLSearchParams({
-          set_id: String(rankerSet.id),
-          format: String(RANKER_FORMAT_ID),
+          set_id: String(activeRater.set_id),
+          format: String(activeRater.format),
         });
         const res = await fetch(`/api/me/card-team-ratings-batch?${qs}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -256,7 +267,7 @@ export function CardRanker({ isLight, active }) {
     return () => {
       cancelled = true;
     };
-  }, [active, user, rankerSet, queue.length, teamRefreshKey]);
+  }, [active, user, activeRater, queue.length, teamRefreshKey]);
 
   const setBgUrl =
     rankerSet?.image_url != null && String(rankerSet.image_url).trim() !== ""
@@ -312,8 +323,7 @@ export function CardRanker({ isLight, active }) {
       if (!background) setSubmitting(true);
       try {
         const token = await user.getIdToken();
-        if (!rankerSet) return;
-        const setId = rankerSet.id;
+        if (!activeRater) return;
         const ratingVal = current.kind === "rated" ? current.rating : draftRank;
         if (ratingVal == null || ratingVal < 1 || ratingVal > 5) {
           if (!background) setSaveError("Choose a star rating (1–5).");
@@ -321,9 +331,8 @@ export function CardRanker({ isLight, active }) {
         }
         const notesTrim = draftNotes.trim();
         const body = {
-          set_id: setId,
+          rater_id: activeRater.id,
           card_id: current.card.id,
-          format: RANKER_FORMAT_ID,
           rating: ratingVal,
           notes: notesTrim === "" ? null : notesTrim,
         };
@@ -363,7 +372,7 @@ export function CardRanker({ isLight, active }) {
         if (!background) setSubmitting(false);
       }
     },
-    [user, current, canSubmit, draftNotes, rankerSet, draftRank, cardIndex],
+    [user, current, canSubmit, draftNotes, activeRater, draftRank, cardIndex],
   );
 
   const goPrev = useCallback(() => {
@@ -688,18 +697,21 @@ export function CardRanker({ isLight, active }) {
         </>
       ) : null}
       <div className="relative z-[1] flex min-h-0 w-full flex-1 flex-col gap-4 px-4 pt-4 pb-8 sm:px-5 sm:pt-5 sm:pb-10">
-        {setsError ? (
-          <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">{setsError}</p>
+        {sessionError ? (
+          <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">{sessionError}</p>
         ) : null}
-        {setsLoading ? <p className="text-[0.9rem] text-[#f4f0fa]/80">Loading card set…</p> : null}
+        {!sessionLoading && !sessionError && ratingInactive ? (
+          <p className="text-[0.9rem] leading-snug text-[#f4f0fa]/80">Rating is not currently active.</p>
+        ) : null}
+        {sessionLoading ? <p className="text-[0.9rem] text-[#f4f0fa]/80">Loading rating session…</p> : null}
 
         {!configured || !user ? (
-          <p className="text-[0.9rem] text-[#f4f0fa]/75">Sign in to rate cards for this set and format.</p>
-        ) : rankerSet ? (
+          <p className="text-[0.9rem] text-[#f4f0fa]/75">Sign in to rate cards for the active session.</p>
+        ) : activeRater && rankerSet ? (
           <div className="flex min-h-0 flex-1 flex-col gap-6 lg:flex-row lg:items-stretch lg:gap-6">
             <div className="relative flex min-h-[min(18rem,40vh)] min-w-0 flex-1 flex-col items-stretch justify-center lg:basis-0">
               {!rankLoading && queue.length === 0 ? (
-                <p className="text-center text-[0.9rem] text-[#f4f0fa]/70">No cards to show for this set and format.</p>
+                <p className="text-center text-[0.9rem] text-[#f4f0fa]/70">No cards to show for this rating session.</p>
               ) : null}
               {current ? (
                 <div className="flex w-full min-h-0 items-center justify-center gap-0.5 sm:gap-1">

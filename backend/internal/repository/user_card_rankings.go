@@ -10,12 +10,11 @@ import (
 
 // UserCardRating is a row from user_card_ratings.
 type UserCardRating struct {
-	UserID int
-	SetID  int
-	CardID int
-	Format int16
-	Rating int16
-	Notes  *string
+	UserID  int
+	RaterID int
+	CardID  int
+	Rating  int16
+	Notes   *string
 }
 
 // UserCardRatingWithCard is a rating row joined to its card (and set name on the card).
@@ -24,24 +23,25 @@ type UserCardRatingWithCard struct {
 	Card Card
 }
 
-// ListUserCardRatingsWithCards returns rated rows with full card rows for the user, set, and format.
+// ListUserCardRatingsWithCards returns rated rows with full card rows for the user and rater.
 // Basic-rarity cards are omitted (they are not part of the rating experience).
 // For Limited format (0), legendary (7) and fabled (8) rarities are omitted — see domain.CardRarity / CardFormat.
-func (r *Repository) ListUserCardRatingsWithCards(ctx context.Context, userID, setID int, format int16) ([]UserCardRatingWithCard, error) {
+func (r *Repository) ListUserCardRatingsWithCards(ctx context.Context, userID, raterID int) ([]UserCardRatingWithCard, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	q := `
-SELECT r.user_id, r.set_id, r.card_id, r.format, r.rating, r.notes,
+SELECT r.user_id, r.rater_id, r.card_id, r.rating, r.notes,
 ` + cardSelectColumnsFromC + `, s.name AS set_name
 FROM user_card_ratings r
+INNER JOIN card_rater cr ON cr.id = r.rater_id
 INNER JOIN cards c ON c.id = r.card_id
 INNER JOIN sets s ON s.id = c.set_id
-WHERE r.user_id = $1 AND r.set_id = $2 AND r.format = $3
+WHERE r.user_id = $1 AND r.rater_id = $2
   AND (c.rarity IS NULL OR c.rarity <> 0)
-  AND ($3::smallint <> 0 OR c.rarity IS NULL OR c.rarity NOT IN (7, 8))
+  AND (cr.format <> 0 OR c.rarity IS NULL OR c.rarity NOT IN (7, 8))
 ORDER BY r.rating ASC, r.card_id ASC`
-	rows, err := r.pool.Query(ctx, q, userID, setID, format)
+	rows, err := r.pool.Query(ctx, q, userID, raterID)
 	if err != nil {
 		return nil, fmt.Errorf("repository: list user card ratings with cards: %w", err)
 	}
@@ -52,9 +52,8 @@ ORDER BY r.rating ASC, r.card_id ASC`
 		var row UserCardRatingWithCard
 		err := rows.Scan(
 			&row.UserID,
-			&row.SetID,
+			&row.RaterID,
 			&row.CardID,
-			&row.Format,
 			&row.Rating,
 			&row.Notes,
 			&row.Card.ID,
@@ -99,17 +98,17 @@ ORDER BY r.rating ASC, r.card_id ASC`
 var ErrUserCardRatingNotFound = errors.New("repository: user card rating not found")
 
 // GetUserCardRating returns one rating row or ErrUserCardRatingNotFound.
-func (r *Repository) GetUserCardRating(ctx context.Context, userID, setID, cardID int, format int16) (*UserCardRating, error) {
+func (r *Repository) GetUserCardRating(ctx context.Context, userID, raterID, cardID int) (*UserCardRating, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-SELECT user_id, set_id, card_id, format, rating, notes
+SELECT user_id, rater_id, card_id, rating, notes
 FROM user_card_ratings
-WHERE user_id = $1 AND set_id = $2 AND card_id = $3 AND format = $4`
-	dbRow := r.pool.QueryRow(ctx, q, userID, setID, cardID, format)
+WHERE user_id = $1 AND rater_id = $2 AND card_id = $3`
+	dbRow := r.pool.QueryRow(ctx, q, userID, raterID, cardID)
 	var rating UserCardRating
-	err := dbRow.Scan(&rating.UserID, &rating.SetID, &rating.CardID, &rating.Format, &rating.Rating, &rating.Notes)
+	err := dbRow.Scan(&rating.UserID, &rating.RaterID, &rating.CardID, &rating.Rating, &rating.Notes)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserCardRatingNotFound
@@ -120,14 +119,14 @@ WHERE user_id = $1 AND set_id = $2 AND card_id = $3 AND format = $4`
 }
 
 // InsertUserCardRating inserts a new rating row.
-func (r *Repository) InsertUserCardRating(ctx context.Context, userID, setID, cardID int, format int16, rating int16, notes *string) error {
+func (r *Repository) InsertUserCardRating(ctx context.Context, userID, raterID, cardID int, rating int16, notes *string) error {
 	if r.pool == nil {
 		return fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-INSERT INTO user_card_ratings (user_id, set_id, card_id, format, rating, notes)
-VALUES ($1, $2, $3, $4, $5, $6)`
-	_, err := r.pool.Exec(ctx, q, userID, setID, cardID, format, rating, notes)
+INSERT INTO user_card_ratings (user_id, rater_id, card_id, rating, notes)
+VALUES ($1, $2, $3, $4, $5)`
+	_, err := r.pool.Exec(ctx, q, userID, raterID, cardID, rating, notes)
 	if err != nil {
 		return fmt.Errorf("repository: insert user card rating: %w", err)
 	}
@@ -135,15 +134,15 @@ VALUES ($1, $2, $3, $4, $5, $6)`
 }
 
 // UpdateUserCardRatingNotes updates only the notes column for an existing row.
-func (r *Repository) UpdateUserCardRatingNotes(ctx context.Context, userID, setID, cardID int, format int16, notes *string) error {
+func (r *Repository) UpdateUserCardRatingNotes(ctx context.Context, userID, raterID, cardID int, notes *string) error {
 	if r.pool == nil {
 		return fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
 UPDATE user_card_ratings
-SET notes = $5
-WHERE user_id = $1 AND set_id = $2 AND card_id = $3 AND format = $4`
-	tag, err := r.pool.Exec(ctx, q, userID, setID, cardID, format, notes)
+SET notes = $4
+WHERE user_id = $1 AND rater_id = $2 AND card_id = $3`
+	tag, err := r.pool.Exec(ctx, q, userID, raterID, cardID, notes)
 	if err != nil {
 		return fmt.Errorf("repository: update user card rating notes: %w", err)
 	}
@@ -153,25 +152,26 @@ WHERE user_id = $1 AND set_id = $2 AND card_id = $3 AND format = $4`
 	return nil
 }
 
-// ListUnrankedCardsForUserSetFormat returns cards in the set that include the format in their
-// formats array and have no user_card_ratings row for this user, set, and format.
+// ListUnrankedCardsForUserRater returns cards in the rater's set that include the rater's format in their
+// formats array and have no user_card_ratings row for this user and rater.
 // Basic-rarity cards (rarity = 0, domain.CardRarityBasic) are omitted.
 // For Limited format (0), legendary (7) and fabled (8) are omitted.
-func (r *Repository) ListUnrankedCardsForUserSetFormat(ctx context.Context, userID, setID int, format int16) ([]Card, error) {
+func (r *Repository) ListUnrankedCardsForUserRater(ctx context.Context, userID, raterID int) ([]Card, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	q := cardSelectJoinSet + `
-WHERE c.set_id = $1
-  AND $2::smallint = ANY (c.formats)
+INNER JOIN card_rater cr ON cr.id = $2
+WHERE c.set_id = cr.set_id
+  AND cr.format = ANY (c.formats)
   AND (c.rarity IS NULL OR c.rarity <> 0)
-  AND ($2::smallint <> 0 OR c.rarity IS NULL OR c.rarity NOT IN (7, 8))
+  AND (cr.format <> 0 OR c.rarity IS NULL OR c.rarity NOT IN (7, 8))
   AND NOT EXISTS (
     SELECT 1 FROM user_card_ratings r
-    WHERE r.user_id = $3 AND r.set_id = $1 AND r.format = $2 AND r.card_id = c.id
+    WHERE r.user_id = $1 AND r.rater_id = $2 AND r.card_id = c.id
   )
 ORDER BY c.set_num ASC, c.id ASC`
-	rows, err := r.pool.Query(ctx, q, setID, format, userID)
+	rows, err := r.pool.Query(ctx, q, userID, raterID)
 	if err != nil {
 		return nil, fmt.Errorf("repository: list unranked cards: %w", err)
 	}
@@ -210,8 +210,9 @@ func (r *Repository) ListCardTeamRatings(ctx context.Context, setID, cardID int,
 	const q = `
 SELECT r.user_id, u.username, u.email, r.rating, r.notes
 FROM user_card_ratings r
+INNER JOIN card_rater cr ON cr.id = r.rater_id
 INNER JOIN users u ON u.id = r.user_id
-WHERE r.set_id = $1 AND r.card_id = $2 AND r.format = $3
+WHERE cr.set_id = $1 AND r.card_id = $2 AND cr.format = $3
 ORDER BY COALESCE(NULLIF(TRIM(u.username), ''), u.email) ASC, r.user_id ASC`
 	rows, err := r.pool.Query(ctx, q, setID, cardID, format)
 	if err != nil {
@@ -249,8 +250,9 @@ func (r *Repository) ListCardTeamRatingsForSetFormat(ctx context.Context, setID 
 	const q = `
 SELECT r.user_id, r.card_id, u.username, u.email, r.rating, r.notes
 FROM user_card_ratings r
+INNER JOIN card_rater cr ON cr.id = r.rater_id
 INNER JOIN users u ON u.id = r.user_id
-WHERE r.set_id = $1 AND r.format = $2
+WHERE cr.set_id = $1 AND cr.format = $2
 ORDER BY r.card_id ASC, COALESCE(NULLIF(TRIM(u.username), ''), u.email) ASC, r.user_id ASC`
 	rows, err := r.pool.Query(ctx, q, setID, format)
 	if err != nil {
