@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { CARD_FORMAT_NAMES, CardFormat, isValidCardFormatId } from "../constants/cardFormat";
 
@@ -193,7 +193,7 @@ export function CardRanker({ isLight, active }) {
     "rounded-lg border border-white/[0.28] bg-violet-600/90 px-4 py-2.5 text-[0.875rem] font-semibold text-white shadow-md transition-colors hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-45";
 
   const starBase =
-    "flex size-16 items-center justify-center rounded-xl border text-[1.6rem] leading-none transition-colors sm:size-[4.5rem] sm:text-3xl";
+    "flex size-[3.875rem] items-center justify-center rounded-xl border text-[1.52rem] leading-none transition-colors sm:size-16 sm:text-[1.85rem]";
   const starIdle = `${starBase} border-white/[0.28] bg-black/55 text-amber-200/90 hover:border-amber-300/55 hover:bg-black/65`;
   const starOn = `${starBase} border-amber-300/85 bg-amber-500/55 text-amber-50 shadow-[0_0_16px_rgba(251,191,36,0.5)]`;
   const starDisabled = `${starBase} cursor-default border-white/[0.18] bg-black/45 text-amber-200/55`;
@@ -256,10 +256,119 @@ export function CardRanker({ isLight, active }) {
     setCardIndex((i) => Math.min(Math.max(0, queue.length - 1), i + 1));
   }, [queue.length]);
 
+  /** @type {React.MutableRefObject<{ active: boolean, id: number, x0: number, y0: number }>} */
+  const cardSwipeRef = useRef({ active: false, id: 0, x0: 0, y0: 0 });
+
+  const resetCardSwipe = useCallback(() => {
+    cardSwipeRef.current = { active: false, id: 0, x0: 0, y0: 0 };
+  }, []);
+
+  const onCardSwipePointerDown = useCallback(
+    /** @param {React.PointerEvent<HTMLDivElement>} e */
+    (e) => {
+      if (rankLoading || queue.length <= 1) return;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      cardSwipeRef.current = { active: true, id: e.pointerId, x0: e.clientX, y0: e.clientY };
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+    },
+    [rankLoading, queue.length],
+  );
+
+  const onCardSwipePointerUpOrCancel = useCallback(
+    /** @param {React.PointerEvent<HTMLDivElement>} e */
+    (e) => {
+      const s = cardSwipeRef.current;
+      if (!s.active || s.id !== e.pointerId) return;
+      const { x0, y0 } = s;
+      resetCardSwipe();
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      if (rankLoading || queue.length <= 1) return;
+      const dx = e.clientX - x0;
+      const dy = e.clientY - y0;
+      const minDist = 52;
+      if (Math.abs(dx) < minDist) return;
+      if (Math.abs(dy) > Math.abs(dx) * 0.72) return;
+      if (dx < 0) {
+        setCardIndex((i) => Math.min(Math.max(0, queue.length - 1), i + 1));
+      } else {
+        setCardIndex((i) => Math.max(0, i - 1));
+      }
+    },
+    [rankLoading, queue.length, resetCardSwipe],
+  );
+
+  useEffect(() => {
+    if (!active || !user || queue.length === 0) return undefined;
+
+    /** @param {EventTarget | null} t */
+    function isTextualFieldTarget(t) {
+      if (!(t instanceof HTMLElement)) return false;
+      if (t.closest("select")) return true;
+      if (t.isContentEditable) return true;
+      const tag = t.tagName;
+      if (tag === "TEXTAREA" || tag === "SELECT") return true;
+      if (tag === "INPUT") {
+        const type = (t.getAttribute("type") || "text").toLowerCase();
+        const nonText = new Set([
+          "button",
+          "submit",
+          "reset",
+          "checkbox",
+          "radio",
+          "range",
+          "file",
+          "hidden",
+          "color",
+          "image",
+        ]);
+        return !nonText.has(type);
+      }
+      return false;
+    }
+
+    /** @param {KeyboardEvent} e */
+    function onKeyDown(e) {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      if (isTextualFieldTarget(e.target)) return;
+      if (rankLoading) return;
+      if (e.key === "ArrowLeft") {
+        if (cardIndex <= 0) return;
+        e.preventDefault();
+        goPrev();
+        return;
+      }
+      if (cardIndex >= queue.length - 1) return;
+      e.preventDefault();
+      goNext();
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [active, user, queue.length, cardIndex, rankLoading, goPrev, goNext]);
+
   const imgUrl =
     current?.card?.image_url != null && String(current.card.image_url).trim() !== ""
       ? String(current.card.image_url).trim()
       : null;
+
+  const rankStats = useMemo(() => {
+    let unranked = 0;
+    for (const e of queue) {
+      if (e.kind === "pending") unranked++;
+    }
+    return { total: queue.length, unranked };
+  }, [queue]);
+
+  const showRankCompleteMessage =
+    !rankLoading && rankStats.total > 0 && rankStats.unranked === 0;
 
   return (
     <div className="relative flex min-h-0 w-full min-h-[min(52vh,28rem)] flex-1 flex-col overflow-hidden rounded-2xl text-left">
@@ -279,7 +388,7 @@ export function CardRanker({ isLight, active }) {
           />
         </>
       ) : null}
-      <div className="relative z-[1] flex min-h-0 w-full flex-1 flex-col gap-4 px-4 py-4 sm:px-5 sm:py-5">
+      <div className="relative z-[1] flex min-h-0 w-full flex-1 flex-col gap-4 px-4 pt-4 pb-8 sm:px-5 sm:pt-5 sm:pb-10">
         <div className="flex flex-wrap items-center gap-3 self-start">
           <select
             className={selectCls}
@@ -329,6 +438,22 @@ export function CardRanker({ isLight, active }) {
                 <div className="min-h-0 flex-1" aria-hidden />
               </div>
               <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-white/[0.12] pt-4">
+                {!rankLoading ? (
+                  <div className="flex flex-col gap-1">
+                    <p className="m-0 text-[0.9rem] leading-snug text-[#f4f0fa]/88">
+                      Total cards available for ranking: {rankStats.total}
+                    </p>
+                    {showRankCompleteMessage ? (
+                      <p className="m-0 text-[0.9rem] leading-snug text-[#f4f0fa]/92">
+                        No more cards left to rank, come back later!
+                      </p>
+                    ) : (
+                      <p className="m-0 text-[0.9rem] leading-snug text-[#f4f0fa]/88">
+                        Unranked cards remaining: {rankStats.unranked}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
                 <label className="flex flex-col gap-2">
                   <span className="sr-only">Notes</span>
                   <textarea
@@ -401,7 +526,15 @@ export function CardRanker({ isLight, active }) {
                         );
                       })}
                     </div>
-                    <div className="flex min-h-0 w-full max-w-xs flex-1 items-center justify-center sm:max-w-sm">
+                    <div
+                      className="mt-2 flex min-h-0 w-full max-w-xs flex-1 touch-pan-y select-none items-center justify-center sm:mt-3 sm:max-w-sm"
+                      onPointerDown={onCardSwipePointerDown}
+                      onPointerUp={onCardSwipePointerUpOrCancel}
+                      onPointerCancel={onCardSwipePointerUpOrCancel}
+                      onLostPointerCapture={resetCardSwipe}
+                      role="presentation"
+                      aria-label="Swipe left or right on the card to change cards"
+                    >
                       {imgUrl ? (
                         <img
                           src={imgUrl}
@@ -415,12 +548,6 @@ export function CardRanker({ isLight, active }) {
                         </div>
                       )}
                     </div>
-                    <p className="m-0 max-w-full truncate text-center text-[0.85rem] text-[#f4f0fa]/80">
-                      {String(current.card.name ?? "").trim() || "Card"}
-                      {queue.length > 1 ? (
-                        <span className="text-[#f4f0fa]/50"> · {cardIndex + 1} / {queue.length}</span>
-                      ) : null}
-                    </p>
                   </div>
                   <button
                     type="button"

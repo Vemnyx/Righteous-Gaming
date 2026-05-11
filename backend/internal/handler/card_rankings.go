@@ -76,6 +76,18 @@ func cardExcludedFromRankings(c *repository.Card) bool {
 	return *c.Rarity == int16(domain.CardRarityBasic)
 }
 
+// cardExcludedFromLimitedRankings is true for Legendary or Fabled when format is Limited.
+func cardExcludedFromLimitedRankings(c *repository.Card, format int16) bool {
+	if format != int16(domain.CardFormatLimited) {
+		return false
+	}
+	if c == nil || c.Rarity == nil {
+		return false
+	}
+	r := *c.Rarity
+	return r == int16(domain.CardRarityLegendary) || r == int16(domain.CardRarityFabled)
+}
+
 func (h *cardRankingsHTTP) sessionUser(w http.ResponseWriter, r *http.Request) (*domain.User, bool) {
 	idToken := bearerIDToken(r.Header.Get("Authorization"))
 	if idToken == "" {
@@ -248,6 +260,10 @@ func (h *cardRankingsHTTP) saveMyRanking(w http.ResponseWriter, r *http.Request)
 	}
 	if cardExcludedFromRankings(card) {
 		writeFieldError(w, http.StatusBadRequest, "card_id", "basic rarity cards cannot be ranked")
+		return
+	}
+	if cardExcludedFromLimitedRankings(card, body.Format) {
+		writeFieldError(w, http.StatusBadRequest, "card_id", "legendary and fabled cards cannot be ranked in limited format")
 		return
 	}
 
