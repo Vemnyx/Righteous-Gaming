@@ -644,6 +644,51 @@ func (h *cardRatingsHTTP) completeActiveCardRater(w http.ResponseWriter, r *http
 	writeCatalogJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+// PATCH /api/card-raters/{id}/reopen — clears completed_at for a completed session (must be no other active session).
+func (h *cardRatingsHTTP) reopenCardRater(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := h.sessionUser(w, r); !ok {
+		return
+	}
+	idStr := strings.TrimSpace(r.PathValue("id"))
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id <= 0 {
+		writeMessageError(w, http.StatusBadRequest, "invalid card rater id")
+		return
+	}
+	cr, err := h.app.Repo.GetCardRater(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrCardRaterNotFound) {
+			writeMessageError(w, http.StatusNotFound, "card rater not found")
+			return
+		}
+		log.Error("reopen card rater get", "error", err, "id", id)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	if cr.CompletedAt == nil {
+		writeMessageError(w, http.StatusBadRequest, "session is already active")
+		return
+	}
+	if err := h.app.Repo.ReopenCardRater(r.Context(), id); err != nil {
+		if errors.Is(err, repository.ErrActiveCardRaterExists) {
+			writeMessageError(w, http.StatusConflict, "another card rater session is already active")
+			return
+		}
+		if errors.Is(err, repository.ErrCardRaterNotFound) {
+			writeMessageError(w, http.StatusNotFound, "card rater not found")
+			return
+		}
+		log.Error("reopen card rater", "error", err, "id", id)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	writeCatalogJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 // DELETE /api/card-raters/{id}
 func (h *cardRatingsHTTP) deleteCardRater(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {

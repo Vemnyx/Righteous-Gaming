@@ -98,6 +98,26 @@ RETURNING id, set_id, format, label, started_at, completed_at`
 	return &cr, nil
 }
 
+// ReopenCardRater clears completed_at for a completed session so it becomes the active session.
+// Fails with ErrActiveCardRaterExists (unique partial index) if another row is already active.
+func (r *Repository) ReopenCardRater(ctx context.Context, id int) error {
+	if r.pool == nil {
+		return fmt.Errorf("repository: pool is closed")
+	}
+	tag, err := r.pool.Exec(ctx, `UPDATE card_rater SET completed_at = NULL WHERE id = $1 AND completed_at IS NOT NULL`, id)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return ErrActiveCardRaterExists
+		}
+		return fmt.Errorf("repository: reopen card rater: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrCardRaterNotFound
+	}
+	return nil
+}
+
 // CompleteActiveCardRater sets completed_at = now() on the row where completed_at IS NULL.
 func (r *Repository) CompleteActiveCardRater(ctx context.Context) (bool, error) {
 	if r.pool == nil {

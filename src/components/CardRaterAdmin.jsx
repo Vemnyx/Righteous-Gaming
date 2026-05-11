@@ -42,6 +42,8 @@ export function CardRaterAdmin({ isLight, active }) {
   const [modalError, setModalError] = useState(/** @type {string | null} */ (null));
 
   const [completing, setCompleting] = useState(false);
+  /** When set, a re-open request is in flight for this row id. */
+  const [reopeningId, setReopeningId] = useState(/** @type {number | null} */ (null));
 
   /** Row pending delete confirmation; null when dialog closed. */
   const [deleteTarget, setDeleteTarget] = useState(/** @type {CardRaterRow | null} */ (null));
@@ -275,6 +277,39 @@ export function CardRaterAdmin({ isLight, active }) {
     }
   }, [user]);
 
+  const reopenSession = useCallback(
+    /** @param {number} rowId */
+    async (rowId) => {
+      if (!user) return;
+      setReopeningId(rowId);
+      setError(null);
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/card-raters/${rowId}/reopen`, {
+          method: "PATCH",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const errText = (await res.text())?.trim() || res.statusText;
+        if (!res.ok) {
+          let msg = errText || `HTTP ${res.status}`;
+          try {
+            const j = JSON.parse(errText);
+            if (j && typeof j.message === "string" && j.message.trim() !== "") msg = j.message.trim();
+          } catch {
+            /* use msg */
+          }
+          throw new Error(msg);
+        }
+        setReloadSeq((n) => n + 1);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to re-open session");
+      } finally {
+        setReopeningId(null);
+      }
+    },
+    [user],
+  );
+
   const btnBase =
     "rounded-lg border px-3 py-1.5 text-[0.8125rem] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40";
   const btnTheme = isLight
@@ -286,6 +321,9 @@ export function CardRaterAdmin({ isLight, active }) {
 
   const btnDanger =
     "rounded-lg border border-red-400/45 bg-red-950/50 px-3 py-1.5 text-[0.8125rem] font-medium text-red-100 transition-colors hover:border-red-300/55 hover:bg-red-900/45 disabled:cursor-not-allowed disabled:opacity-45";
+
+  const btnReopen =
+    "rounded-lg border border-emerald-400/45 bg-emerald-950/40 px-3 py-1.5 text-[0.8125rem] font-medium text-emerald-100 transition-colors hover:border-emerald-300/55 hover:bg-emerald-900/40 disabled:cursor-not-allowed disabled:opacity-45";
 
   const tableChromeBorder = isLight
     ? "border-white/[0.12]"
@@ -312,14 +350,15 @@ export function CardRaterAdmin({ isLight, active }) {
         <button
           type="button"
           className={`shrink-0 self-start sm:self-auto ${btnPrimary}`}
-          disabled={!user || hasActiveRater || loading}
+          disabled={!user || hasActiveRater || loading || reopeningId != null}
           onClick={() => void openModal()}
         >
           New session
         </button>
       </div>
       <p className="m-0 max-w-2xl text-left text-[0.85rem] leading-snug text-[#f4f0fa]/70">
-        Only one open session is allowed at a time. Use Complete to close the active session before starting another.
+        Only one open session is allowed at a time. Use Complete to close the active session, or re-open a completed one
+        when none are active, before starting another.
       </p>
 
       {error ? (
@@ -336,7 +375,7 @@ export function CardRaterAdmin({ isLight, active }) {
       ) : null}
 
       <div className={`overflow-x-auto rounded-xl border bg-black/20 ${tableChromeBorder}`}>
-        <table className="w-full min-w-[58rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
+        <table className="w-full min-w-[64rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
           <thead>
             <tr className={`border-b text-[0.68rem] uppercase tracking-wider text-[#f4f0fa]/55 ${tableHeadBorder}`}>
               <th className="px-3 py-2.5 font-semibold sm:px-4">ID</th>
@@ -396,16 +435,25 @@ export function CardRaterAdmin({ isLight, active }) {
                           <button
                             type="button"
                             className={`${btnBase} ${btnTheme}`}
-                            disabled={completing || !user || deleteSubmitting}
+                            disabled={completing || !user || deleteSubmitting || reopeningId != null}
                             onClick={() => void completeActive()}
                           >
                             {completing ? "Completing…" : "Complete"}
+                          </button>
+                        ) : !hasActiveRater ? (
+                          <button
+                            type="button"
+                            className={btnReopen}
+                            disabled={!user || deleteSubmitting || completing || reopeningId != null}
+                            onClick={() => void reopenSession(row.id)}
+                          >
+                            {reopeningId === row.id ? "Re-opening…" : "Re-open"}
                           </button>
                         ) : null}
                         <button
                           type="button"
                           className={btnDanger}
-                          disabled={!user || deleteSubmitting || completing}
+                          disabled={!user || deleteSubmitting || completing || reopeningId != null}
                           onClick={() => {
                             setDeleteError(null);
                             setDeleteTarget(row);
