@@ -105,21 +105,22 @@ export function AnnouncementExpandedLayout({
       {lightbox && typeof document !== "undefined"
         ? createPortal(
             <div
-              className="fixed inset-0 z-[10001] flex cursor-default items-center justify-center bg-black/80 p-3 sm:p-6"
+              className="fixed inset-0 z-[10001] cursor-default bg-black/80 p-3 sm:p-6"
               role="dialog"
               aria-modal="true"
               aria-label={lightbox.alt ? `Image: ${lightbox.alt}` : "Announcement image"}
               onClick={closeLightbox}
             >
-              <div
-                className="flex h-[85vh] w-full max-w-[min(100%,96vw)] flex-col items-center justify-center gap-4"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex min-h-0 w-full flex-1 items-center justify-center">
+              {/* pointer-events-none so clicks beside the image hit the backdrop and close; image subtree is pointer-events-auto */}
+              <div className="pointer-events-none flex h-full w-full items-center justify-center">
+                <div
+                  className="pointer-events-auto flex max-h-[85vh] max-w-[min(100%,96vw)] items-center justify-center"
+                  onClick={(e) => e.stopPropagation()}
+                >
                   <img
                     src={lightbox.src}
                     alt={lightbox.alt || "Announcement image"}
-                    className="max-h-full max-w-full object-contain select-none"
+                    className="max-h-[85vh] max-w-full object-contain select-none"
                     draggable={false}
                   />
                 </div>
