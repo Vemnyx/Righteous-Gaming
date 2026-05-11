@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { UsersAdminTable } from "../components/UsersAdminTable";
 import { CardsCatalog } from "../components/CardsCatalog";
+import { CardRanker } from "../components/CardRanker";
 import { CardDetailPage } from "../components/CardDetailPage";
 import { AnnouncementsFeed } from "../components/AnnouncementsFeed";
 import { AnnouncementsAdmin } from "../components/AnnouncementsAdmin";
@@ -1083,6 +1084,11 @@ export default function Dashboard({ onNavigate }) {
                     !resourcesCardIdentifier
                   }
                   onOpenCardDetail={openCardDetail}
+                />
+              ) : resourcesChild === "card-ranker" ? (
+                <CardRanker
+                  isLight={isLight}
+                  active={activeTab === RESOURCES_TAB_ID && resourcesChild === "card-ranker"}
                 />
               ) : (
                 <div
