@@ -15,6 +15,7 @@ import { CardFormat } from "../constants/cardFormat";
 /**
  * @typedef {{ user_name: string, rank: number, notes?: string | null }} TeamRankingRow
  * @typedef {{ averageRank: number | null, rows: TeamRankingRow[] }} TeamRankingsState
+ * @typedef {Record<number, TeamRankingsState>} TeamRankingsByCard
  */
 
 function notesFromServer(/** @type {string | null | undefined} */ n) {
@@ -70,7 +71,7 @@ export function CardRanker({ isLight, active }) {
   const [cardDragX, setCardDragX] = useState(0);
   const [cardDragActive, setCardDragActive] = useState(false);
 
-  const [teamRankings, setTeamRankings] = useState(/** @type {TeamRankingsState | null} */ (null));
+  const [teamRankingsByCard, setTeamRankingsByCard] = useState(/** @type {TeamRankingsByCard} */ ({}));
   const [teamLoading, setTeamLoading] = useState(false);
   const [teamLoadError, setTeamLoadError] = useState(/** @type {string | null} */ (null));
 
@@ -201,13 +202,12 @@ export function CardRanker({ isLight, active }) {
   }, [current]);
 
   useEffect(() => {
-    if (!active || !user || !rankerSet || !current || current.kind !== "ranked") {
-      setTeamRankings(null);
+    if (!active || !user || !rankerSet || queue.length === 0) {
+      setTeamRankingsByCard({});
       setTeamLoadError(null);
       setTeamLoading(false);
       return undefined;
     }
-    const cardId = current.card.id;
     let cancelled = false;
     (async () => {
       setTeamLoading(true);
@@ -217,28 +217,34 @@ export function CardRanker({ isLight, active }) {
         const qs = new URLSearchParams({
           set_id: String(rankerSet.id),
           format: String(RANKER_FORMAT_ID),
-          card_id: String(cardId),
         });
-        const res = await fetch(`/api/me/card-team-rankings?${qs}`, {
+        const res = await fetch(`/api/me/card-team-rankings-batch?${qs}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         if (cancelled) return;
-        const rawRows = Array.isArray(data.rankings) ? data.rankings : [];
-        /** @type {TeamRankingRow[]} */
-        const rows = rawRows
-          .filter((r) => r && typeof r.user_name === "string" && typeof r.rank === "number")
-          .map((r) => ({
-            user_name: String(r.user_name),
-            rank: Number(r.rank),
-            notes: r.notes != null ? String(r.notes) : null,
-          }));
-        const averageRank = typeof data.average_rank === "number" && Number.isFinite(data.average_rank) ? data.average_rank : null;
-        setTeamRankings({ averageRank, rows });
+        const cards = Array.isArray(data.cards) ? data.cards : [];
+        /** @type {TeamRankingsByCard} */
+        const byCard = {};
+        for (const c of cards) {
+          if (!c || typeof c.card_id !== "number") continue;
+          const rawRows = Array.isArray(c.rankings) ? c.rankings : [];
+          const rows = rawRows
+            .filter((r) => r && typeof r.user_name === "string" && typeof r.rank === "number")
+            .map((r) => ({
+              user_name: String(r.user_name),
+              rank: Number(r.rank),
+              notes: r.notes != null ? String(r.notes) : null,
+            }));
+          const averageRank =
+            typeof c.average_rank === "number" && Number.isFinite(c.average_rank) ? c.average_rank : null;
+          byCard[c.card_id] = { averageRank, rows };
+        }
+        setTeamRankingsByCard(byCard);
       } catch (e) {
         if (!cancelled) {
-          setTeamRankings(null);
+          setTeamRankingsByCard({});
           setTeamLoadError(e instanceof Error ? e.message : "Failed to load team rankings");
         }
       } finally {
@@ -248,7 +254,7 @@ export function CardRanker({ isLight, active }) {
     return () => {
       cancelled = true;
     };
-  }, [active, user, rankerSet, current?.kind, current?.card?.id]);
+  }, [active, user, rankerSet, queue.length]);
 
   const setBgUrl =
     rankerSet?.image_url != null && String(rankerSet.image_url).trim() !== ""
@@ -281,7 +287,7 @@ export function CardRanker({ isLight, active }) {
   const starDisabled = `${starBase} cursor-default border-white/[0.18] bg-black/45 text-amber-200/55`;
 
   const arrowNavCls =
-    "mt-9 flex h-[min(14rem,52vh)] min-h-[10.5rem] w-12 shrink-0 items-center justify-center rounded-xl border-2 border-yellow-400/85 bg-yellow-400/18 text-xl font-semibold text-yellow-200 shadow-[0_0_18px_rgba(250,204,21,0.35)] transition-colors hover:border-yellow-300 hover:bg-yellow-400/28 hover:text-yellow-50 disabled:cursor-not-allowed disabled:border-white/20 disabled:bg-black/30 disabled:text-[#f4f0fa]/40 disabled:shadow-none sm:mt-11 sm:w-14 sm:text-2xl";
+    "translate-y-8 sm:translate-y-10 flex h-[min(14rem,52vh)] min-h-[10.5rem] w-12 shrink-0 items-center justify-center rounded-xl border-2 border-yellow-400/85 bg-yellow-400/18 text-xl font-semibold text-yellow-200 shadow-[0_0_18px_rgba(250,204,21,0.35)] transition-colors hover:border-yellow-300 hover:bg-yellow-400/28 hover:text-yellow-50 disabled:cursor-not-allowed disabled:border-white/20 disabled:bg-black/30 disabled:text-[#f4f0fa]/40 disabled:shadow-none sm:w-14 sm:text-2xl";
 
   const canSubmit = useMemo(() => {
     if (!user || !current || submitting) return false;
@@ -354,8 +360,8 @@ export function CardRanker({ isLight, active }) {
     setCardIndex((i) => Math.min(Math.max(0, queue.length - 1), i + 1));
   }, [queue.length]);
 
-  /** @type {React.MutableRefObject<{ active: boolean, id: number, x0: number, y0: number }>} */
-  const cardSwipeRef = useRef({ active: false, id: 0, x0: 0, y0: 0 });
+  /** @type {React.MutableRefObject<{ active: boolean, id: number, x0: number, y0: number, x: number, y: number }>} */
+  const cardSwipeRef = useRef({ active: false, id: 0, x0: 0, y0: 0, x: 0, y: 0 });
   /** @type {React.MutableRefObject<number | null>} */
   const cardSwipeAnimTimerRef = useRef(null);
 
@@ -364,7 +370,7 @@ export function CardRanker({ isLight, active }) {
       window.clearTimeout(cardSwipeAnimTimerRef.current);
       cardSwipeAnimTimerRef.current = null;
     }
-    cardSwipeRef.current = { active: false, id: 0, x0: 0, y0: 0 };
+    cardSwipeRef.current = { active: false, id: 0, x0: 0, y0: 0, x: 0, y: 0 };
     setCardDragActive(false);
     setCardDragX(0);
   }, []);
@@ -376,7 +382,14 @@ export function CardRanker({ isLight, active }) {
     (e) => {
       if (rankLoading || queue.length <= 1) return;
       if (e.pointerType === "mouse" && e.button !== 0) return;
-      cardSwipeRef.current = { active: true, id: e.pointerId, x0: e.clientX, y0: e.clientY };
+      cardSwipeRef.current = {
+        active: true,
+        id: e.pointerId,
+        x0: e.clientX,
+        y0: e.clientY,
+        x: e.clientX,
+        y: e.clientY,
+      };
       setCardDragActive(true);
       setCardDragX(0);
       try {
@@ -393,8 +406,10 @@ export function CardRanker({ isLight, active }) {
     (e) => {
       const s = cardSwipeRef.current;
       if (!s.active || s.id !== e.pointerId) return;
-      const dx = e.clientX - s.x0;
-      const dy = e.clientY - s.y0;
+      s.x = e.clientX;
+      s.y = e.clientY;
+      const dx = s.x - s.x0;
+      const dy = s.y - s.y0;
       if (Math.abs(dy) > Math.abs(dx) * 1.4) return;
       const clamped = Math.max(-220, Math.min(220, dx));
       setCardDragX(clamped);
@@ -402,28 +417,9 @@ export function CardRanker({ isLight, active }) {
     [],
   );
 
-  const onCardSwipePointerUpOrCancel = useCallback(
-    /** @param {React.PointerEvent<HTMLDivElement>} e */
-    (e) => {
-      const s = cardSwipeRef.current;
-      if (!s.active || s.id !== e.pointerId) return;
-      const { x0, y0 } = s;
-      resetCardSwipe();
-      try {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      } catch {
-        /* ignore */
-      }
-      if (rankLoading || queue.length <= 1) return;
-      const dx = e.clientX - x0;
-      const dy = e.clientY - y0;
-      const minDist = 52;
-      const mostlyHorizontal = Math.abs(dy) <= Math.abs(dx) * 0.72;
-      if (Math.abs(dx) < minDist || !mostlyHorizontal) {
-        setCardDragActive(false);
-        setCardDragX(0);
-        return;
-      }
+  const completeSwipe = useCallback(
+    /** @param {number} dx */
+    (dx) => {
       const direction = dx < 0 ? -1 : 1;
       setCardDragActive(false);
       setCardDragX(direction * 560);
@@ -432,16 +428,60 @@ export function CardRanker({ isLight, active }) {
       }
       cardSwipeAnimTimerRef.current = window.setTimeout(() => {
         cardSwipeAnimTimerRef.current = null;
-        if (direction < 0) {
-          setCardIndex((i) => Math.min(Math.max(0, queue.length - 1), i + 1));
-        } else {
-          setCardIndex((i) => Math.max(0, i - 1));
-        }
-        setCardDragX(0);
+        void (async () => {
+          const hasPendingSelectedRank =
+            current?.kind === "pending" &&
+            draftRank != null &&
+            draftRank >= 1 &&
+            draftRank <= 5;
+          if (hasPendingSelectedRank) {
+            await submitRanking();
+          }
+          if (direction < 0) {
+            goNext();
+          } else {
+            goPrev();
+          }
+          setCardDragX(0);
+        })();
       }, 165);
     },
-    [rankLoading, queue.length, resetCardSwipe],
+    [goNext, goPrev, current, draftRank, submitRanking],
   );
+
+  const onCardSwipePointerUpOrCancel = useCallback(
+    /** @param {React.PointerEvent<HTMLDivElement>} e */
+    (e) => {
+      const s = cardSwipeRef.current;
+      if (!s.active || s.id !== e.pointerId) return;
+      s.x = e.clientX;
+      s.y = e.clientY;
+      s.active = false;
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      if (rankLoading || queue.length <= 1) return;
+      const dx = s.x - s.x0;
+      const dy = s.y - s.y0;
+      const minDist = 52;
+      const mostlyHorizontal = Math.abs(dy) <= Math.abs(dx) * 0.72;
+      if (Math.abs(dx) < minDist || !mostlyHorizontal) {
+        setCardDragActive(false);
+        setCardDragX(0);
+        return;
+      }
+      completeSwipe(dx);
+    },
+    [rankLoading, queue.length, completeSwipe],
+  );
+
+  const onCardSwipePointerCancel = useCallback(() => {
+    setCardDragActive(false);
+    setCardDragX(0);
+    cardSwipeRef.current.active = false;
+  }, []);
 
   useEffect(() => {
     if (!active || !user || queue.length === 0) return undefined;
@@ -571,6 +611,8 @@ export function CardRanker({ isLight, active }) {
     return { pending, ranked };
   }, [queue]);
 
+  const currentTeamRankings = current ? (teamRankingsByCard[current.card.id] ?? null) : null;
+
   return (
     <div className="relative flex min-h-0 w-full min-h-[min(52vh,28rem)] flex-1 flex-col overflow-hidden rounded-2xl text-left">
       {setBgUrl ? (
@@ -679,7 +721,7 @@ export function CardRanker({ isLight, active }) {
                       onPointerDown={onCardSwipePointerDown}
                       onPointerMove={onCardSwipePointerMove}
                       onPointerUp={onCardSwipePointerUpOrCancel}
-                      onPointerCancel={onCardSwipePointerUpOrCancel}
+                      onPointerCancel={onCardSwipePointerCancel}
                       onLostPointerCapture={resetCardSwipe}
                       role="presentation"
                       aria-label="Swipe left or right on the card to change cards"
@@ -728,17 +770,17 @@ export function CardRanker({ isLight, active }) {
                           {teamLoadError}
                         </p>
                       ) : null}
-                      {!teamLoading && !teamLoadError && teamRankings ? (
+                      {!teamLoading && !teamLoadError && currentTeamRankings ? (
                         <>
                           <p className="m-0 text-[0.92rem] font-semibold leading-snug text-[#f4f0fa]">
                             Avg Team Ranking -{" "}
-                            {teamRankings.averageRank != null ? `${teamRankings.averageRank.toFixed(2)}★` : "—"}
+                            {currentTeamRankings.averageRank != null ? `${currentTeamRankings.averageRank.toFixed(2)}★` : "—"}
                           </p>
                           <div className="max-h-[14rem] min-h-[5rem] overflow-y-auto overscroll-contain rounded-md border border-white/[0.12] bg-black/30 px-2 py-1 [scrollbar-gutter:stable]">
-                            {teamRankings.rows.length === 0 ? (
+                            {currentTeamRankings.rows.length === 0 ? (
                               <p className="m-0 py-2 text-center text-[0.85rem] text-[#f4f0fa]/65">No team ratings yet.</p>
                             ) : (
-                              teamRankings.rows.map((row, idx) => (
+                              currentTeamRankings.rows.map((row, idx) => (
                                 <div
                                   key={`${row.user_name}-${idx}`}
                                   className="border-b border-white/[0.08] py-2.5 last:border-b-0"

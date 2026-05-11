@@ -169,6 +169,12 @@ type cardTeamRankingRowJSON struct {
 	Notes    *string `json:"notes,omitempty"`
 }
 
+type cardTeamRankingByCardJSON struct {
+	CardID      int                  `json:"card_id"`
+	AverageRank *float64             `json:"average_rank,omitempty"`
+	Rankings    []cardTeamRankingRowJSON `json:"rankings"`
+}
+
 func teamRankingDisplayName(username *string, email string) string {
 	if username != nil {
 		s := strings.TrimSpace(*username)
@@ -440,4 +446,76 @@ func (h *cardRankingsHTTP) listCardTeamRankings(w http.ResponseWriter, r *http.R
 		payload["average_rank"] = math.Round(*avgPtr*100) / 100
 	}
 	writeCatalogJSON(w, http.StatusOK, payload)
+}
+
+// GET /api/me/card-team-rankings-batch?set_id=&format=
+func (h *cardRankingsHTTP) listCardTeamRankingsBatch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	setID, format, ok := parseSetIDFormatQuery(w, r)
+	if !ok {
+		return
+	}
+	exists, err := h.app.Repo.SetExists(r.Context(), setID)
+	if err != nil {
+		log.Error("card team rankings batch set exists", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	if !exists {
+		writeFieldError(w, http.StatusNotFound, "set_id", "set not found")
+		return
+	}
+	rows, err := h.app.Repo.ListCardTeamRankingsForSetFormat(r.Context(), setID, format)
+	if err != nil {
+		log.Error("list card team rankings batch", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	type agg struct {
+		sum   float64
+		count int
+		rows  []cardTeamRankingRowJSON
+	}
+	byCard := make(map[int]*agg, 64)
+	for i := range rows {
+		row := rows[i]
+		a, ok := byCard[row.CardID]
+		if !ok {
+			a = &agg{rows: make([]cardTeamRankingRowJSON, 0, 8)}
+			byCard[row.CardID] = a
+		}
+		a.sum += float64(row.Rank)
+		a.count++
+		if row.UserID == u.ID {
+			continue
+		}
+		a.rows = append(a.rows, cardTeamRankingRowJSON{
+			UserName: teamRankingDisplayName(row.Username, row.Email),
+			Rank:     row.Rank,
+			Notes:    row.Notes,
+		})
+	}
+
+	out := make([]cardTeamRankingByCardJSON, 0, len(byCard))
+	for cardID, a := range byCard {
+		var avg *float64
+		if a.count > 0 {
+			v := math.Round((a.sum/float64(a.count))*100) / 100
+			avg = &v
+		}
+		out = append(out, cardTeamRankingByCardJSON{
+			CardID:      cardID,
+			AverageRank: avg,
+			Rankings:    a.rows,
+		})
+	}
+	writeCatalogJSON(w, http.StatusOK, map[string]any{"cards": out})
 }

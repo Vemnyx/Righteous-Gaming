@@ -194,6 +194,7 @@ ORDER BY c.set_num ASC, c.id ASC`
 // CardTeamRankingRow is one user's ranking for a card in a set+format (for team aggregate UI).
 type CardTeamRankingRow struct {
 	UserID   int
+	CardID   int
 	Username *string
 	Email    string
 	Rank     int16
@@ -225,6 +226,7 @@ ORDER BY COALESCE(NULLIF(TRIM(u.username), ''), u.email) ASC, r.user_id ASC`
 		if err := rows.Scan(&row.UserID, &row.Username, &row.Email, &row.Rank, &row.Notes); err != nil {
 			return nil, nil, fmt.Errorf("repository: list card team rankings scan: %w", err)
 		}
+		row.CardID = cardID
 		out = append(out, row)
 		sum += float64(row.Rank)
 	}
@@ -237,6 +239,37 @@ ORDER BY COALESCE(NULLIF(TRIM(u.username), ''), u.email) ASC, r.user_id ASC`
 		avg = &v
 	}
 	return out, avg, nil
+}
+
+// ListCardTeamRankingsForSetFormat returns all users' rankings for every card in a set+format.
+func (r *Repository) ListCardTeamRankingsForSetFormat(ctx context.Context, setID int, format int16) ([]CardTeamRankingRow, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	const q = `
+SELECT r.user_id, r.card_id, u.username, u.email, r.rank, r.notes
+FROM user_card_rankings r
+INNER JOIN users u ON u.id = r.user_id
+WHERE r.set_id = $1 AND r.format = $2
+ORDER BY r.card_id ASC, COALESCE(NULLIF(TRIM(u.username), ''), u.email) ASC, r.user_id ASC`
+	rows, err := r.pool.Query(ctx, q, setID, format)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list card team rankings for set format: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]CardTeamRankingRow, 0, 128)
+	for rows.Next() {
+		var row CardTeamRankingRow
+		if err := rows.Scan(&row.UserID, &row.CardID, &row.Username, &row.Email, &row.Rank, &row.Notes); err != nil {
+			return nil, fmt.Errorf("repository: list card team rankings for set format scan: %w", err)
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: list card team rankings for set format rows: %w", err)
+	}
+	return out, nil
 }
 
 // SetExists reports whether a set with the given id exists.
