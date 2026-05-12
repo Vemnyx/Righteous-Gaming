@@ -627,6 +627,8 @@ export default function Dashboard({ onNavigate }) {
   );
   /** Numeric `card_rater.id` when URL is `/resources/card-rater/:id` (analytics). */
   const [resourcesCardRaterId, setResourcesCardRaterId] = useState(/** @type {string | null} */ (null));
+  /** True while showing CardRanker at `/resources/card-rater` (active session; no id in URL). */
+  const [cardRaterPlayAtRoot, setCardRaterPlayAtRoot] = useState(false);
   /** When `activeTab === admin`, which sub-route is shown (`/admin/...`). */
   const [adminChild, setAdminChild] = useState(/** @type {string | null} */ (null));
   /** Sub-route under `/admin/announcements` (list vs create vs edit). */
@@ -651,10 +653,11 @@ export default function Dashboard({ onNavigate }) {
     const hit = RESOURCE_SUB_LINKS.find(
       (l) =>
         l.segment === resourcesChild ||
-        (l.segment === "card-rater" && resourcesChild === "card-rater-play"),
+        (l.segment === "card-rater" &&
+          (resourcesChild === "card-rater-play" || (resourcesChild === "card-rater" && cardRaterPlayAtRoot))),
     );
     return hit?.label ?? "Resources";
-  }, [activeTab, resourcesChild]);
+  }, [activeTab, resourcesChild, cardRaterPlayAtRoot]);
 
   const adminTabLabel = useMemo(() => {
     if (activeTab !== ADMIN_TAB_ID) {
@@ -670,6 +673,7 @@ export default function Dashboard({ onNavigate }) {
       setResourcesChild(DEFAULT_RESOURCES_SEGMENT);
       setResourcesCardIdentifier(null);
       setResourcesCardRaterId(null);
+      setCardRaterPlayAtRoot(false);
       setAdminChild(null);
       setAdminAnnouncementForm(null);
       replaceDashboardUrl(RESOURCES_TAB_ID, DEFAULT_RESOURCES_SEGMENT, null, null, null, null);
@@ -678,12 +682,14 @@ export default function Dashboard({ onNavigate }) {
       setResourcesChild(null);
       setResourcesCardIdentifier(null);
       setResourcesCardRaterId(null);
+      setCardRaterPlayAtRoot(false);
       setAdminAnnouncementForm(null);
       replaceDashboardUrl(ADMIN_TAB_ID, null, null, null, DEFAULT_ADMIN_SEGMENT, null);
     } else {
       setResourcesChild(null);
       setResourcesCardIdentifier(null);
       setResourcesCardRaterId(null);
+      setCardRaterPlayAtRoot(false);
       setAdminChild(null);
       setAdminAnnouncementForm(null);
       replaceDashboardUrl(tabId, null, null, null, null, null);
@@ -697,6 +703,7 @@ export default function Dashboard({ onNavigate }) {
     setResourcesChild(segment);
     setResourcesCardIdentifier(null);
     setResourcesCardRaterId(null);
+    if (segment === "card-rater") setCardRaterPlayAtRoot(false);
     setAdminChild(null);
     setAdminAnnouncementForm(null);
     replaceDashboardUrl(RESOURCES_TAB_ID, segment, null, null, null, null);
@@ -708,6 +715,7 @@ export default function Dashboard({ onNavigate }) {
     setResourcesChild(null);
     setResourcesCardIdentifier(null);
     setResourcesCardRaterId(null);
+    setCardRaterPlayAtRoot(false);
     setAdminAnnouncementForm(null);
     replaceDashboardUrl(ADMIN_TAB_ID, null, null, null, segment, null);
   }, []);
@@ -732,6 +740,7 @@ export default function Dashboard({ onNavigate }) {
     setResourcesChild("cards");
     setResourcesCardIdentifier(id);
     setResourcesCardRaterId(null);
+    setCardRaterPlayAtRoot(false);
     setAdminChild(null);
     setAdminAnnouncementForm(null);
     pushDashboardUrl(RESOURCES_TAB_ID, "cards", id, null, null, null);
@@ -740,6 +749,7 @@ export default function Dashboard({ onNavigate }) {
   const openCardRaterAnalytics = useCallback((raterId) => {
     const sid = String(raterId).trim();
     if (!/^\d+$/.test(sid)) return;
+    setCardRaterPlayAtRoot(false);
     setActiveTab(RESOURCES_TAB_ID);
     setResourcesChild("card-rater");
     setResourcesCardIdentifier(null);
@@ -748,6 +758,10 @@ export default function Dashboard({ onNavigate }) {
     setAdminAnnouncementForm(null);
     pushDashboardUrl(RESOURCES_TAB_ID, "card-rater", null, sid, null, null);
     setMobileNavOpen(false);
+  }, []);
+
+  const openCardRaterPlayAtRoot = useCallback(() => {
+    setCardRaterPlayAtRoot(true);
   }, []);
 
   useEffect(() => {
@@ -772,6 +786,11 @@ export default function Dashboard({ onNavigate }) {
       setResourcesChild(nextChild);
       setResourcesCardIdentifier(nextCardId);
       setResourcesCardRaterId(nextRaterId);
+      const cardRaterAtRoot =
+        nextTab === RESOURCES_TAB_ID &&
+        nextChild === "card-rater" &&
+        (nextRaterId == null || String(nextRaterId).trim() === "");
+      if (!cardRaterAtRoot) setCardRaterPlayAtRoot(false);
       setAdminChild(nextAdminChild);
       setAdminAnnouncementForm(nextAnnouncementForm);
       replaceDashboardUrl(
@@ -826,6 +845,10 @@ export default function Dashboard({ onNavigate }) {
   }, [mobileNavOpen]);
 
   const isLight = theme === "light";
+
+  const showCardRankerResources =
+    resourcesChild === "card-rater-play" ||
+    (resourcesChild === "card-rater" && cardRaterPlayAtRoot);
 
   return (
     <div className={isLight ? shellLight : shellDark}>
@@ -944,7 +967,8 @@ export default function Dashboard({ onNavigate }) {
                               ? activeTab === RESOURCES_TAB_ID &&
                                 (resourcesChild === link.segment ||
                                   (link.segment === "card-rater" &&
-                                    resourcesChild === "card-rater-play"))
+                                    (resourcesChild === "card-rater-play" ||
+                                      (resourcesChild === "card-rater" && cardRaterPlayAtRoot))))
                               : activeTab === ADMIN_TAB_ID && adminChild === link.segment;
                           return (
                             <button
@@ -1056,7 +1080,9 @@ export default function Dashboard({ onNavigate }) {
                           {RESOURCE_SUB_LINKS.map((link) => {
                             const subSel =
                               resourcesChild === link.segment ||
-                              (link.segment === "card-rater" && resourcesChild === "card-rater-play");
+                              (link.segment === "card-rater" &&
+                                (resourcesChild === "card-rater-play" ||
+                                  (resourcesChild === "card-rater" && cardRaterPlayAtRoot)));
                             return (
                               <button
                                 key={link.segment}
@@ -1166,9 +1192,7 @@ export default function Dashboard({ onNavigate }) {
             key={tab.id}
             value={tab.id}
             className={`relative z-0 flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl border outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 ${
-              tab.id === RESOURCES_TAB_ID && resourcesChild === "card-rater-play"
-                ? "p-0 sm:p-0"
-                : "p-8 sm:p-10"
+              tab.id === RESOURCES_TAB_ID && showCardRankerResources ? "p-0 sm:p-0" : "p-8 sm:p-10"
             } ${
               isLight
                 ? "border-white/[0.12] bg-gradient-to-b from-[#434054] via-[#353145] to-[#292433] shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
@@ -1240,10 +1264,10 @@ export default function Dashboard({ onNavigate }) {
                   }
                   onOpenCardDetail={openCardDetail}
                 />
-              ) : resourcesChild === "card-rater-play" ? (
+              ) : showCardRankerResources ? (
                 <CardRanker
                   isLight={isLight}
-                  active={activeTab === RESOURCES_TAB_ID && resourcesChild === "card-rater-play"}
+                  active={activeTab === RESOURCES_TAB_ID && showCardRankerResources}
                 />
               ) : resourcesChild === "card-rater" && resourcesCardRaterId ? (
                 <CardRaterAnalytics
@@ -1259,7 +1283,8 @@ export default function Dashboard({ onNavigate }) {
               ) : resourcesChild === "card-rater" ? (
                 <CardRaterRedirect
                   active={activeTab === RESOURCES_TAB_ID && resourcesChild === "card-rater"}
-                  onResolvedTarget={openCardRaterAnalytics}
+                  onActiveSession={openCardRaterPlayAtRoot}
+                  onLatestCompletedSession={openCardRaterAnalytics}
                 />
               ) : (
                 <div
