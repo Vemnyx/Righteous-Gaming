@@ -30,9 +30,9 @@ function formatDateTime(iso) {
 }
 
 /**
- * @param {{ isLight: boolean, active: boolean, raterId: string, onOpenCardDetail: (identifier: string) => void }} props
+ * @param {{ isLight: boolean, active: boolean, raterId: string }} props
  */
-export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail }) {
+export function CardRaterAnalytics({ isLight, active, raterId }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -472,7 +472,6 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                   const cid = cardIdFromRecord(card);
                   const img = card && card.image_url != null ? String(card.image_url) : "";
                   const name = card && card.name != null ? String(card.name) : "Card";
-                  const ident = card && card.card_identifier != null ? String(card.card_identifier).trim() : "";
                   const avg = typeof r.avg_rating === "number" ? r.avg_rating : Number(r.avg_rating);
                   const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
                   return (
@@ -504,18 +503,6 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                       <p className="m-0 line-clamp-2 text-center text-[0.72rem] font-semibold leading-tight text-[#f4f0fa]/90">
                         {name}
                       </p>
-                      {ident ? (
-                        <button
-                          type="button"
-                          className="mx-auto text-[0.68rem] font-semibold text-violet-200/90 underline-offset-2 hover:underline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenCardDetail(ident);
-                          }}
-                        >
-                          Open in catalog
-                        </button>
-                      ) : null}
                     </div>
                   );
                 })}
@@ -554,7 +541,6 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                           const talents = Array.isArray(card.talents) ? card.talents : [];
                           const avg = typeof r.avg_rating === "number" ? r.avg_rating : Number(r.avg_rating);
                           const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
-                          const ident = card.card_identifier != null ? String(card.card_identifier).trim() : "";
                           const cid = cardIdFromRecord(card);
                           return (
                             <tr
@@ -574,11 +560,7 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                             >
                               <td className="py-2 pr-3 tabular-nums text-[#f4f0fa]/55">{idx + 1}</td>
                               <td className="py-2 pr-3">
-                                {ident ? (
-                                  <span className="max-w-[16rem] truncate font-semibold text-violet-200/95">{name}</span>
-                                ) : (
-                                  <span className="font-semibold">{name}</span>
-                                )}
+                                <span className="max-w-[16rem] truncate font-semibold text-violet-200/95">{name}</span>
                               </td>
                               <td className="py-2 pr-3 text-[#f4f0fa]/75">{setName}</td>
                               <td className="py-2 pr-3">{typ != null ? cardTypeName(typ) ?? typ : "—"}</td>
@@ -713,7 +695,6 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                     if (!card) return null;
                     const img = card.image_url != null ? String(card.image_url) : "";
                     const name = card.name != null ? String(card.name) : "Card";
-                    const ident = card.card_identifier != null ? String(card.card_identifier).trim() : "";
                     const avg = typeof r.avg_rating === "number" ? r.avg_rating : Number(r.avg_rating);
                     const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
                     const noteCount = typeof r.note_count === "number" ? r.note_count : Number(r.note_count);
@@ -754,18 +735,6 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                           <p className="m-0 text-[0.7rem] text-[#f4f0fa]/55">
                             Avg {Number.isFinite(avg) ? avg.toFixed(2) : "—"} · {Number.isFinite(votes) ? votes : "—"} votes
                           </p>
-                          {ident ? (
-                            <button
-                              type="button"
-                              className="mt-1 self-start text-[0.68rem] font-semibold text-violet-200/90 underline-offset-2 hover:underline"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onOpenCardDetail(ident);
-                              }}
-                            >
-                              Open in catalog
-                            </button>
-                          ) : null}
                         </div>
                       </div>
                     );
@@ -787,8 +756,8 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
             if (e.target === e.currentTarget) closeCardDetailModal();
           }}
         >
-          <div className="max-h-[min(92vh,40rem)] w-full max-w-3xl overflow-hidden rounded-xl border border-white/[0.18] bg-[#1a1424] shadow-xl">
-            <div className="flex items-start justify-between gap-3 border-b border-white/[0.1] px-4 py-3 sm:px-5">
+          <div className="max-h-[min(96vh,56rem)] w-full max-w-6xl overflow-hidden rounded-xl border border-white/[0.18] bg-[#1a1424] shadow-xl">
+            <div className="flex items-start justify-between gap-3 border-b border-white/[0.1] px-4 py-3 sm:px-6">
               <div className="min-w-0">
                 <p id="card-session-detail-title" className="m-0 truncate text-[0.95rem] font-semibold text-[#f4f0fa]">
                   {cardDetailModal.card && cardDetailModal.card.name != null
@@ -805,7 +774,7 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                 Close
               </button>
             </div>
-            <div className="max-h-[min(78vh,34rem)] overflow-y-auto px-4 py-4 sm:px-5">
+            <div className="max-h-[min(88vh,50rem)] overflow-y-auto px-4 py-5 sm:px-6 sm:py-6">
               {cardDetailModal.loading ? (
                 <p className="text-[0.85rem] text-[#f4f0fa]/65">Loading…</p>
               ) : cardDetailModal.error ? (
@@ -813,16 +782,16 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                   {cardDetailModal.error}
                 </p>
               ) : (
-                <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
-                  <div className="mx-auto w-[min(100%,12rem)] shrink-0 sm:mx-0 sm:w-[11.5rem]">
+                <div className="flex flex-col gap-6 md:flex-row md:items-start md:gap-8">
+                  <div className="mx-auto w-full max-w-[22rem] shrink-0 sm:max-w-[26rem] md:mx-0 md:max-w-[28rem] lg:max-w-[32rem]">
                     {cardDetailModal.card && cardDetailModal.card.image_url != null ? (
                       <img
                         src={String(cardDetailModal.card.image_url)}
                         alt=""
-                        className="aspect-[2.5/3.5] w-full rounded-lg border border-white/[0.12] object-cover"
+                        className="aspect-[2.5/3.5] w-full rounded-xl border border-white/[0.14] object-contain shadow-[0_8px_32px_rgba(0,0,0,0.35)]"
                       />
                     ) : (
-                      <div className="flex aspect-[2.5/3.5] w-full items-center justify-center rounded-lg border border-white/[0.12] bg-black/35 px-2 text-center text-[0.75rem] text-[#f4f0fa]/50">
+                      <div className="flex aspect-[2.5/3.5] w-full items-center justify-center rounded-xl border border-white/[0.12] bg-black/35 px-2 text-center text-[0.8rem] text-[#f4f0fa]/50">
                         No image
                       </div>
                     )}
@@ -837,19 +806,6 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                         ({cardDetailModal.voteCount} {cardDetailModal.voteCount === 1 ? "rating" : "ratings"})
                       </span>
                     </p>
-                    {cardDetailModal.card &&
-                    cardDetailModal.card.card_identifier != null &&
-                    String(cardDetailModal.card.card_identifier).trim() !== "" ? (
-                      <button
-                        type="button"
-                        className="mt-3 text-[0.8rem] font-semibold text-violet-200/95 underline-offset-2 hover:underline"
-                        onClick={() =>
-                          onOpenCardDetail(String(cardDetailModal.card?.card_identifier).trim())
-                        }
-                      >
-                        Open in catalog
-                      </button>
-                    ) : null}
                     <p className={`m-0 mt-5 ${labelMuted}`}>Ratings by user</p>
                     {cardDetailModal.ratings.length === 0 ? (
                       <p className="mt-2 text-[0.85rem] text-[#f4f0fa]/60">No ratings for this card in this session.</p>
@@ -870,7 +826,7 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCardDetail 
                                   {row.user_label || `User ${row.user_id}`}
                                 </td>
                                 <td className="py-2 pr-2 tabular-nums text-[#f4f0fa]/80">{row.rating}/5</td>
-                                <td className="max-w-[min(28rem,55vw)] py-2 pr-3 whitespace-pre-wrap text-[#f4f0fa]/75">
+                                <td className="max-w-[min(36rem,58vw)] py-2 pr-3 whitespace-pre-wrap text-[0.8rem] leading-relaxed text-[#f4f0fa]/75">
                                   {row.notes != null && row.notes !== "" ? row.notes : "—"}
                                 </td>
                               </tr>

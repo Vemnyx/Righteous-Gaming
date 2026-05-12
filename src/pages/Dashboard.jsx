@@ -1278,7 +1278,6 @@ export default function Dashboard({ onNavigate }) {
                     resourcesChild === "card-rater" &&
                     Boolean(resourcesCardRaterId)
                   }
-                  onOpenCardDetail={openCardDetail}
                 />
               ) : resourcesChild === "card-rater" ? (
                 <CardRaterRedirect
