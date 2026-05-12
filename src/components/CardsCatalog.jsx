@@ -311,6 +311,11 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
   const tableHeadBorder = isLight ? "border-white/[0.12]" : "border-white/[0.20]";
   const tableRowBorder = isLight ? "border-white/[0.06]" : "border-white/[0.12]";
   const gridThumbBorder = isLight ? "border-white/[0.1]" : "border-white/[0.20]";
+  const gridCardLift =
+    "relative z-0 transition-[transform,box-shadow] duration-200 ease-out will-change-transform " +
+    (isLight
+      ? "shadow-sm shadow-black/15 hover:z-10 hover:-translate-y-2 hover:shadow-[0_14px_32px_-8px_rgba(0,0,0,0.22)] focus-visible:z-10 focus-visible:-translate-y-2 focus-visible:shadow-[0_14px_32px_-8px_rgba(0,0,0,0.22)]"
+      : "shadow-none hover:z-10 hover:-translate-y-2 hover:shadow-[0_18px_44px_-10px_rgba(0,0,0,0.72)] focus-visible:z-10 focus-visible:-translate-y-2 focus-visible:shadow-[0_18px_44px_-10px_rgba(0,0,0,0.72)]");
 
   return (
     <div className="relative flex w-full flex-1 flex-col gap-4 px-1 py-2 sm:px-2">
@@ -482,11 +487,11 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
         <>
           <div className={`grid gap-2 ${gridColClass} sm:gap-2 md:gap-3`}>
             {pagedGrid.map((c) => (
-              <div key={c.id} className="min-w-0">
+              <div key={c.id} className="min-w-0 overflow-visible px-0.5 pb-1 pt-0.5">
                 {c.image_url ? (
                   <button
                     type="button"
-                    className={`flex aspect-[63/88] w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg border bg-black/30 p-0 text-left transition-opacity hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 ${gridThumbBorder}`}
+                    className={`flex aspect-[63/88] w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg border bg-black/30 p-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 ${gridThumbBorder} ${gridCardLift}`}
                     aria-label={`Open full image: ${c.name}`}
                     onClick={() =>
                       setGridImageModal({
