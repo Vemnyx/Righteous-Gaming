@@ -41,6 +41,16 @@ function pitchDot(card) {
   return "";
 }
 
+const CARD_SWIPE_MIN_DIST_PX = 34;
+/** Max |dy|/|dx| for a horizontal swipe (higher = more vertical wobble allowed). */
+const CARD_SWIPE_MAX_VERTICAL_RATIO = 0.9;
+
+/** @param {number} dx @param {number} dy */
+function cardSwipeQualifies(dx, dy) {
+  const mostlyHorizontal = Math.abs(dy) <= Math.abs(dx) * CARD_SWIPE_MAX_VERTICAL_RATIO;
+  return Math.abs(dx) >= CARD_SWIPE_MIN_DIST_PX && mostlyHorizontal;
+}
+
 /**
  * @param {{ isLight: boolean, active: boolean }} props
  */
@@ -376,11 +386,20 @@ export function CardRanker({ isLight, active }) {
   );
 
   const goPrev = useCallback(() => {
-    setCardIndex((i) => Math.max(0, i - 1));
-  }, []);
+    setCardIndex((i) => {
+      if (queue.length <= 0) return 0;
+      if (i <= 0) return queue.length - 1;
+      return i - 1;
+    });
+  }, [queue.length]);
 
   const goNext = useCallback(() => {
-    setCardIndex((i) => Math.min(Math.max(0, queue.length - 1), i + 1));
+    setCardIndex((i) => {
+      if (queue.length <= 0) return 0;
+      const last = queue.length - 1;
+      if (i >= last) return 0;
+      return i + 1;
+    });
   }, [queue.length]);
 
   /** @type {React.MutableRefObject<{ active: boolean, id: number, x0: number, y0: number, x: number, y: number }>} */
@@ -433,7 +452,7 @@ export function CardRanker({ isLight, active }) {
       s.y = e.clientY;
       const dx = s.x - s.x0;
       const dy = s.y - s.y0;
-      if (Math.abs(dy) > Math.abs(dx) * 1.4) return;
+      if (Math.abs(dy) > Math.abs(dx) * 1.55) return;
       const clamped = Math.max(-220, Math.min(220, dx));
       setCardDragX(clamped);
     },
@@ -461,9 +480,9 @@ export function CardRanker({ isLight, active }) {
             void submitRanking({ background: true });
           }
           if (direction < 0) {
-            goPrev();
-          } else {
             goNext();
+          } else {
+            goPrev();
           }
           setCardDragX(0);
         })();
@@ -492,9 +511,7 @@ export function CardRanker({ isLight, active }) {
       }
       const dx = s.x - s.x0;
       const dy = s.y - s.y0;
-      const minDist = 52;
-      const mostlyHorizontal = Math.abs(dy) <= Math.abs(dx) * 0.72;
-      if (Math.abs(dx) >= minDist && mostlyHorizontal) {
+      if (cardSwipeQualifies(dx, dy)) {
         completeSwipe(dx);
         return;
       }
@@ -521,9 +538,7 @@ export function CardRanker({ isLight, active }) {
     }
     const dx = s.x - s.x0;
     const dy = s.y - s.y0;
-    const minDist = 52;
-    const mostlyHorizontal = Math.abs(dy) <= Math.abs(dx) * 0.72;
-    if (Math.abs(dx) >= minDist && mostlyHorizontal) {
+    if (cardSwipeQualifies(dx, dy)) {
       completeSwipe(dx);
       return;
     }
@@ -567,15 +582,13 @@ export function CardRanker({ isLight, active }) {
       if (rankLoading || !current) return;
 
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-        if (e.key === "ArrowLeft") {
-          if (cardIndex <= 0) return;
-          e.preventDefault();
-          goPrev();
-          return;
-        }
-        if (cardIndex >= queue.length - 1) return;
+        if (queue.length <= 1) return;
         e.preventDefault();
-        goNext();
+        if (e.key === "ArrowLeft") {
+          goPrev();
+        } else {
+          goNext();
+        }
         return;
       }
 
@@ -613,7 +626,7 @@ export function CardRanker({ isLight, active }) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [active, user, queue.length, cardIndex, rankLoading, goPrev, goNext, current, canSubmit, submitRanking]);
+  }, [active, user, queue.length, rankLoading, goPrev, goNext, current, canSubmit, submitRanking]);
 
   const imgUrl =
     current?.card?.image_url != null && String(current.card.image_url).trim() !== ""
@@ -718,7 +731,7 @@ export function CardRanker({ isLight, active }) {
                   <button
                     type="button"
                     onClick={goPrev}
-                    disabled={cardIndex <= 0 || rankLoading}
+                    disabled={rankLoading || queue.length <= 1}
                     className={`${arrowNavCls} hidden sm:flex`}
                     aria-label="Previous card"
                   >
@@ -811,7 +824,7 @@ export function CardRanker({ isLight, active }) {
                   <button
                     type="button"
                     onClick={goNext}
-                    disabled={cardIndex >= queue.length - 1 || rankLoading}
+                    disabled={rankLoading || queue.length <= 1}
                     className={`${arrowNavCls} hidden sm:flex`}
                     aria-label="Next card"
                   >
