@@ -5,6 +5,7 @@ import {
   clearSessionProfile,
   fetchSessionProfileFromApi,
   readSessionProfile,
+  userSettingsFromProfile,
   writeSessionProfile,
 } from "./sessionProfile";
 
@@ -84,13 +85,8 @@ export function AuthProvider({ children }) {
   const updateSessionProfileSettings = useCallback((/** @type {import("./sessionProfile").UserSettings} */ settings) => {
     setSessionProfile((prev) => {
       if (!prev) return prev;
-      const next = {
-        ...prev,
-        settings: {
-          ...(prev.settings ?? {}),
-          ...settings,
-        },
-      };
+      const merged = userSettingsFromProfile({ ...prev, settings: { ...prev.settings, ...settings } });
+      const next = { ...prev, settings: merged };
       writeSessionProfile(next);
       return next;
     });

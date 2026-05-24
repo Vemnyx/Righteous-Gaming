@@ -274,8 +274,41 @@ type userSettingsResponse struct {
 	Settings domain.UserSettings `json:"settings"`
 }
 
-func (h *userHTTP) patchMySettings(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPatch {
+func (h *userHTTP) getMySettings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	idToken := bearerIDToken(r.Header.Get("Authorization"))
+	if idToken == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	settings, err := h.svc.UserSettingsForIDToken(r.Context(), idToken)
+	if err != nil {
+		if errors.Is(err, service.ErrValidation) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, service.ErrUnauthenticated) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if errors.Is(err, service.ErrUserNotFound) {
+			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
+		log.Error("failed to load user settings", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(userSettingsResponse{Settings: settings})
+}
+
+func (h *userHTTP) saveMySettings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch && r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}

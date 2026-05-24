@@ -84,12 +84,31 @@ export async function fetchSessionProfileFromApi(idToken) {
 
 /**
  * @param {string} idToken
+ * @returns {Promise<UserSettings>}
+ */
+export async function fetchUserSettingsFromApi(idToken) {
+  const res = await fetch("/api/me/settings", {
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(t || `me/settings GET failed: ${res.status}`);
+  }
+  const data = await res.json();
+  const saved = data?.settings;
+  return {
+    card_rater_quick_submit: saved?.card_rater_quick_submit === true,
+  };
+}
+
+/**
+ * @param {string} idToken
  * @param {UserSettings} settings
  * @returns {Promise<UserSettings>}
  */
-export async function patchUserSettingsFromApi(idToken, settings) {
+export async function saveUserSettingsFromApi(idToken, settings) {
   const res = await fetch("/api/me/settings", {
-    method: "PATCH",
+    method: "POST",
     headers: {
       Authorization: `Bearer ${idToken}`,
       "Content-Type": "application/json",
@@ -98,7 +117,7 @@ export async function patchUserSettingsFromApi(idToken, settings) {
   });
   if (!res.ok) {
     const t = await res.text();
-    throw new Error(t || `me/settings failed: ${res.status}`);
+    throw new Error(t || `me/settings POST failed: ${res.status}`);
   }
   const data = await res.json();
   const saved = data?.settings;

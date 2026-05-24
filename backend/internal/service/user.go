@@ -67,6 +67,15 @@ func (s *UserService) UserForIDToken(ctx context.Context, idToken string) (*doma
 	return u, nil
 }
 
+// UserSettingsForIDToken returns settings for the authenticated user.
+func (s *UserService) UserSettingsForIDToken(ctx context.Context, idToken string) (domain.UserSettings, error) {
+	u, err := s.UserForIDToken(ctx, idToken)
+	if err != nil {
+		return domain.UserSettings{}, err
+	}
+	return u.Settings, nil
+}
+
 // UpdateUserSettingsForIDToken verifies the token and upserts settings for the authenticated user.
 func (s *UserService) UpdateUserSettingsForIDToken(ctx context.Context, idToken string, settings domain.UserSettings) (domain.UserSettings, error) {
 	idToken = strings.TrimSpace(idToken)

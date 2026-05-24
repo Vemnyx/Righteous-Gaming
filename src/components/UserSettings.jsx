@@ -1,6 +1,10 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { patchUserSettingsFromApi, userSettingsFromProfile } from "../auth/sessionProfile";
+import {
+  fetchUserSettingsFromApi,
+  saveUserSettingsFromApi,
+  userSettingsFromProfile,
+} from "../auth/sessionProfile";
 
 /**
  * @param {{ enabled: boolean, disabled?: boolean, onChange: (next: boolean) => void, isLight: boolean, label: string, description?: string }} props
@@ -43,21 +47,45 @@ function SettingsToggle({ enabled, disabled, onChange, isLight, label, descripti
  * @param {{ isLight: boolean, active: boolean }} props
  */
 export function UserSettings({ isLight, active }) {
-  const { user, sessionProfile, updateSessionProfileSettings } = useAuth();
+  const { user, sessionProfile, sessionProfileLoading, updateSessionProfileSettings } = useAuth();
   const quickSubmit = userSettingsFromProfile(sessionProfile).card_rater_quick_submit;
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
 
+  useEffect(() => {
+    if (!active || !user || sessionProfileLoading) return undefined;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const token = await user.getIdToken();
+        const settings = await fetchUserSettingsFromApi(token);
+        if (!cancelled) updateSessionProfileSettings(settings);
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load settings");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [active, user, sessionProfileLoading, updateSessionProfileSettings]);
+
   const onQuickSubmitChange = useCallback(
     async (next) => {
-      if (!user || saving) return;
+      if (!user || saving || loading) return;
       const prev = quickSubmit;
       updateSessionProfileSettings({ card_rater_quick_submit: next });
       setError(null);
       setSaving(true);
       try {
         const token = await user.getIdToken();
-        const saved = await patchUserSettingsFromApi(token, { card_rater_quick_submit: next });
+        const saved = await saveUserSettingsFromApi(token, { card_rater_quick_submit: next });
         updateSessionProfileSettings(saved);
       } catch (e) {
         updateSessionProfileSettings({ card_rater_quick_submit: prev });
@@ -66,7 +94,7 @@ export function UserSettings({ isLight, active }) {
         setSaving(false);
       }
     },
-    [user, saving, quickSubmit, updateSessionProfileSettings],
+    [user, saving, loading, quickSubmit, updateSessionProfileSettings],
   );
 
   const sectionCls = isLight
@@ -89,14 +117,18 @@ export function UserSettings({ isLight, active }) {
           Card Rater
         </h2>
         <div className="mt-4 border-t border-white/[0.1] pt-4">
-          <SettingsToggle
-            isLight={isLight}
-            enabled={quickSubmit}
-            disabled={saving || !user}
-            label="Quick submit"
-            description="Automatically submit your star rating when you swipe to the next card."
-            onChange={(next) => void onQuickSubmitChange(next)}
-          />
+          {loading ? (
+            <p className="m-0 text-[0.88rem] text-[#f4f0fa]/70">Loading settings…</p>
+          ) : (
+            <SettingsToggle
+              isLight={isLight}
+              enabled={quickSubmit}
+              disabled={saving || !user}
+              label="Quick submit"
+              description="Automatically submit your star rating when you pick a star count."
+              onChange={(next) => void onQuickSubmitChange(next)}
+            />
+          )}
         </div>
       </section>
 
