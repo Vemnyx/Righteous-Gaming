@@ -15,7 +15,7 @@ function SettingsToggle({ enabled, disabled, onChange, isLight, label, descripti
     : isLight
       ? "bg-[#4a4658]/95 border-white/20"
       : "bg-black/45 border-white/[0.22]";
-  const knobCls = enabled ? "translate-x-5" : "translate-x-0.5";
+  const knobCls = enabled ? "translate-x-5" : "translate-x-0";
 
   return (
     <label className="flex cursor-pointer items-start justify-between gap-4">
@@ -32,11 +32,11 @@ function SettingsToggle({ enabled, disabled, onChange, isLight, label, descripti
         aria-label={label}
         disabled={disabled}
         onClick={() => onChange(!enabled)}
-        className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${trackCls}`}
+        className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full border p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${trackCls}`}
       >
         <span
           aria-hidden
-          className={`absolute top-0.5 size-6 rounded-full bg-white shadow transition-transform ${knobCls}`}
+          className={`block size-6 rounded-full bg-white shadow transition-transform ${knobCls}`}
         />
       </button>
     </label>
@@ -125,7 +125,7 @@ export function UserSettings({ isLight, active }) {
               enabled={quickSubmit}
               disabled={saving || !user}
               label="Quick submit"
-              description="Automatically submit your star rating when you pick a star count."
+              description="Automatically submit your star rating and go to the next card when you pick a star count."
               onChange={(next) => void onQuickSubmitChange(next)}
             />
           )}

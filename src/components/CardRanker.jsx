@@ -327,29 +327,29 @@ export function CardRanker({ isLight, active }) {
     async (opts) => {
       const background = opts?.background === true;
       const ratingVal = opts?.rating ?? draftRank;
-      if (!user || !current) return;
+      if (!user || !current) return false;
       if (background) {
-        if (ratingVal == null || ratingVal < 1 || ratingVal > 5) return;
+        if (ratingVal == null || ratingVal < 1 || ratingVal > 5) return false;
         if (current.kind === "pending") {
           /* ok */
         } else if (current.kind === "rated") {
           const notesTrim = draftNotes.trim();
           const savedNotes = notesFromServer(current.notes);
-          if (ratingVal === current.rating && notesTrim === savedNotes) return;
+          if (ratingVal === current.rating && notesTrim === savedNotes) return false;
         } else {
-          return;
+          return false;
         }
       } else if (!canSubmit) {
-        return;
+        return false;
       }
       setSaveError(null);
       if (!background) setSubmitting(true);
       try {
         const token = await user.getIdToken();
-        if (!activeRater) return;
+        if (!activeRater) return false;
         if (ratingVal == null || ratingVal < 1 || ratingVal > 5) {
           if (!background) setSaveError("Choose a star rating (1–5).");
-          return;
+          return false;
         }
         const notesTrim = draftNotes.trim();
         const body = {
@@ -388,25 +388,15 @@ export function CardRanker({ isLight, active }) {
           };
           return next;
         });
+        return true;
       } catch (e) {
         setSaveError(e instanceof Error ? e.message : "Save failed");
+        return false;
       } finally {
         if (!background) setSubmitting(false);
       }
     },
     [user, current, canSubmit, draftNotes, activeRater, draftRank, cardIndex],
-  );
-
-  const pickStarRating = useCallback(
-    /** @param {number} n */
-    (n) => {
-      setDraftRank(n);
-      if (!cardRaterQuickSubmit || !user || !current || rankLoading || submitting) return;
-      if (n < 1 || n > 5) return;
-      if (current.kind === "rated" && n === current.rating) return;
-      void submitRanking({ background: true, rating: n });
-    },
-    [cardRaterQuickSubmit, user, current, rankLoading, submitting, submitRanking],
   );
 
   const goPrev = useCallback(() => {
@@ -425,6 +415,21 @@ export function CardRanker({ isLight, active }) {
       return i + 1;
     });
   }, [queue.length]);
+
+  const pickStarRating = useCallback(
+    /** @param {number} n */
+    (n) => {
+      setDraftRank(n);
+      if (!cardRaterQuickSubmit || !user || !current || rankLoading || submitting) return;
+      if (n < 1 || n > 5) return;
+      if (current.kind === "rated" && n === current.rating) return;
+      void (async () => {
+        const ok = await submitRanking({ background: true, rating: n });
+        if (ok && queue.length > 1) goNext();
+      })();
+    },
+    [cardRaterQuickSubmit, user, current, rankLoading, submitting, submitRanking, queue.length, goNext],
+  );
 
   /** @type {React.MutableRefObject<{ active: boolean, id: number, x0: number, y0: number, x: number, y: number }>} */
   const cardSwipeRef = useRef({ active: false, id: 0, x0: 0, y0: 0, x: 0, y: 0 });
