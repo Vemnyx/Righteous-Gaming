@@ -135,16 +135,16 @@ VALUES ($1, $2, $3, $4, $5)`
 	return nil
 }
 
-// UpdateUserCardRatingNotes updates only the notes column for an existing row.
-func (r *Repository) UpdateUserCardRatingNotes(ctx context.Context, userID, raterID, cardID int, notes *string) error {
+// UpdateUserCardRating updates rating and notes for an existing row.
+func (r *Repository) UpdateUserCardRating(ctx context.Context, userID, raterID, cardID int, rating int16, notes *string) error {
 	if r.pool == nil {
 		return fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
 UPDATE user_card_ratings
-SET notes = $4
+SET rating = $4, notes = $5
 WHERE user_id = $1 AND rater_id = $2 AND card_id = $3`
-	tag, err := r.pool.Exec(ctx, q, userID, raterID, cardID, notes)
+	tag, err := r.pool.Exec(ctx, q, userID, raterID, cardID, rating, notes)
 	if err != nil {
 		return fmt.Errorf("repository: update user card rating notes: %w", err)
 	}

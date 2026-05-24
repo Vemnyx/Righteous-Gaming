@@ -15,6 +15,7 @@ const AuthContext = createContext({
   loading: true,
   configured: false,
   signOut: async () => {},
+  updateSessionProfileSettings: () => {},
 });
 
 export function AuthProvider({ children }) {
@@ -80,6 +81,21 @@ export function AuthProvider({ children }) {
     await firebaseSignOut(getFirebaseAuth());
   }, [configured]);
 
+  const updateSessionProfileSettings = useCallback((/** @type {import("./sessionProfile").UserSettings} */ settings) => {
+    setSessionProfile((prev) => {
+      if (!prev) return prev;
+      const next = {
+        ...prev,
+        settings: {
+          ...(prev.settings ?? {}),
+          ...settings,
+        },
+      };
+      writeSessionProfile(next);
+      return next;
+    });
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
@@ -88,8 +104,9 @@ export function AuthProvider({ children }) {
       loading,
       configured,
       signOut,
+      updateSessionProfileSettings,
     }),
-    [user, sessionProfile, sessionProfileLoading, loading, configured, signOut]
+    [user, sessionProfile, sessionProfileLoading, loading, configured, signOut, updateSessionProfileSettings]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -58,7 +58,37 @@ func (s *UserService) UserForIDToken(ctx context.Context, idToken string) (*doma
 		}
 		return nil, fmt.Errorf("service: user by uid: %w", err)
 	}
-	return domainUserFromRepo(row), nil
+	u := domainUserFromRepo(row)
+	settings, err := s.repo.GetUserSettings(ctx, row.ID)
+	if err != nil {
+		return nil, fmt.Errorf("service: user settings: %w", err)
+	}
+	u.Settings = domain.UserSettings{CardRaterQuickSubmit: settings.CardRaterQuickSubmit}
+	return u, nil
+}
+
+// UpdateUserSettingsForIDToken verifies the token and upserts settings for the authenticated user.
+func (s *UserService) UpdateUserSettingsForIDToken(ctx context.Context, idToken string, settings domain.UserSettings) (domain.UserSettings, error) {
+	idToken = strings.TrimSpace(idToken)
+	if idToken == "" {
+		return domain.UserSettings{}, fmt.Errorf("%w: id token required", ErrValidation)
+	}
+	tok, err := s.fb.VerifyIDToken(ctx, idToken)
+	if err != nil {
+		return domain.UserSettings{}, fmt.Errorf("%w: %v", ErrUnauthenticated, err)
+	}
+	row, err := s.repo.UserByUID(ctx, tok.UID)
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			return domain.UserSettings{}, fmt.Errorf("%w", ErrUserNotFound)
+		}
+		return domain.UserSettings{}, fmt.Errorf("service: user by uid: %w", err)
+	}
+	updated, err := s.repo.UpsertUserSettings(ctx, row.ID, settings.CardRaterQuickSubmit)
+	if err != nil {
+		return domain.UserSettings{}, fmt.Errorf("service: upsert user settings: %w", err)
+	}
+	return domain.UserSettings{CardRaterQuickSubmit: updated.CardRaterQuickSubmit}, nil
 }
 
 // ListUsersPagedForAdmin verifies the Firebase token, ensures the caller is an admin,

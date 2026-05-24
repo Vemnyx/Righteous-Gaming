@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { userSettingsFromProfile } from "../auth/sessionProfile";
 
 /** @typedef {{ id: number, name: string, code: string, image_url?: string | null }} CatalogSet */
 
@@ -55,7 +56,8 @@ function cardSwipeQualifies(dx, dy) {
  * @param {{ isLight: boolean, active: boolean }} props
  */
 export function CardRanker({ isLight, active }) {
-  const { user, configured } = useAuth();
+  const { user, configured, sessionProfile } = useAuth();
+  const cardRaterQuickSubmit = userSettingsFromProfile(sessionProfile).card_rater_quick_submit;
   const [activeRater, setActiveRater] = useState(/** @type {ActiveCardRater | null} */ (null));
   const [rankerSet, setRankerSet] = useState(/** @type {CatalogSet | null} */ (null));
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -307,25 +309,36 @@ export function CardRanker({ isLight, active }) {
     "flex size-[3.875rem] items-center justify-center rounded-xl border text-[1.52rem] leading-none transition-colors sm:size-16 sm:text-[1.85rem]";
   const starIdle = `${starBase} border-white/[0.28] bg-black/55 text-amber-200/90 hover:border-amber-300/55 hover:bg-black/65`;
   const starOn = `${starBase} border-amber-300/85 bg-amber-500/55 text-amber-50 shadow-[0_0_16px_rgba(251,191,36,0.5)]`;
-  const starDisabled = `${starBase} cursor-default border-white/[0.18] bg-black/45 text-amber-200/55`;
 
   const arrowNavCls =
     "translate-y-8 sm:translate-y-10 flex h-[min(14rem,52vh)] min-h-[10.5rem] w-12 shrink-0 items-center justify-center rounded-xl border-2 border-yellow-400/85 bg-yellow-400/18 text-xl font-semibold text-yellow-200 shadow-[0_0_18px_rgba(250,204,21,0.35)] transition-colors hover:border-yellow-300 hover:bg-yellow-400/28 hover:text-yellow-50 disabled:cursor-not-allowed disabled:border-white/20 disabled:bg-black/30 disabled:text-[#f4f0fa]/40 disabled:shadow-none sm:w-14 sm:text-2xl";
 
   const canSubmit = useMemo(() => {
     if (!user || !current || submitting) return false;
-    if (current.kind === "pending") return draftRank != null && draftRank >= 1 && draftRank <= 5;
-    return true;
-  }, [user, current, draftRank, submitting]);
+    if (draftRank == null || draftRank < 1 || draftRank > 5) return false;
+    if (current.kind === "pending") return true;
+    const notesTrim = draftNotes.trim();
+    const savedNotes = notesFromServer(current.notes);
+    return draftRank !== current.rating || notesTrim !== savedNotes;
+  }, [user, current, draftRank, draftNotes, submitting]);
 
   const submitRanking = useCallback(
-    /** @param {{ background?: boolean }} [opts] */
+    /** @param {{ background?: boolean, rating?: number }} [opts] */
     async (opts) => {
       const background = opts?.background === true;
+      const ratingVal = opts?.rating ?? draftRank;
       if (!user || !current) return;
       if (background) {
-        if (current.kind !== "pending") return;
-        if (draftRank == null || draftRank < 1 || draftRank > 5) return;
+        if (ratingVal == null || ratingVal < 1 || ratingVal > 5) return;
+        if (current.kind === "pending") {
+          /* ok */
+        } else if (current.kind === "rated") {
+          const notesTrim = draftNotes.trim();
+          const savedNotes = notesFromServer(current.notes);
+          if (ratingVal === current.rating && notesTrim === savedNotes) return;
+        } else {
+          return;
+        }
       } else if (!canSubmit) {
         return;
       }
@@ -334,7 +347,6 @@ export function CardRanker({ isLight, active }) {
       try {
         const token = await user.getIdToken();
         if (!activeRater) return;
-        const ratingVal = current.kind === "rated" ? current.rating : draftRank;
         if (ratingVal == null || ratingVal < 1 || ratingVal > 5) {
           if (!background) setSaveError("Choose a star rating (1–5).");
           return;
@@ -383,6 +395,18 @@ export function CardRanker({ isLight, active }) {
       }
     },
     [user, current, canSubmit, draftNotes, activeRater, draftRank, cardIndex],
+  );
+
+  const pickStarRating = useCallback(
+    /** @param {number} n */
+    (n) => {
+      setDraftRank(n);
+      if (!cardRaterQuickSubmit || !user || !current || rankLoading || submitting) return;
+      if (n < 1 || n > 5) return;
+      if (current.kind === "rated" && n === current.rating) return;
+      void submitRanking({ background: true, rating: n });
+    },
+    [cardRaterQuickSubmit, user, current, rankLoading, submitting, submitRanking],
   );
 
   const goPrev = useCallback(() => {
@@ -607,9 +631,8 @@ export function CardRanker({ isLight, active }) {
         }
       }
       if (starPick != null) {
-        if (current.kind !== "pending") return;
         e.preventDefault();
-        setDraftRank(starPick);
+        pickStarRating(starPick);
         return;
       }
 
@@ -626,7 +649,7 @@ export function CardRanker({ isLight, active }) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [active, user, queue.length, rankLoading, goPrev, goNext, current, canSubmit, submitRanking]);
+  }, [active, user, queue.length, rankLoading, goPrev, goNext, current, canSubmit, submitRanking, pickStarRating]);
 
   const imgUrl =
     current?.card?.image_url != null && String(current.card.image_url).trim() !== ""
@@ -770,26 +793,19 @@ export function CardRanker({ isLight, active }) {
                     </select>
                     <div className="flex w-full max-w-md justify-center gap-2.5 sm:gap-3" role="group" aria-label="Star rating 1 to 5">
                       {[1, 2, 3, 4, 5].map((n) => {
-                        const locked = current.kind === "rated";
-                        const cap = locked ? current.rating : draftRank;
+                        const cap = draftRank;
                         const filled = cap != null && cap >= 1 && cap <= 5 && n <= cap;
                         const isExact = cap === n;
-                        const starClass = locked
-                          ? filled
-                            ? `${starOn} cursor-default opacity-95`
-                            : `${starDisabled} opacity-55`
-                          : filled
-                            ? starOn
-                            : starIdle;
+                        const starClass = filled ? starOn : starIdle;
                         return (
                           <button
                             key={n}
                             type="button"
-                            disabled={locked || rankLoading}
+                            disabled={rankLoading}
                             aria-pressed={isExact}
                             aria-label={`${n} star${n === 1 ? "" : "s"}`}
                             className={starClass}
-                            onClick={() => setDraftRank(n)}
+                            onClick={() => pickStarRating(n)}
                           >
                             ★
                           </button>
@@ -920,7 +936,7 @@ export function CardRanker({ isLight, active }) {
                   />
                 </label>
                 <button type="button" className={btnPrimary} disabled={!canSubmit} onClick={() => void submitRanking()}>
-                  {submitting ? "Saving…" : current?.kind === "rated" ? "Save notes" : "Submit rating"}
+                  {submitting ? "Saving…" : current?.kind === "rated" ? "Save changes" : "Submit rating"}
                 </button>
                 {saveError ? (
                   <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100">

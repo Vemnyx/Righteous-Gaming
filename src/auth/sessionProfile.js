@@ -2,7 +2,35 @@
 
 export const SESSION_PROFILE_STORAGE_KEY = "rg-session-profile";
 
-/** @typedef {{ id?: number, email?: string, username?: string|null, uid?: string, role?: number|null, created_at?: string }} SessionProfile */
+/** @typedef {{ card_rater_quick_submit?: boolean }} UserSettings */
+
+/** @typedef {{ id?: number, email?: string, username?: string|null, uid?: string, role?: number|null, created_at?: string, settings?: UserSettings }} SessionProfile */
+
+/**
+ * @param {SessionProfile | null | undefined} profile
+ * @returns {UserSettings}
+ */
+export function userSettingsFromProfile(profile) {
+  const s = profile?.settings;
+  return {
+    card_rater_quick_submit: s?.card_rater_quick_submit === true,
+  };
+}
+
+/**
+ * @param {SessionProfile | null | undefined} profile
+ * @returns {string}
+ */
+export function sessionProfileDisplayName(profile) {
+  const uname = profile?.username != null ? String(profile.username).trim() : "";
+  if (uname) return uname;
+  const email = profile?.email != null ? String(profile.email).trim() : "";
+  if (email) {
+    const local = email.split("@")[0]?.trim();
+    return local || email;
+  }
+  return "Account";
+}
 
 /**
  * Loads cached profile only if `uid` matches the signed-in Firebase user.
@@ -15,7 +43,7 @@ export function readSessionProfile(expectedUid) {
     if (!raw) return null;
     const o = JSON.parse(raw);
     if (!o || typeof o !== "object" || o.uid !== expectedUid) return null;
-    return o;
+    return { ...o, settings: userSettingsFromProfile(o) };
   } catch {
     return null;
   }
@@ -50,5 +78,31 @@ export async function fetchSessionProfileFromApi(idToken) {
     const t = await res.text();
     throw new Error(t || `session/me failed: ${res.status}`);
   }
-  return res.json();
+  const data = await res.json();
+  return { ...data, settings: userSettingsFromProfile(data) };
+}
+
+/**
+ * @param {string} idToken
+ * @param {UserSettings} settings
+ * @returns {Promise<UserSettings>}
+ */
+export async function patchUserSettingsFromApi(idToken, settings) {
+  const res = await fetch("/api/me/settings", {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(settings),
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(t || `me/settings failed: ${res.status}`);
+  }
+  const data = await res.json();
+  const saved = data?.settings;
+  return {
+    card_rater_quick_submit: saved?.card_rater_quick_submit === true,
+  };
 }

@@ -266,6 +266,59 @@ func (h *userHTTP) sessionMe(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(u)
 }
 
+type patchUserSettingsRequest struct {
+	CardRaterQuickSubmit *bool `json:"card_rater_quick_submit"`
+}
+
+type userSettingsResponse struct {
+	Settings domain.UserSettings `json:"settings"`
+}
+
+func (h *userHTTP) patchMySettings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	idToken := bearerIDToken(r.Header.Get("Authorization"))
+	if idToken == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var body patchUserSettingsRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeMessageError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if body.CardRaterQuickSubmit == nil {
+		writeFieldError(w, http.StatusBadRequest, "card_rater_quick_submit", "required")
+		return
+	}
+	settings, err := h.svc.UpdateUserSettingsForIDToken(r.Context(), idToken, domain.UserSettings{
+		CardRaterQuickSubmit: *body.CardRaterQuickSubmit,
+	})
+	if err != nil {
+		if errors.Is(err, service.ErrValidation) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, service.ErrUnauthenticated) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if errors.Is(err, service.ErrUserNotFound) {
+			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
+		log.Error("failed to update user settings", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(userSettingsResponse{Settings: settings})
+}
+
 func (h *userHTTP) registrationByCode(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -358,7 +411,7 @@ func (h *userHTTP) adminRegisterUser(w http.ResponseWriter, r *http.Request) {
 		UserID:   user.ID,
 		Email:    email,
 		Code:     code,
-		ExpireAt: time.Now().Add(2 * time.Hour),
+		ExpireAt: time.Now().Add(12 * time.Hour),
 	}); err != nil {
 		log.Error("failed to upsert user registration", "error", err, "email", email, "user_id", user.ID)
 		http.Error(w, "internal server error", http.StatusInternalServerError)

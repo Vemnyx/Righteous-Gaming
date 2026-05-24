@@ -227,7 +227,7 @@ func (h *cardRatingsHTTP) listMyRatings(w http.ResponseWriter, r *http.Request) 
 
 const maxRatingNotesBytes = 2048
 
-// POST /api/me/card-ratings — new rating (1–5) or notes-only update (rating must match stored).
+// POST /api/me/card-ratings — create a rating or update an existing rating and notes.
 func (h *cardRatingsHTTP) saveMyRating(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -323,11 +323,7 @@ func (h *cardRatingsHTTP) saveMyRating(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if existing.Rating != body.Rating {
-		writeFieldError(w, http.StatusBadRequest, "rating", "rating cannot be changed after submission")
-		return
-	}
-	if err := h.app.Repo.UpdateUserCardRatingNotes(r.Context(), u.ID, body.RaterID, body.CardID, body.Notes); err != nil {
+	if err := h.app.Repo.UpdateUserCardRating(r.Context(), u.ID, body.RaterID, body.CardID, body.Rating, body.Notes); err != nil {
 		if errors.Is(err, repository.ErrUserCardRatingNotFound) {
 			writeFieldError(w, http.StatusNotFound, "card_id", "rating not found")
 			return

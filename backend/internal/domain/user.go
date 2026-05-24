@@ -21,6 +21,11 @@ func (r Role) Valid() bool {
 	}
 }
 
+// UserSettings holds per-user app preferences (from user_settings).
+type UserSettings struct {
+	CardRaterQuickSubmit bool `json:"card_rater_quick_submit"`
+}
+
 // User mirrors persisted user fields and supports JSON request/response bodies.
 // For create requests, omit "role" or send null to default to member (RoleMember).
 // Using *Role allows omit vs zero (which would otherwise imply RoleAdmin).
@@ -31,4 +36,5 @@ type User struct {
 	UID       string     `json:"uid"`
 	Role      *Role      `json:"role,omitempty"`
 	CreatedAt *time.Time `json:"created_at,omitempty"`
+	Settings  UserSettings `json:"settings"`
 }

@@ -11,12 +11,16 @@ import { CardRaterAdmin } from "../components/CardRaterAdmin";
 import { CardRaterRedirect } from "../components/CardRaterRedirect";
 import { CardRaterAnalytics } from "../components/CardRaterAnalytics";
 import { SetsAdmin } from "../components/SetsAdmin";
+import { UserAccountMenu } from "../components/UserAccountMenu";
+import { UserSettings } from "../components/UserSettings";
+import { sessionProfileDisplayName } from "../auth/sessionProfile";
 
 /** Persisted before opening Invite User so Back restores the dashboard URL (e.g. `/admin/users`). */
 const SESSION_INVITE_RETURN_KEY = "rg-dashboard-return-url";
 
 const RESOURCES_TAB_ID = "resources";
 const ADMIN_TAB_ID = "admin";
+const SETTINGS_TAB_ID = "settings";
 
 /** Default Admin sub-path when opening the Admin tab from the UI (not from the address bar). */
 const DEFAULT_ADMIN_SEGMENT = "users";
@@ -60,6 +64,7 @@ function buildDashboardPathname(
   adminChild,
   announcementForm = null,
 ) {
+  if (tabId === SETTINGS_TAB_ID) return "/settings";
   if (tabId === ADMIN_TAB_ID) {
     const seg =
       adminChild === "users" ||
@@ -333,6 +338,18 @@ function parseDashboardPathname(pathname) {
     return { kind: "invalid" };
   }
 
+  if (a === "settings" && b === undefined && c === undefined && rest.length === 0) {
+    return {
+      kind: "ok",
+      tabId: SETTINGS_TAB_ID,
+      resourcesChild: null,
+      resourcesCardIdentifier: null,
+      resourcesCardRaterId: null,
+      adminChild: null,
+      adminAnnouncementForm: null,
+    };
+  }
+
   /** Legacy dashboard URL before Admin submenu (`/users` → `/admin/users`). */
   if (a === "users" && b === undefined && c === undefined && rest.length === 0) {
     return {
@@ -423,6 +440,17 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
     adminChild,
     adminAnnouncementForm,
   } = parsed;
+
+  if (tabId === SETTINGS_TAB_ID) {
+    return {
+      tabId: SETTINGS_TAB_ID,
+      resourcesChild: null,
+      resourcesCardIdentifier: null,
+      resourcesCardRaterId: null,
+      adminChild: null,
+      adminAnnouncementForm: null,
+    };
+  }
 
   if (!tabsAllowed.some((t) => t.id === tabId)) {
     return {
@@ -764,6 +792,18 @@ export default function Dashboard({ onNavigate }) {
     setCardRaterPlayAtRoot(true);
   }, []);
 
+  const openSettings = useCallback(() => {
+    setActiveTab(SETTINGS_TAB_ID);
+    setResourcesChild(null);
+    setResourcesCardIdentifier(null);
+    setResourcesCardRaterId(null);
+    setCardRaterPlayAtRoot(false);
+    setAdminChild(null);
+    setAdminAnnouncementForm(null);
+    setMobileNavOpen(false);
+    pushDashboardUrl(SETTINGS_TAB_ID, null, null, null, null, null);
+  }, []);
+
   useEffect(() => {
     function syncFromBrowser() {
       const resolved = resolveDashboardLocation(
@@ -1005,17 +1045,12 @@ export default function Dashboard({ onNavigate }) {
             <div className="hidden shrink-0 md:block">
               <ThemeToggle theme={theme} onChange={setTheme} />
             </div>
-            <button
-              type="button"
-              className={
-                isLight
-                  ? "min-h-11 cursor-pointer rounded-lg border border-white/15 bg-[#5f5b6c] px-4 py-2.5 text-[0.875rem] font-semibold text-white hover:brightness-110 sm:min-h-12"
-                  : "min-h-11 cursor-pointer rounded-lg border border-white/[0.22] bg-black/35 px-4 py-2.5 text-[0.875rem] font-semibold text-white hover:border-[rgba(232,197,71,0.45)] sm:min-h-12"
-              }
-              onClick={() => void signOut()}
-            >
-              Sign out
-            </button>
+            <UserAccountMenu
+              isLight={isLight}
+              label={sessionProfileDisplayName(sessionProfile)}
+              onSettings={openSettings}
+              onSignOut={() => void signOut()}
+            />
           </div>
           </header>
 
@@ -1306,6 +1341,17 @@ export default function Dashboard({ onNavigate }) {
             )}
           </Tabs.Content>
         ))}
+
+        <Tabs.Content
+          value={SETTINGS_TAB_ID}
+          className={`relative z-0 flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl border p-8 outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 sm:p-10 ${
+            isLight
+              ? "border-white/[0.12] bg-gradient-to-b from-[#434054] via-[#353145] to-[#292433] shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
+              : "border-white/[0.26] bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.06]"
+          }`}
+        >
+          <UserSettings isLight={isLight} active={activeTab === SETTINGS_TAB_ID} />
+        </Tabs.Content>
       </Tabs.Root>
     </div>
   );

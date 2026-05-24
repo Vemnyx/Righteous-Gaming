@@ -20,6 +20,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("POST /api/users", uh.createUser)
 	mux.HandleFunc("POST /api/complete-registration", uh.completeRegistration)
 	mux.HandleFunc("GET /api/session/me", uh.sessionMe)
+	mux.HandleFunc("PATCH /api/me/settings", uh.patchMySettings)
 	mux.HandleFunc("GET /api/me/card-ratings", rh.listMyRatings)
 	mux.HandleFunc("POST /api/me/card-ratings", rh.saveMyRating)
 	mux.HandleFunc("GET /api/me/cards-to-rate", rh.listMyCardsToRate)
