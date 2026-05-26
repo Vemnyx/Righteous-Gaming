@@ -767,6 +767,31 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 		typeF = &v
 	}
 
+	parseOffset := func(key string) (int, bool) {
+		s := strings.TrimSpace(r.URL.Query().Get(key))
+		if s == "" {
+			return 0, true
+		}
+		v, err := strconv.Atoi(s)
+		if err != nil || v < 0 {
+			writeFieldError(w, http.StatusBadRequest, key, "must be a non-negative integer")
+			return 0, false
+		}
+		return v, true
+	}
+	parseLimit := func(key string, defaultVal int) (int, bool) {
+		s := strings.TrimSpace(r.URL.Query().Get(key))
+		if s == "" {
+			return defaultVal, true
+		}
+		v, err := strconv.Atoi(s)
+		if err != nil || v < 1 || v > 200 {
+			writeFieldError(w, http.StatusBadRequest, key, "must be between 1 and 200")
+			return 0, false
+		}
+		return v, true
+	}
+
 	topLimit := 10
 	if s := strings.TrimSpace(r.URL.Query().Get("top_limit")); s != "" {
 		v, err := strconv.Atoi(s)
@@ -776,17 +801,59 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 		}
 		topLimit = v
 	}
-	tableLimit := 50
+	ratedOffset, ok := parseOffset("rated_offset")
+	if !ok {
+		return
+	}
+	ratedLimit, ok := parseLimit("rated_limit", 50)
+	if !ok {
+		return
+	}
+	// Legacy single-table params
+	if s := strings.TrimSpace(r.URL.Query().Get("table_offset")); s != "" {
+		v, err := strconv.Atoi(s)
+		if err != nil || v < 0 {
+			writeFieldError(w, http.StatusBadRequest, "table_offset", "must be a non-negative integer")
+			return
+		}
+		ratedOffset = v
+	}
 	if s := strings.TrimSpace(r.URL.Query().Get("table_limit")); s != "" {
 		v, err := strconv.Atoi(s)
 		if err != nil || v < 1 || v > 200 {
 			writeFieldError(w, http.StatusBadRequest, "table_limit", "must be between 1 and 200")
 			return
 		}
-		tableLimit = v
+		ratedLimit = v
+	}
+	controversialOffset, ok := parseOffset("controversial_offset")
+	if !ok {
+		return
+	}
+	controversialLimit, ok := parseLimit("controversial_limit", 50)
+	if !ok {
+		return
+	}
+	talkedOffset, ok := parseOffset("talked_offset")
+	if !ok {
+		return
+	}
+	talkedLimit, ok := parseLimit("talked_limit", 50)
+	if !ok {
+		return
 	}
 
-	analytics, err := h.app.Repo.CardRaterAnalytics(r.Context(), id, classF, talentF, typeF, topLimit, tableLimit)
+	paging := repository.CardRaterAnalyticsPaging{
+		TopLimit:            topLimit,
+		RatedOffset:         ratedOffset,
+		RatedLimit:          ratedLimit,
+		ControversialOffset: controversialOffset,
+		ControversialLimit:  controversialLimit,
+		TalkedOffset:        talkedOffset,
+		TalkedLimit:         talkedLimit,
+	}
+
+	analytics, err := h.app.Repo.CardRaterAnalytics(r.Context(), id, classF, talentF, typeF, paging)
 	if err != nil {
 		log.Error("card rater analytics", "error", err, "id", id)
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
@@ -810,9 +877,9 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 	for _, e := range analytics.TopCards {
 		top = append(top, rankedJSON{Card: cardToJSON(&e.Card), AvgRating: e.AvgRating, VoteCount: e.VoteCount})
 	}
-	tbl := make([]rankedJSON, 0, len(analytics.RatedTable))
-	for _, e := range analytics.RatedTable {
-		tbl = append(tbl, rankedJSON{Card: cardToJSON(&e.Card), AvgRating: e.AvgRating, VoteCount: e.VoteCount})
+	tblRows := make([]rankedJSON, 0, len(analytics.RatedTable.Rows))
+	for _, e := range analytics.RatedTable.Rows {
+		tblRows = append(tblRows, rankedJSON{Card: cardToJSON(&e.Card), AvgRating: e.AvgRating, VoteCount: e.VoteCount})
 	}
 
 	type controversialJSON struct {
@@ -827,9 +894,24 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 		LowRatings     int      `json:"low_ratings"`
 		HighRatings    int      `json:"high_ratings"`
 	}
-	cont := make([]controversialJSON, 0, len(analytics.MostControversial))
-	for _, e := range analytics.MostControversial {
-		cont = append(cont, controversialJSON{
+	contTop := make([]controversialJSON, 0, len(analytics.ControversialTop))
+	for _, e := range analytics.ControversialTop {
+		contTop = append(contTop, controversialJSON{
+			Card:           cardToJSON(&e.Card),
+			MinRating:      e.MinRating,
+			MaxRating:      e.MaxRating,
+			Spread:         e.Spread,
+			StdDev:         e.StdDev,
+			RatingVariance: e.Variance,
+			AvgRating:      e.AvgRating,
+			VoteCount:      e.VoteCount,
+			LowRatings:     e.LowRatings,
+			HighRatings:    e.HighRatings,
+		})
+	}
+	contTbl := make([]controversialJSON, 0, len(analytics.ControversialTable.Rows))
+	for _, e := range analytics.ControversialTable.Rows {
+		contTbl = append(contTbl, controversialJSON{
 			Card:           cardToJSON(&e.Card),
 			MinRating:      e.MinRating,
 			MaxRating:      e.MaxRating,
@@ -849,9 +931,18 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 		VoteCount int      `json:"vote_count"`
 		NoteCount int      `json:"note_count"`
 	}
-	noted := make([]notedJSON, 0, len(analytics.MostTalkedAboutCards))
-	for _, e := range analytics.MostTalkedAboutCards {
-		noted = append(noted, notedJSON{
+	notedTop := make([]notedJSON, 0, len(analytics.TalkedTop))
+	for _, e := range analytics.TalkedTop {
+		notedTop = append(notedTop, notedJSON{
+			Card:      cardToJSON(&e.Card),
+			AvgRating: e.AvgRating,
+			VoteCount: e.VoteCount,
+			NoteCount: e.NoteCount,
+		})
+	}
+	notedTbl := make([]notedJSON, 0, len(analytics.TalkedTable.Rows))
+	for _, e := range analytics.TalkedTable.Rows {
+		notedTbl = append(notedTbl, notedJSON{
 			Card:      cardToJSON(&e.Card),
 			AvgRating: e.AvgRating,
 			VoteCount: e.VoteCount,
@@ -890,10 +981,31 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 			"talents": analytics.FilterOptions.Talents,
 			"types":   analytics.FilterOptions.CardTypes,
 		},
-		"top_cards":             top,
-		"rated_table":           tbl,
-		"most_controversial":    cont,
-		"most_talked_about_cards": noted,
+		"top_cards": top,
+		"rated_table": map[string]any{
+			"rows":   tblRows,
+			"total":  analytics.RatedTable.Total,
+			"offset": analytics.RatedTable.Offset,
+			"limit":  analytics.RatedTable.Limit,
+		},
+		"controversial_top": contTop,
+		"controversial_table": map[string]any{
+			"rows":   contTbl,
+			"total":  analytics.ControversialTable.Total,
+			"offset": analytics.ControversialTable.Offset,
+			"limit":  analytics.ControversialTable.Limit,
+		},
+		"talked_top": notedTop,
+		"talked_table": map[string]any{
+			"rows":   notedTbl,
+			"total":  analytics.TalkedTable.Total,
+			"offset": analytics.TalkedTable.Offset,
+			"limit":  analytics.TalkedTable.Limit,
+		},
+		// Legacy aliases
+		"most_controversial":      contTop,
+		"most_talked_about_cards": notedTop,
+		"ranked_table":            tblRows,
 	})
 }
 

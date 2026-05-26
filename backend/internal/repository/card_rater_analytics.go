@@ -66,16 +66,89 @@ type CardRaterUserAvgRating struct {
 	RatingCount  int
 }
 
+// CardRaterRatedListPage is a paginated list of rated cards.
+type CardRaterRatedListPage struct {
+	Rows   []CardRaterRatedCard
+	Total  int
+	Offset int
+	Limit  int
+}
+
+// CardRaterControversialListPage is a paginated list of controversial cards.
+type CardRaterControversialListPage struct {
+	Rows   []CardRaterControversialCard
+	Total  int
+	Offset int
+	Limit  int
+}
+
+// CardRaterNotedListPage is a paginated list of cards with notes.
+type CardRaterNotedListPage struct {
+	Rows   []CardRaterNotedCard
+	Total  int
+	Offset int
+	Limit  int
+}
+
+// CardRaterAnalyticsPaging controls top-N and per-list table pagination.
+type CardRaterAnalyticsPaging struct {
+	TopLimit            int
+	RatedOffset         int
+	RatedLimit          int
+	ControversialOffset int
+	ControversialLimit  int
+	TalkedOffset        int
+	TalkedLimit         int
+}
+
 // CardRaterAnalytics aggregates analytics for one card_rater id.
 type CardRaterAnalytics struct {
-	Summary              CardRaterSummaryStats
-	Distribution         []CardRaterRatingBin
-	FilterOptions        CardRaterFilterOptions
-	UserAvgRatings       []CardRaterUserAvgRating
-	TopCards             []CardRaterRatedCard
-	RatedTable           []CardRaterRatedCard
-	MostControversial    []CardRaterControversialCard
-	MostTalkedAboutCards []CardRaterNotedCard
+	Summary           CardRaterSummaryStats
+	Distribution      []CardRaterRatingBin
+	FilterOptions     CardRaterFilterOptions
+	UserAvgRatings    []CardRaterUserAvgRating
+	TopCards          []CardRaterRatedCard
+	RatedTable        CardRaterRatedListPage
+	ControversialTop  []CardRaterControversialCard
+	ControversialTable CardRaterControversialListPage
+	TalkedTop         []CardRaterNotedCard
+	TalkedTable       CardRaterNotedListPage
+}
+
+func clampAnalyticsPaging(p *CardRaterAnalyticsPaging) {
+	if p.TopLimit <= 0 {
+		p.TopLimit = 10
+	}
+	if p.TopLimit > 50 {
+		p.TopLimit = 50
+	}
+	if p.RatedLimit <= 0 {
+		p.RatedLimit = 50
+	}
+	if p.RatedLimit > 200 {
+		p.RatedLimit = 200
+	}
+	if p.RatedOffset < 0 {
+		p.RatedOffset = 0
+	}
+	if p.ControversialLimit <= 0 {
+		p.ControversialLimit = 50
+	}
+	if p.ControversialLimit > 200 {
+		p.ControversialLimit = 200
+	}
+	if p.ControversialOffset < 0 {
+		p.ControversialOffset = 0
+	}
+	if p.TalkedLimit <= 0 {
+		p.TalkedLimit = 50
+	}
+	if p.TalkedLimit > 200 {
+		p.TalkedLimit = 200
+	}
+	if p.TalkedOffset < 0 {
+		p.TalkedOffset = 0
+	}
 }
 
 func scanCardStatsRow(row pgx.Row) (CardRaterRatedCard, error) {
@@ -226,22 +299,12 @@ ORDER BY avg_rating DESC NULLS LAST, vote_count DESC, c.id ASC
 `
 
 // CardRaterAnalytics loads summary, distribution, filter facets, and ranked card lists for a rater session.
-func (r *Repository) CardRaterAnalytics(ctx context.Context, raterID int, classFilter, talentFilter, typeFilter *int16, topLimit, tableLimit int) (*CardRaterAnalytics, error) {
+func (r *Repository) CardRaterAnalytics(ctx context.Context, raterID int, classFilter, talentFilter, typeFilter *int16, paging CardRaterAnalyticsPaging) (*CardRaterAnalytics, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
-	if topLimit <= 0 {
-		topLimit = 10
-	}
-	if topLimit > 50 {
-		topLimit = 50
-	}
-	if tableLimit <= 0 {
-		tableLimit = 50
-	}
-	if tableLimit > 200 {
-		tableLimit = 200
-	}
+	clampAnalyticsPaging(&paging)
+	topLimit := paging.TopLimit
 
 	var classArg any
 	var talentArg any
@@ -257,12 +320,14 @@ func (r *Repository) CardRaterAnalytics(ctx context.Context, raterID int, classF
 	}
 
 	out := &CardRaterAnalytics{
-		Distribution:         []CardRaterRatingBin{},
-		UserAvgRatings:        []CardRaterUserAvgRating{},
-		TopCards:             []CardRaterRatedCard{},
-		RatedTable:           []CardRaterRatedCard{},
-		MostControversial:    []CardRaterControversialCard{},
-		MostTalkedAboutCards: []CardRaterNotedCard{},
+		Distribution:      []CardRaterRatingBin{},
+		UserAvgRatings:    []CardRaterUserAvgRating{},
+		TopCards:          []CardRaterRatedCard{},
+		RatedTable:        CardRaterRatedListPage{Offset: paging.RatedOffset, Limit: paging.RatedLimit},
+		ControversialTop:  []CardRaterControversialCard{},
+		ControversialTable: CardRaterControversialListPage{Offset: paging.ControversialOffset, Limit: paging.ControversialLimit},
+		TalkedTop:         []CardRaterNotedCard{},
+		TalkedTable:       CardRaterNotedListPage{Offset: paging.TalkedOffset, Limit: paging.TalkedLimit},
 	}
 
 	const summaryQ = `
@@ -383,8 +448,24 @@ ORDER BY 1`
 		return nil, fmt.Errorf("repository: card rater analytics top cards rows: %w", err)
 	}
 
-	tableQ := ratedCardsFromSession + ` LIMIT $5`
-	tableRows, err := r.pool.Query(ctx, tableQ, raterID, classArg, talentArg, typeArg, tableLimit)
+	const ratedCountQ = `
+SELECT COUNT(*)::int
+FROM (
+	SELECT c.id
+	FROM user_card_ratings r
+	INNER JOIN cards c ON c.id = r.card_id
+	WHERE r.rater_id = $1
+		AND ($2::smallint IS NULL OR $2 = ANY(c.classes))
+		AND ($3::smallint IS NULL OR $3 = ANY(c.talents))
+		AND ($4::smallint IS NULL OR c.type = $4)
+	GROUP BY c.id
+) sub`
+	if err := r.pool.QueryRow(ctx, ratedCountQ, raterID, classArg, talentArg, typeArg).Scan(&out.RatedTable.Total); err != nil {
+		return nil, fmt.Errorf("repository: card rater analytics rated table count: %w", err)
+	}
+
+	tableQ := ratedCardsFromSession + ` OFFSET $5 LIMIT $6`
+	tableRows, err := r.pool.Query(ctx, tableQ, raterID, classArg, talentArg, typeArg, paging.RatedOffset, paging.RatedLimit)
 	if err != nil {
 		return nil, fmt.Errorf("repository: card rater analytics rated table: %w", err)
 	}
@@ -394,13 +475,13 @@ ORDER BY 1`
 		if err != nil {
 			return nil, fmt.Errorf("repository: card rater analytics rated table scan: %w", err)
 		}
-		out.RatedTable = append(out.RatedTable, e)
+		out.RatedTable.Rows = append(out.RatedTable.Rows, e)
 	}
 	if err := tableRows.Err(); err != nil {
 		return nil, fmt.Errorf("repository: card rater analytics rated table rows: %w", err)
 	}
 
-	const controversialQ = `
+	const controversialSelect = `
 SELECT ` + cardSelectColumnsFromC + `, MAX(s.name) AS set_name,
 	MIN(r.rating)::smallint AS min_rating,
 	MAX(r.rating)::smallint AS max_rating,
@@ -416,26 +497,59 @@ INNER JOIN cards c ON c.id = r.card_id
 INNER JOIN sets s ON s.id = c.set_id
 WHERE r.rater_id = $1
 GROUP BY c.id
-HAVING COUNT(*) >= 2 AND VAR_POP(r.rating::double precision) IS NOT NULL
-ORDER BY rating_variance DESC NULLS LAST, vote_count DESC, c.id ASC
-LIMIT 10`
-	contRows, err := r.pool.Query(ctx, controversialQ, raterID)
-	if err != nil {
-		return nil, fmt.Errorf("repository: card rater analytics controversial: %w", err)
-	}
-	defer contRows.Close()
-	for contRows.Next() {
-		e, err := scanCardControversialRow(contRows)
-		if err != nil {
-			return nil, fmt.Errorf("repository: card rater analytics controversial scan: %w", err)
-		}
-		out.MostControversial = append(out.MostControversial, e)
-	}
-	if err := contRows.Err(); err != nil {
-		return nil, fmt.Errorf("repository: card rater analytics controversial rows: %w", err)
+HAVING COUNT(*) >= 2 AND VAR_POP(r.rating::double precision) IS NOT NULL`
+	const controversialOrder = `
+ORDER BY rating_variance DESC NULLS LAST, vote_count DESC, c.id ASC`
+
+	const controversialCountQ = `
+SELECT COUNT(*)::int
+FROM (
+	SELECT c.id
+	FROM user_card_ratings r
+	INNER JOIN cards c ON c.id = r.card_id
+	WHERE r.rater_id = $1
+	GROUP BY c.id
+	HAVING COUNT(*) >= 2 AND VAR_POP(r.rating::double precision) IS NOT NULL
+) sub`
+	if err := r.pool.QueryRow(ctx, controversialCountQ, raterID).Scan(&out.ControversialTable.Total); err != nil {
+		return nil, fmt.Errorf("repository: card rater analytics controversial count: %w", err)
 	}
 
-	const notedQ = `
+	contTopQ := controversialSelect + controversialOrder + ` LIMIT $2`
+	contTopRows, err := r.pool.Query(ctx, contTopQ, raterID, topLimit)
+	if err != nil {
+		return nil, fmt.Errorf("repository: card rater analytics controversial top: %w", err)
+	}
+	defer contTopRows.Close()
+	for contTopRows.Next() {
+		e, err := scanCardControversialRow(contTopRows)
+		if err != nil {
+			return nil, fmt.Errorf("repository: card rater analytics controversial top scan: %w", err)
+		}
+		out.ControversialTop = append(out.ControversialTop, e)
+	}
+	if err := contTopRows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: card rater analytics controversial top rows: %w", err)
+	}
+
+	contTableQ := controversialSelect + controversialOrder + ` OFFSET $2 LIMIT $3`
+	contTableRows, err := r.pool.Query(ctx, contTableQ, raterID, paging.ControversialOffset, paging.ControversialLimit)
+	if err != nil {
+		return nil, fmt.Errorf("repository: card rater analytics controversial table: %w", err)
+	}
+	defer contTableRows.Close()
+	for contTableRows.Next() {
+		e, err := scanCardControversialRow(contTableRows)
+		if err != nil {
+			return nil, fmt.Errorf("repository: card rater analytics controversial table scan: %w", err)
+		}
+		out.ControversialTable.Rows = append(out.ControversialTable.Rows, e)
+	}
+	if err := contTableRows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: card rater analytics controversial table rows: %w", err)
+	}
+
+	const notedSelect = `
 SELECT ` + cardSelectColumnsFromC + `, MAX(s.name) AS set_name,
 	AVG(r.rating)::float8 AS avg_rating,
 	COUNT(*)::int AS vote_count,
@@ -445,23 +559,56 @@ INNER JOIN cards c ON c.id = r.card_id
 INNER JOIN sets s ON s.id = c.set_id
 WHERE r.rater_id = $1
 GROUP BY c.id
-HAVING COUNT(*) FILTER (WHERE r.notes IS NOT NULL AND btrim(r.notes) <> '') > 0
-ORDER BY note_count DESC, vote_count DESC, c.id ASC
-LIMIT 10`
-	noteRows, err := r.pool.Query(ctx, notedQ, raterID)
+HAVING COUNT(*) FILTER (WHERE r.notes IS NOT NULL AND btrim(r.notes) <> '') > 0`
+	const notedOrder = `
+ORDER BY note_count DESC, vote_count DESC, c.id ASC`
+
+	const notedCountQ = `
+SELECT COUNT(*)::int
+FROM (
+	SELECT c.id
+	FROM user_card_ratings r
+	INNER JOIN cards c ON c.id = r.card_id
+	WHERE r.rater_id = $1
+	GROUP BY c.id
+	HAVING COUNT(*) FILTER (WHERE r.notes IS NOT NULL AND btrim(r.notes) <> '') > 0
+) sub`
+	if err := r.pool.QueryRow(ctx, notedCountQ, raterID).Scan(&out.TalkedTable.Total); err != nil {
+		return nil, fmt.Errorf("repository: card rater analytics noted count: %w", err)
+	}
+
+	noteTopQ := notedSelect + notedOrder + ` LIMIT $2`
+	noteTopRows, err := r.pool.Query(ctx, noteTopQ, raterID, topLimit)
 	if err != nil {
-		return nil, fmt.Errorf("repository: card rater analytics noted cards: %w", err)
+		return nil, fmt.Errorf("repository: card rater analytics noted top: %w", err)
 	}
-	defer noteRows.Close()
-	for noteRows.Next() {
-		e, err := scanCardNotedRow(noteRows)
+	defer noteTopRows.Close()
+	for noteTopRows.Next() {
+		e, err := scanCardNotedRow(noteTopRows)
 		if err != nil {
-			return nil, fmt.Errorf("repository: card rater analytics noted cards scan: %w", err)
+			return nil, fmt.Errorf("repository: card rater analytics noted top scan: %w", err)
 		}
-		out.MostTalkedAboutCards = append(out.MostTalkedAboutCards, e)
+		out.TalkedTop = append(out.TalkedTop, e)
 	}
-	if err := noteRows.Err(); err != nil {
-		return nil, fmt.Errorf("repository: card rater analytics noted cards rows: %w", err)
+	if err := noteTopRows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: card rater analytics noted top rows: %w", err)
+	}
+
+	noteTableQ := notedSelect + notedOrder + ` OFFSET $2 LIMIT $3`
+	noteTableRows, err := r.pool.Query(ctx, noteTableQ, raterID, paging.TalkedOffset, paging.TalkedLimit)
+	if err != nil {
+		return nil, fmt.Errorf("repository: card rater analytics noted table: %w", err)
+	}
+	defer noteTableRows.Close()
+	for noteTableRows.Next() {
+		e, err := scanCardNotedRow(noteTableRows)
+		if err != nil {
+			return nil, fmt.Errorf("repository: card rater analytics noted table scan: %w", err)
+		}
+		out.TalkedTable.Rows = append(out.TalkedTable.Rows, e)
+	}
+	if err := noteTableRows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: card rater analytics noted table rows: %w", err)
 	}
 
 	return out, nil

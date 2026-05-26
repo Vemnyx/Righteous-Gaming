@@ -21,6 +21,96 @@ function cardIdFromRecord(card) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+const TABLE_PAGE_SIZE = 50;
+
+/**
+ * @param {unknown} pageObj
+ * @param {unknown[]} [legacyRows]
+ */
+function parseListPage(pageObj, legacyRows = []) {
+  if (pageObj && typeof pageObj === "object") {
+    const p = /** @type {Record<string, unknown>} */ (pageObj);
+    const rows = Array.isArray(p.rows) ? p.rows : [];
+    const total = typeof p.total === "number" ? p.total : Number(p.total);
+    const offset = typeof p.offset === "number" ? p.offset : Number(p.offset);
+    const limit = typeof p.limit === "number" ? p.limit : Number(p.limit);
+    return {
+      rows,
+      total: Number.isFinite(total) ? total : rows.length,
+      offset: Number.isFinite(offset) ? offset : 0,
+      limit: Number.isFinite(limit) ? limit : TABLE_PAGE_SIZE,
+    };
+  }
+  const rows = Array.isArray(legacyRows) ? legacyRows : [];
+  return { rows, total: rows.length, offset: 0, limit: TABLE_PAGE_SIZE };
+}
+
+/** @param {{ label: string, tip: string, className?: string }} props */
+function ThWithTooltip({ label, tip, className = "py-2 pr-3 font-semibold" }) {
+  return (
+    <th className={className}>
+      <span
+        className="inline-flex cursor-help items-center gap-1 border-b border-dotted border-[#f4f0fa]/30 decoration-[#f4f0fa]/30"
+        title={tip}
+      >
+        {label}
+      </span>
+    </th>
+  );
+}
+
+const CONTROVERSIAL_COLUMN_TIPS = {
+  variance:
+    "Population variance (VAR_POP) of all star ratings for this card. Higher means more disagreement; cards are ranked by this value.",
+  stddev:
+    "Population standard deviation (STDDEV_POP): square root of variance. Same units as star ratings—typical distance from the average.",
+  minMax: "Lowest and highest star rating anyone gave this card in the session.",
+  spread: "Range of ratings: highest star minus lowest star (max − min).",
+  avg: "Mean star rating across everyone who rated this card.",
+  votes: "Total number of ratings for this card (only cards with at least 2 ratings appear here).",
+  low: "Number of ratings of 1 or 2 stars.",
+  high: "Number of ratings of 4 or 5 stars.",
+};
+
+/**
+ * @param {{ pageIndex: number, pageSize: number, total: number, onPageChange: (nextIndex: number) => void, disabled?: boolean }} props
+ */
+function TablePagination({ pageIndex, pageSize, total, onPageChange, disabled }) {
+  const totalPages = Math.max(1, Math.ceil(Math.max(0, total) / pageSize));
+  const safeIndex = Math.min(Math.max(0, pageIndex), totalPages - 1);
+  const start = total === 0 ? 0 : safeIndex * pageSize + 1;
+  const end = Math.min(total, (safeIndex + 1) * pageSize);
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+      <p className="m-0 text-[0.8rem] text-[#f4f0fa]/60">
+        {total === 0 ? "No cards" : `Showing ${start}–${end} of ${total}`}
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={disabled || safeIndex <= 0}
+          className="rounded-lg border border-white/[0.18] bg-black/30 px-3 py-1.5 text-[0.78rem] font-semibold text-[#f4f0fa]/90 disabled:cursor-not-allowed disabled:opacity-45 hover:bg-white/[0.06]"
+          onClick={() => onPageChange(safeIndex - 1)}
+        >
+          Previous
+        </button>
+        <span className="text-[0.78rem] tabular-nums text-[#f4f0fa]/70">
+          Page {safeIndex + 1} of {totalPages}
+        </span>
+        <button
+          type="button"
+          disabled={disabled || safeIndex >= totalPages - 1}
+          className="rounded-lg border border-white/[0.18] bg-black/30 px-3 py-1.5 text-[0.78rem] font-semibold text-[#f4f0fa]/90 disabled:cursor-not-allowed disabled:opacity-45 hover:bg-white/[0.06]"
+          onClick={() => onPageChange(safeIndex + 1)}
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** @param {string | undefined | null} iso */
 function formatDateTime(iso) {
   if (iso == null || iso === "") return "—";
@@ -44,6 +134,13 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
   const [filterType, setFilterType] = useState("");
 
   const [resultsTab, setResultsTab] = useState(/** @type {'top_rated' | 'controversial' | 'talked'} */ ("top_rated"));
+  const [tablePage, setTablePage] = useState(
+    /** @type {{ top_rated: number, controversial: number, talked: number }} */ ({
+      top_rated: 0,
+      controversial: 0,
+      talked: 0,
+    }),
+  );
 
   const [cardDetailModal, setCardDetailModal] = useState({
     open: false,
@@ -76,7 +173,12 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
       if (t != null) qs.set("talent", String(t));
       if (ty != null) qs.set("type", String(ty));
       qs.set("top_limit", "10");
-      qs.set("table_limit", "50");
+      qs.set("rated_offset", String(tablePage.top_rated * TABLE_PAGE_SIZE));
+      qs.set("rated_limit", String(TABLE_PAGE_SIZE));
+      qs.set("controversial_offset", String(tablePage.controversial * TABLE_PAGE_SIZE));
+      qs.set("controversial_limit", String(TABLE_PAGE_SIZE));
+      qs.set("talked_offset", String(tablePage.talked * TABLE_PAGE_SIZE));
+      qs.set("talked_limit", String(TABLE_PAGE_SIZE));
       const q = qs.toString();
       const res = await fetch(`/api/card-raters/${idNum}/analytics${q ? `?${q}` : ""}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -89,7 +191,11 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
     } finally {
       setLoading(false);
     }
-  }, [user, idNum, filterClass, filterTalent, filterType]);
+  }, [user, idNum, filterClass, filterTalent, filterType, tablePage]);
+
+  useEffect(() => {
+    setTablePage({ top_rated: 0, controversial: 0, talked: 0 });
+  }, [filterClass, filterTalent, filterType]);
 
   useEffect(() => {
     if (!active || !user || idNum <= 0) return undefined;
@@ -111,13 +217,34 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
     const dist = Array.isArray(o.rating_distribution) ? o.rating_distribution : [];
     const fo = o.filter_options && typeof o.filter_options === "object" ? /** @type {Record<string, unknown>} */ (o.filter_options) : null;
     const top = Array.isArray(o.top_cards) ? o.top_cards : [];
-    const ratedTbl = Array.isArray(o.rated_table) ? o.rated_table : [];
     const legacyTbl = Array.isArray(o.ranked_table) ? o.ranked_table : [];
-    const tbl = ratedTbl.length ? ratedTbl : legacyTbl;
-    const controversial = Array.isArray(o.most_controversial) ? o.most_controversial : [];
-    const talked = Array.isArray(o.most_talked_about_cards) ? o.most_talked_about_cards : [];
+    const ratedTable = parseListPage(o.rated_table, legacyTbl);
+    const controversialTop = Array.isArray(o.controversial_top)
+      ? o.controversial_top
+      : Array.isArray(o.most_controversial)
+        ? o.most_controversial
+        : [];
+    const controversialTable = parseListPage(o.controversial_table, controversialTop);
+    const talkedTop = Array.isArray(o.talked_top)
+      ? o.talked_top
+      : Array.isArray(o.most_talked_about_cards)
+        ? o.most_talked_about_cards
+        : [];
+    const talkedTable = parseListPage(o.talked_table, talkedTop);
     const userAvg = Array.isArray(o.user_avg_ratings) ? o.user_avg_ratings : [];
-    return { rater, summary, dist, fo, top, tbl, controversial, talked, userAvg };
+    return {
+      rater,
+      summary,
+      dist,
+      fo,
+      top,
+      ratedTable,
+      controversialTop,
+      controversialTable,
+      talkedTop,
+      talkedTable,
+      userAvg,
+    };
   }, [raw]);
 
   const distMap = useMemo(() => {
@@ -464,7 +591,8 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
                 </label>
               </div>
 
-              <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-5">
+              <p className={`m-0 mt-6 ${labelMuted}`}>Top 10</p>
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-5">
                 {parsed.top.map((row, idx) => {
                   if (!row || typeof row !== "object") return null;
                   const r = /** @type {Record<string, unknown>} */ (row);
@@ -511,25 +639,28 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
                 <p className="mt-4 text-[0.85rem] text-[#f4f0fa]/60">No cards match these filters (or no ratings yet).</p>
               ) : null}
 
-              {parsed.tbl?.length ? (
-                <div className="mt-8">
-                  <p className={`m-0 ${labelMuted}`}>Rated cards (top 50 in this view)</p>
-                  <div className="mt-3 overflow-x-auto">
-                    <table className="w-full min-w-[52rem] border-collapse text-left text-[0.78rem] text-[#f4f0fa]/88">
-                      <thead>
-                        <tr className="border-b border-white/[0.12] text-[0.68rem] uppercase tracking-wide text-[#f4f0fa]/50">
-                          <th className="py-2 pr-3 font-semibold">#</th>
-                          <th className="py-2 pr-3 font-semibold">Card</th>
-                          <th className="py-2 pr-3 font-semibold">Set</th>
-                          <th className="py-2 pr-3 font-semibold">Type</th>
-                          <th className="py-2 pr-3 font-semibold">Classes</th>
-                          <th className="py-2 pr-3 font-semibold">Talents</th>
-                          <th className="py-2 pr-3 font-semibold">Avg</th>
-                          <th className="py-2 font-semibold">Votes</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {parsed.tbl.map((row, idx) => {
+              <div className="mt-8">
+                <p className={`m-0 ${labelMuted}`}>All rated cards</p>
+                {parsed.ratedTable.total === 0 ? (
+                  <p className="mt-3 text-[0.85rem] text-[#f4f0fa]/60">No cards match these filters (or no ratings yet).</p>
+                ) : (
+                  <>
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="w-full min-w-[52rem] border-collapse text-left text-[0.78rem] text-[#f4f0fa]/88">
+                        <thead>
+                          <tr className="border-b border-white/[0.12] text-[0.68rem] uppercase tracking-wide text-[#f4f0fa]/50">
+                            <th className="py-2 pr-3 font-semibold">#</th>
+                            <th className="py-2 pr-3 font-semibold">Card</th>
+                            <th className="py-2 pr-3 font-semibold">Set</th>
+                            <th className="py-2 pr-3 font-semibold">Type</th>
+                            <th className="py-2 pr-3 font-semibold">Classes</th>
+                            <th className="py-2 pr-3 font-semibold">Talents</th>
+                            <th className="py-2 pr-3 font-semibold">Avg</th>
+                            <th className="py-2 font-semibold">Votes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {parsed.ratedTable.rows.map((row, idx) => {
                           if (!row || typeof row !== "object") return null;
                           const r = /** @type {Record<string, unknown>} */ (row);
                           const card = r.card && typeof r.card === "object" ? /** @type {Record<string, unknown>} */ (r.card) : null;
@@ -542,6 +673,7 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
                           const avg = typeof r.avg_rating === "number" ? r.avg_rating : Number(r.avg_rating);
                           const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
                           const cid = cardIdFromRecord(card);
+                          const rank = parsed.ratedTable.offset + idx + 1;
                           return (
                             <tr
                               key={typeof card.id === "number" ? card.id : idx}
@@ -558,7 +690,7 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
                               tabIndex={cid != null ? 0 : undefined}
                               role={cid != null ? "button" : undefined}
                             >
-                              <td className="py-2 pr-3 tabular-nums text-[#f4f0fa]/55">{idx + 1}</td>
+                              <td className="py-2 pr-3 tabular-nums text-[#f4f0fa]/55">{rank}</td>
                               <td className="py-2 pr-3">
                                 <span className="max-w-[16rem] truncate font-semibold text-violet-200/95">{name}</span>
                               </td>
@@ -587,11 +719,19 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
                             </tr>
                           );
                         })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : null}
+                        </tbody>
+                      </table>
+                    </div>
+                    <TablePagination
+                      pageIndex={tablePage.top_rated}
+                      pageSize={TABLE_PAGE_SIZE}
+                      total={parsed.ratedTable.total}
+                      disabled={loading}
+                      onPageChange={(next) => setTablePage((p) => ({ ...p, top_rated: next }))}
+                    />
+                  </>
+                )}
+              </div>
             </>
           ) : null}
 
@@ -600,83 +740,143 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
               <p className={`m-0 ${labelMuted}`}>
                 Population variance of ratings (VAR_POP); at least two votes per card. Higher means more disagreement.
               </p>
-              {parsed.controversial.length === 0 ? (
+              {parsed.controversialTable.total === 0 ? (
                 <p className="mt-3 text-[0.85rem] text-[#f4f0fa]/60">
                   No cards with at least two ratings in this session yet.
                 </p>
               ) : (
-                <div className="mt-3 overflow-x-auto">
-                  <table className="w-full min-w-[58rem] border-collapse text-left text-[0.78rem] text-[#f4f0fa]/88">
-                    <thead>
-                      <tr className="border-b border-white/[0.12] text-[0.68rem] uppercase tracking-wide text-[#f4f0fa]/50">
-                        <th className="py-2 pr-3 font-semibold">#</th>
-                        <th className="py-2 pr-3 font-semibold">Card</th>
-                        <th className="py-2 pr-3 font-semibold">Variance</th>
-                        <th className="py-2 pr-3 font-semibold">Std dev</th>
-                        <th className="py-2 pr-3 font-semibold">Min–max</th>
-                        <th className="py-2 pr-3 font-semibold">Spread</th>
-                        <th className="py-2 pr-3 font-semibold">Avg</th>
-                        <th className="py-2 pr-3 font-semibold">Votes</th>
-                        <th className="py-2 pr-3 font-semibold">1–2</th>
-                        <th className="py-2 font-semibold">4–5</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {parsed.controversial.map((row, idx) => {
-                        if (!row || typeof row !== "object") return null;
-                        const r = /** @type {Record<string, unknown>} */ (row);
-                        const card = r.card && typeof r.card === "object" ? /** @type {Record<string, unknown>} */ (r.card) : null;
-                        if (!card) return null;
-                        const name = card.name != null ? String(card.name) : "—";
-                        const minR = typeof r.min_rating === "number" ? r.min_rating : Number(r.min_rating);
-                        const maxR = typeof r.max_rating === "number" ? r.max_rating : Number(r.max_rating);
-                        const spread = typeof r.spread === "number" ? r.spread : Number(r.spread);
-                        const std = typeof r.stddev === "number" ? r.stddev : Number(r.stddev);
-                        const variance =
-                          typeof r.rating_variance === "number" ? r.rating_variance : Number(r.rating_variance);
-                        const avg = typeof r.avg_rating === "number" ? r.avg_rating : Number(r.avg_rating);
-                        const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
-                        const low = typeof r.low_ratings === "number" ? r.low_ratings : Number(r.low_ratings);
-                        const high = typeof r.high_ratings === "number" ? r.high_ratings : Number(r.high_ratings);
-                        const cid = cardIdFromRecord(card);
-                        return (
-                          <tr
-                            key={cid ?? idx}
-                            className={`border-b border-white/[0.06] last:border-b-0 ${
-                              cid != null ? "cursor-pointer hover:bg-white/[0.04]" : ""
-                            }`}
+                <>
+                  <p className={`m-0 mt-6 ${labelMuted}`}>Top 10</p>
+                  <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-5">
+                    {parsed.controversialTop.map((row, idx) => {
+                      if (!row || typeof row !== "object") return null;
+                      const r = /** @type {Record<string, unknown>} */ (row);
+                      const card = r.card && typeof r.card === "object" ? /** @type {Record<string, unknown>} */ (r.card) : null;
+                      const cid = cardIdFromRecord(card);
+                      const img = card && card.image_url != null ? String(card.image_url) : "";
+                      const name = card && card.name != null ? String(card.name) : "Card";
+                      const variance =
+                        typeof r.rating_variance === "number" ? r.rating_variance : Number(r.rating_variance);
+                      const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
+                      return (
+                        <div
+                          key={cid ?? idx}
+                          className="flex flex-col gap-1.5 rounded-lg border border-white/[0.12] bg-black/25 p-2"
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-[0.68rem] font-bold tabular-nums text-amber-200/90">#{idx + 1}</span>
+                            <span
+                              className="cursor-help text-[0.68rem] tabular-nums text-[#f4f0fa]/55"
+                              title={CONTROVERSIAL_COLUMN_TIPS.variance}
+                            >
+                              σ² {Number.isFinite(variance) ? variance.toFixed(3) : "—"} · {Number.isFinite(votes) ? votes : "—"}{" "}
+                              votes
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            className="relative block aspect-[2.5/3.5] w-full cursor-pointer overflow-hidden rounded-md border border-white/[0.1] bg-black/40 outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60 disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={cid == null}
                             onClick={() => cid != null && void openCardSessionDetail(cid)}
-                            onKeyDown={(e) => {
-                              if (cid != null && (e.key === "Enter" || e.key === " ")) {
-                                e.preventDefault();
-                                void openCardSessionDetail(cid);
-                              }
-                            }}
-                            tabIndex={cid != null ? 0 : undefined}
-                            role={cid != null ? "button" : undefined}
                           >
-                            <td className="py-2 pr-3 tabular-nums text-[#f4f0fa]/55">{idx + 1}</td>
-                            <td className="py-2 pr-3">
-                              <span className="max-w-[14rem] truncate font-semibold text-violet-200/95">{name}</span>
-                            </td>
-                            <td className="py-2 pr-3 tabular-nums font-semibold text-amber-100/90">
-                              {Number.isFinite(variance) ? variance.toFixed(3) : "—"}
-                            </td>
-                            <td className="py-2 pr-3 tabular-nums">{Number.isFinite(std) ? std.toFixed(2) : "—"}</td>
-                            <td className="py-2 pr-3 tabular-nums text-[#f4f0fa]/75">
-                              {Number.isFinite(minR) && Number.isFinite(maxR) ? `${minR}–${maxR}` : "—"}
-                            </td>
-                            <td className="py-2 pr-3 tabular-nums">{Number.isFinite(spread) ? spread : "—"}</td>
-                            <td className="py-2 pr-3 tabular-nums">{Number.isFinite(avg) ? avg.toFixed(2) : "—"}</td>
-                            <td className="py-2 pr-3 tabular-nums text-[#f4f0fa]/70">{Number.isFinite(votes) ? votes : "—"}</td>
-                            <td className="py-2 pr-3 tabular-nums text-rose-200/80">{Number.isFinite(low) ? low : "—"}</td>
-                            <td className="py-2 tabular-nums text-emerald-200/80">{Number.isFinite(high) ? high : "—"}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                            {img ? (
+                              <img src={img} alt="" className="h-full w-full object-cover" loading="lazy" />
+                            ) : (
+                              <span className="flex h-full items-center justify-center px-1 text-center text-[0.7rem] text-[#f4f0fa]/45">
+                                No image
+                              </span>
+                            )}
+                          </button>
+                          <p className="m-0 line-clamp-2 text-center text-[0.72rem] font-semibold leading-tight text-[#f4f0fa]/90">
+                            {name}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <p className={`m-0 mt-8 ${labelMuted}`}>All controversial cards</p>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full min-w-[58rem] border-collapse text-left text-[0.78rem] text-[#f4f0fa]/88">
+                      <thead>
+                        <tr className="border-b border-white/[0.12] text-[0.68rem] uppercase tracking-wide text-[#f4f0fa]/50">
+                          <th className="py-2 pr-3 font-semibold">#</th>
+                          <th className="py-2 pr-3 font-semibold">Card</th>
+                          <ThWithTooltip label="Variance" tip={CONTROVERSIAL_COLUMN_TIPS.variance} />
+                          <ThWithTooltip label="Std dev" tip={CONTROVERSIAL_COLUMN_TIPS.stddev} />
+                          <ThWithTooltip label="Min–max" tip={CONTROVERSIAL_COLUMN_TIPS.minMax} />
+                          <ThWithTooltip label="Spread" tip={CONTROVERSIAL_COLUMN_TIPS.spread} />
+                          <ThWithTooltip label="Avg" tip={CONTROVERSIAL_COLUMN_TIPS.avg} />
+                          <ThWithTooltip label="Votes" tip={CONTROVERSIAL_COLUMN_TIPS.votes} />
+                          <ThWithTooltip label="1–2" tip={CONTROVERSIAL_COLUMN_TIPS.low} />
+                          <ThWithTooltip label="4–5" tip={CONTROVERSIAL_COLUMN_TIPS.high} className="py-2 font-semibold" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {parsed.controversialTable.rows.map((row, idx) => {
+                          if (!row || typeof row !== "object") return null;
+                          const r = /** @type {Record<string, unknown>} */ (row);
+                          const card = r.card && typeof r.card === "object" ? /** @type {Record<string, unknown>} */ (r.card) : null;
+                          if (!card) return null;
+                          const name = card.name != null ? String(card.name) : "—";
+                          const minR = typeof r.min_rating === "number" ? r.min_rating : Number(r.min_rating);
+                          const maxR = typeof r.max_rating === "number" ? r.max_rating : Number(r.max_rating);
+                          const spread = typeof r.spread === "number" ? r.spread : Number(r.spread);
+                          const std = typeof r.stddev === "number" ? r.stddev : Number(r.stddev);
+                          const variance =
+                            typeof r.rating_variance === "number" ? r.rating_variance : Number(r.rating_variance);
+                          const avg = typeof r.avg_rating === "number" ? r.avg_rating : Number(r.avg_rating);
+                          const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
+                          const low = typeof r.low_ratings === "number" ? r.low_ratings : Number(r.low_ratings);
+                          const high = typeof r.high_ratings === "number" ? r.high_ratings : Number(r.high_ratings);
+                          const cid = cardIdFromRecord(card);
+                          const rank = parsed.controversialTable.offset + idx + 1;
+                          return (
+                            <tr
+                              key={cid ?? idx}
+                              className={`border-b border-white/[0.06] last:border-b-0 ${
+                                cid != null ? "cursor-pointer hover:bg-white/[0.04]" : ""
+                              }`}
+                              onClick={() => cid != null && void openCardSessionDetail(cid)}
+                              onKeyDown={(e) => {
+                                if (cid != null && (e.key === "Enter" || e.key === " ")) {
+                                  e.preventDefault();
+                                  void openCardSessionDetail(cid);
+                                }
+                              }}
+                              tabIndex={cid != null ? 0 : undefined}
+                              role={cid != null ? "button" : undefined}
+                            >
+                              <td className="py-2 pr-3 tabular-nums text-[#f4f0fa]/55">{rank}</td>
+                              <td className="py-2 pr-3">
+                                <span className="max-w-[14rem] truncate font-semibold text-violet-200/95">{name}</span>
+                              </td>
+                              <td className="py-2 pr-3 tabular-nums font-semibold text-amber-100/90">
+                                {Number.isFinite(variance) ? variance.toFixed(3) : "—"}
+                              </td>
+                              <td className="py-2 pr-3 tabular-nums">{Number.isFinite(std) ? std.toFixed(2) : "—"}</td>
+                              <td className="py-2 pr-3 tabular-nums text-[#f4f0fa]/75">
+                                {Number.isFinite(minR) && Number.isFinite(maxR) ? `${minR}–${maxR}` : "—"}
+                              </td>
+                              <td className="py-2 pr-3 tabular-nums">{Number.isFinite(spread) ? spread : "—"}</td>
+                              <td className="py-2 pr-3 tabular-nums">{Number.isFinite(avg) ? avg.toFixed(2) : "—"}</td>
+                              <td className="py-2 pr-3 tabular-nums text-[#f4f0fa]/70">{Number.isFinite(votes) ? votes : "—"}</td>
+                              <td className="py-2 pr-3 tabular-nums text-rose-200/80">{Number.isFinite(low) ? low : "—"}</td>
+                              <td className="py-2 tabular-nums text-emerald-200/80">{Number.isFinite(high) ? high : "—"}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <TablePagination
+                    pageIndex={tablePage.controversial}
+                    pageSize={TABLE_PAGE_SIZE}
+                    total={parsed.controversialTable.total}
+                    disabled={loading}
+                    onPageChange={(next) => setTablePage((p) => ({ ...p, controversial: next }))}
+                  />
+                </>
               )}
             </div>
           ) : null}
@@ -684,62 +884,119 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
           {resultsTab === "talked" ? (
             <div className="mt-6">
               <p className={`m-0 ${labelMuted}`}>Cards with the most written notes</p>
-              {parsed.talked.length === 0 ? (
+              {parsed.talkedTable.total === 0 ? (
                 <p className="mt-3 text-[0.85rem] text-[#f4f0fa]/60">No notes recorded for this session yet.</p>
               ) : (
-                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {parsed.talked.map((row, idx) => {
-                    if (!row || typeof row !== "object") return null;
-                    const r = /** @type {Record<string, unknown>} */ (row);
-                    const card = r.card && typeof r.card === "object" ? /** @type {Record<string, unknown>} */ (r.card) : null;
-                    if (!card) return null;
-                    const img = card.image_url != null ? String(card.image_url) : "";
-                    const name = card.name != null ? String(card.name) : "Card";
-                    const avg = typeof r.avg_rating === "number" ? r.avg_rating : Number(r.avg_rating);
-                    const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
-                    const noteCount = typeof r.note_count === "number" ? r.note_count : Number(r.note_count);
-                    const cid = cardIdFromRecord(card);
-                    return (
-                      <div
-                        key={cid ?? idx}
-                        role={cid != null ? "button" : undefined}
-                        tabIndex={cid != null ? 0 : undefined}
-                        className={`flex gap-3 rounded-lg border border-white/[0.12] bg-black/25 p-3 outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60 ${
-                          cid != null ? "cursor-pointer hover:border-white/[0.2] hover:bg-black/35" : ""
-                        }`}
-                        onClick={() => cid != null && void openCardSessionDetail(cid)}
-                        onKeyDown={(e) => {
-                          if (cid != null && (e.key === "Enter" || e.key === " ")) {
-                            e.preventDefault();
-                            void openCardSessionDetail(cid);
-                          }
-                        }}
-                      >
-                        <div className="relative h-24 w-[4.5rem] shrink-0 overflow-hidden rounded-md border border-white/[0.1] bg-black/40">
-                          {img ? (
-                            <img src={img} alt="" className="h-full w-full object-cover" loading="lazy" />
-                          ) : (
-                            <span className="flex h-full items-center justify-center px-1 text-center text-[0.65rem] text-[#f4f0fa]/45">
-                              No image
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex min-w-0 flex-1 flex-col gap-1">
-                          <div className="flex items-start justify-between gap-2">
+                <>
+                  <p className={`m-0 mt-6 ${labelMuted}`}>Top 10</p>
+                  <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-5">
+                    {parsed.talkedTop.map((row, idx) => {
+                      if (!row || typeof row !== "object") return null;
+                      const r = /** @type {Record<string, unknown>} */ (row);
+                      const card = r.card && typeof r.card === "object" ? /** @type {Record<string, unknown>} */ (r.card) : null;
+                      const cid = cardIdFromRecord(card);
+                      const img = card && card.image_url != null ? String(card.image_url) : "";
+                      const name = card && card.name != null ? String(card.name) : "Card";
+                      const avg = typeof r.avg_rating === "number" ? r.avg_rating : Number(r.avg_rating);
+                      const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
+                      const noteCount = typeof r.note_count === "number" ? r.note_count : Number(r.note_count);
+                      return (
+                        <div
+                          key={cid ?? idx}
+                          className="flex flex-col gap-1.5 rounded-lg border border-white/[0.12] bg-black/25 p-2"
+                        >
+                          <div className="flex items-center justify-between gap-1">
                             <span className="text-[0.68rem] font-bold tabular-nums text-amber-200/90">#{idx + 1}</span>
                             <span className="text-[0.68rem] tabular-nums text-[#f4f0fa]/55">
-                              {Number.isFinite(noteCount) ? noteCount : "—"} notes
+                              {Number.isFinite(noteCount) ? noteCount : "—"} notes · {Number.isFinite(avg) ? avg.toFixed(2) : "—"}{" "}
+                              avg
                             </span>
                           </div>
-                          <p className="m-0 line-clamp-2 text-[0.78rem] font-semibold leading-snug text-[#f4f0fa]/92">{name}</p>
-                          <p className="m-0 text-[0.7rem] text-[#f4f0fa]/55">
-                            Avg {Number.isFinite(avg) ? avg.toFixed(2) : "—"} · {Number.isFinite(votes) ? votes : "—"} votes
+                          <button
+                            type="button"
+                            className="relative block aspect-[2.5/3.5] w-full cursor-pointer overflow-hidden rounded-md border border-white/[0.1] bg-black/40 outline-none focus-visible:ring-2 focus-visible:ring-purple-500/60 disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={cid == null}
+                            onClick={() => cid != null && void openCardSessionDetail(cid)}
+                          >
+                            {img ? (
+                              <img src={img} alt="" className="h-full w-full object-cover" loading="lazy" />
+                            ) : (
+                              <span className="flex h-full items-center justify-center px-1 text-center text-[0.7rem] text-[#f4f0fa]/45">
+                                No image
+                              </span>
+                            )}
+                          </button>
+                          <p className="m-0 line-clamp-2 text-center text-[0.72rem] font-semibold leading-tight text-[#f4f0fa]/90">
+                            {name}
                           </p>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
+
+                  <p className={`m-0 mt-8 ${labelMuted}`}>All cards with notes</p>
+                  <div className="mt-3 overflow-x-auto">
+                    <table className="w-full min-w-[48rem] border-collapse text-left text-[0.78rem] text-[#f4f0fa]/88">
+                      <thead>
+                        <tr className="border-b border-white/[0.12] text-[0.68rem] uppercase tracking-wide text-[#f4f0fa]/50">
+                          <th className="py-2 pr-3 font-semibold">#</th>
+                          <th className="py-2 pr-3 font-semibold">Card</th>
+                          <th className="py-2 pr-3 font-semibold">Notes</th>
+                          <th className="py-2 pr-3 font-semibold">Avg</th>
+                          <th className="py-2 font-semibold">Votes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {parsed.talkedTable.rows.map((row, idx) => {
+                          if (!row || typeof row !== "object") return null;
+                          const r = /** @type {Record<string, unknown>} */ (row);
+                          const card = r.card && typeof r.card === "object" ? /** @type {Record<string, unknown>} */ (r.card) : null;
+                          if (!card) return null;
+                          const name = card.name != null ? String(card.name) : "—";
+                          const avg = typeof r.avg_rating === "number" ? r.avg_rating : Number(r.avg_rating);
+                          const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
+                          const noteCount = typeof r.note_count === "number" ? r.note_count : Number(r.note_count);
+                          const cid = cardIdFromRecord(card);
+                          const rank = parsed.talkedTable.offset + idx + 1;
+                          return (
+                            <tr
+                              key={cid ?? idx}
+                              className={`border-b border-white/[0.06] last:border-b-0 ${
+                                cid != null ? "cursor-pointer hover:bg-white/[0.04]" : ""
+                              }`}
+                              onClick={() => cid != null && void openCardSessionDetail(cid)}
+                              onKeyDown={(e) => {
+                                if (cid != null && (e.key === "Enter" || e.key === " ")) {
+                                  e.preventDefault();
+                                  void openCardSessionDetail(cid);
+                                }
+                              }}
+                              tabIndex={cid != null ? 0 : undefined}
+                              role={cid != null ? "button" : undefined}
+                            >
+                              <td className="py-2 pr-3 tabular-nums text-[#f4f0fa]/55">{rank}</td>
+                              <td className="py-2 pr-3">
+                                <span className="max-w-[16rem] truncate font-semibold text-violet-200/95">{name}</span>
+                              </td>
+                              <td className="py-2 pr-3 tabular-nums font-semibold text-amber-100/90">
+                                {Number.isFinite(noteCount) ? noteCount : "—"}
+                              </td>
+                              <td className="py-2 pr-3 tabular-nums">{Number.isFinite(avg) ? avg.toFixed(2) : "—"}</td>
+                              <td className="py-2 tabular-nums text-[#f4f0fa]/70">{Number.isFinite(votes) ? votes : "—"}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <TablePagination
+                    pageIndex={tablePage.talked}
+                    pageSize={TABLE_PAGE_SIZE}
+                    total={parsed.talkedTable.total}
+                    disabled={loading}
+                    onPageChange={(next) => setTablePage((p) => ({ ...p, talked: next }))}
+                  />
+                </>
               )}
             </div>
           ) : null}
