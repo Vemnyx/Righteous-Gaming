@@ -289,12 +289,13 @@ SELECT ` + cardSelectColumnsFromC + `, MAX(s.name) AS set_name,
 	COUNT(*)::int AS vote_count
 FROM user_card_ratings r
 INNER JOIN cards c ON c.id = r.card_id
+` + cardPrintingLateralJoin + `
 INNER JOIN sets s ON s.id = c.set_id
 WHERE r.rater_id = $1
 	AND ($2::smallint IS NULL OR $2 = ANY(c.classes))
 	AND ($3::smallint IS NULL OR $3 = ANY(c.talents))
 	AND ($4::smallint IS NULL OR c.type = $4)
-GROUP BY c.id
+GROUP BY ` + cardPrintingGroupBy + `
 ORDER BY avg_rating DESC NULLS LAST, vote_count DESC, c.id ASC
 `
 
@@ -494,9 +495,10 @@ SELECT ` + cardSelectColumnsFromC + `, MAX(s.name) AS set_name,
 	COUNT(*) FILTER (WHERE r.rating >= 4)::int AS high_ratings
 FROM user_card_ratings r
 INNER JOIN cards c ON c.id = r.card_id
+` + cardPrintingLateralJoin + `
 INNER JOIN sets s ON s.id = c.set_id
 WHERE r.rater_id = $1
-GROUP BY c.id
+GROUP BY ` + cardPrintingGroupBy + `
 HAVING COUNT(*) >= 2 AND VAR_POP(r.rating::double precision) IS NOT NULL`
 	const controversialOrder = `
 ORDER BY rating_variance DESC NULLS LAST, vote_count DESC, c.id ASC`
@@ -556,9 +558,10 @@ SELECT ` + cardSelectColumnsFromC + `, MAX(s.name) AS set_name,
 	COUNT(*) FILTER (WHERE r.notes IS NOT NULL AND btrim(r.notes) <> '')::int AS note_count
 FROM user_card_ratings r
 INNER JOIN cards c ON c.id = r.card_id
+` + cardPrintingLateralJoin + `
 INNER JOIN sets s ON s.id = c.set_id
 WHERE r.rater_id = $1
-GROUP BY c.id
+GROUP BY ` + cardPrintingGroupBy + `
 HAVING COUNT(*) FILTER (WHERE r.notes IS NOT NULL AND btrim(r.notes) <> '') > 0`
 	const notedOrder = `
 ORDER BY note_count DESC, vote_count DESC, c.id ASC`

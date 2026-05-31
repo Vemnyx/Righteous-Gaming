@@ -38,10 +38,11 @@ SELECT r.user_id, r.rater_id, r.card_id, r.rating, r.notes,
 FROM user_card_ratings r
 INNER JOIN card_rater cr ON cr.id = r.rater_id
 INNER JOIN cards c ON c.id = r.card_id
+` + cardPrintingLateralJoin + `
 INNER JOIN sets s ON s.id = c.set_id
 WHERE r.user_id = $1 AND r.rater_id = $2
-  AND (c.rarity IS NULL OR c.rarity <> 0)
-  AND (cr.format <> 0 OR c.rarity IS NULL OR c.rarity NOT IN (7, 8))
+  AND (cp.rarity IS NULL OR cp.rarity <> 0)
+  AND (cr.format <> 0 OR cp.rarity IS NULL OR cp.rarity NOT IN (7, 8))
 ORDER BY r.rating ASC, r.card_id ASC`
 	rows, err := r.pool.Query(ctx, q, userID, raterID)
 	if err != nil {
@@ -166,13 +167,13 @@ func (r *Repository) ListUnrankedCardsForUserRater(ctx context.Context, userID, 
 INNER JOIN card_rater cr ON cr.id = $2
 WHERE c.set_id = cr.set_id
   AND cr.format = ANY (c.formats)
-  AND (c.rarity IS NULL OR c.rarity <> 0)
-  AND (cr.format <> 0 OR c.rarity IS NULL OR c.rarity NOT IN (7, 8))
+  AND (cp.rarity IS NULL OR cp.rarity <> 0)
+  AND (cr.format <> 0 OR cp.rarity IS NULL OR cp.rarity NOT IN (7, 8))
   AND NOT EXISTS (
     SELECT 1 FROM user_card_ratings r
     WHERE r.user_id = $1 AND r.rater_id = $2 AND r.card_id = c.id
   )
-ORDER BY c.set_num ASC, c.id ASC`
+ORDER BY cp.set_num ASC, c.id ASC`
 	rows, err := r.pool.Query(ctx, q, userID, raterID)
 	if err != nil {
 		return nil, fmt.Errorf("repository: list unranked cards: %w", err)
