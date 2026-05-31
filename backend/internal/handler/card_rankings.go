@@ -210,6 +210,15 @@ func (h *cardRatingsHTTP) listMyRatings(w http.ResponseWriter, r *http.Request) 
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
+	cardPtrs := make([]*repository.Card, len(rows))
+	for i := range rows {
+		cardPtrs[i] = &rows[i].Card
+	}
+	if err := attachPrintings(r.Context(), h.app.Repo, cardPtrs...); err != nil {
+		log.Error("list user card ratings attach printings", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
 	out := make([]userCardRatingDetailJSON, 0, len(rows))
 	for i := range rows {
 		row := rows[i]
@@ -364,9 +373,11 @@ func (h *cardRatingsHTTP) listMyCardsToRate(w http.ResponseWriter, r *http.Reque
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
-	out := make([]cardJSON, 0, len(cards))
-	for i := range cards {
-		out = append(out, cardToJSON(&cards[i]))
+	out, err := cardsToJSON(r.Context(), h.app.Repo, cards)
+	if err != nil {
+		log.Error("list unranked cards attach printings", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
 	}
 	writeCatalogJSON(w, http.StatusOK, map[string]any{"cards": out})
 }
@@ -859,6 +870,11 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
+	if err := attachPrintings(r.Context(), h.app.Repo, analyticsCardPointers(analytics)...); err != nil {
+		log.Error("card rater analytics attach printings", "error", err, "id", id)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
 
 	type rankedJSON struct {
 		Card      cardJSON `json:"card"`
@@ -1104,6 +1120,12 @@ func (h *cardRatingsHTTP) getCardRaterCardSessionRatings(w http.ResponseWriter, 
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
+	cardJSONOut, err := cardWithPrintingsJSON(r.Context(), h.app.Repo, card)
+	if err != nil {
+		log.Error("session ratings attach printings", "error", err, "card_id", cardID)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
 	type rowJSON struct {
 		UserID    int     `json:"user_id"`
 		UserLabel string  `json:"user_label"`
@@ -1120,7 +1142,7 @@ func (h *cardRatingsHTTP) getCardRaterCardSessionRatings(w http.ResponseWriter, 
 		})
 	}
 	payload := map[string]any{
-		"card":        cardToJSON(card),
+		"card":        cardJSONOut,
 		"vote_count":  breakdown.VoteCount,
 		"ratings":     rows,
 	}

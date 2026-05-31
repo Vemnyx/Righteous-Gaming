@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -92,45 +93,69 @@ func (j createCardJSON) toRepoInput() repository.CreateCardInput {
 	}
 }
 
+type printingJSON struct {
+	ID       int     `json:"id"`
+	SetCode  string  `json:"set_code"`
+	SetNum   int16   `json:"set_num"`
+	Rarity   *int16  `json:"rarity"`
+	ImageURL *string `json:"image_url"`
+}
+
 type cardJSON struct {
-	ID              int     `json:"id"`
-	SetID           int     `json:"set_id"`
-	Name            string  `json:"name"`
-	CardIdentifier  *string `json:"card_identifier"`
-	ImageURL        *string `json:"image_url"`
-	FunctionalText  *string `json:"functional_text"`
-	Rarity          *int16  `json:"rarity"`
-	SetCode         string  `json:"set_code"`
-	SetNum          int16   `json:"set_num"`
-	SetName         string  `json:"set_name,omitempty"`
-	Type            int16   `json:"type"`
-	Subtypes        []int16 `json:"subtypes"`
-	Classes         []int16 `json:"classes"`
-	Hybrid          bool    `json:"hybrid"`
-	Talents         []int16 `json:"talents"`
-	Pitch           *int16  `json:"pitch"`
-	Cost            *int16  `json:"cost"`
-	Power           *int16  `json:"power"`
-	Block           *int16  `json:"block"`
-	Heroes          []int16 `json:"heroes"`
-	Life            *int16  `json:"life"`
-	Intellect       *int16  `json:"intellect"`
-	Keywords        []int16 `json:"keywords"`
-	Formats         []int16 `json:"formats"`
-	Specializations []int16 `json:"specializations"`
-	Fusions         []int16 `json:"fusions"`
+	ID              int            `json:"id"`
+	SetID           int            `json:"set_id"`
+	Name            string         `json:"name"`
+	CardIdentifier  *string        `json:"card_identifier"`
+	FunctionalText  *string        `json:"functional_text"`
+	Rarity          *int16         `json:"rarity"`
+	SetCode         string         `json:"set_code"`
+	SetNum          int16          `json:"set_num"`
+	SetName         string         `json:"set_name,omitempty"`
+	Type            int16          `json:"type"`
+	Subtypes        []int16        `json:"subtypes"`
+	Classes         []int16        `json:"classes"`
+	Hybrid          bool           `json:"hybrid"`
+	Talents         []int16        `json:"talents"`
+	Pitch           *int16         `json:"pitch"`
+	Cost            *int16         `json:"cost"`
+	Power           *int16         `json:"power"`
+	Block           *int16         `json:"block"`
+	Heroes          []int16        `json:"heroes"`
+	Life            *int16         `json:"life"`
+	Intellect       *int16         `json:"intellect"`
+	Keywords        []int16        `json:"keywords"`
+	Formats         []int16        `json:"formats"`
+	Specializations []int16        `json:"specializations"`
+	Fusions         []int16        `json:"fusions"`
+	Printings       []printingJSON `json:"printings"`
+}
+
+func printingsToJSON(ps []repository.CardPrinting) []printingJSON {
+	if len(ps) == 0 {
+		return []printingJSON{}
+	}
+	out := make([]printingJSON, len(ps))
+	for i := range ps {
+		out[i] = printingJSON{
+			ID:       ps[i].ID,
+			SetCode:  ps[i].SetCode,
+			SetNum:   ps[i].SetNum,
+			Rarity:   ps[i].Rarity,
+			ImageURL: ps[i].ImageURL,
+		}
+	}
+	return out
 }
 
 func cardToJSON(c *repository.Card) cardJSON {
 	if c == nil {
-		return cardJSON{}
+		return cardJSON{Printings: []printingJSON{}}
 	}
 	return cardJSON{
 		ID:              c.ID,
 		SetID:           c.SetID,
 		Name:            c.Name,
 		CardIdentifier:  c.CardIdentifier,
-		ImageURL:        c.ImageURL,
 		FunctionalText:  c.FunctionalText,
 		Rarity:          c.Rarity,
 		SetCode:         c.SetCode,
@@ -152,7 +177,71 @@ func cardToJSON(c *repository.Card) cardJSON {
 		Formats:         c.Formats,
 		Specializations: c.Specializations,
 		Fusions:         c.Fusions,
+		Printings:       printingsToJSON(c.Printings),
 	}
+}
+
+func attachPrintings(ctx context.Context, repo *repository.Repository, cards ...*repository.Card) error {
+	return repo.AttachPrintings(ctx, cards)
+}
+
+func cardsToJSON(ctx context.Context, repo *repository.Repository, cards []repository.Card) ([]cardJSON, error) {
+	if len(cards) == 0 {
+		return []cardJSON{}, nil
+	}
+	ptrs := make([]*repository.Card, len(cards))
+	for i := range cards {
+		ptrs[i] = &cards[i]
+	}
+	if err := attachPrintings(ctx, repo, ptrs...); err != nil {
+		return nil, err
+	}
+	out := make([]cardJSON, len(cards))
+	for i := range cards {
+		out[i] = cardToJSON(&cards[i])
+	}
+	return out, nil
+}
+
+func cardWithPrintingsJSON(ctx context.Context, repo *repository.Repository, c *repository.Card) (cardJSON, error) {
+	if c == nil {
+		return cardJSON{Printings: []printingJSON{}}, nil
+	}
+	if err := attachPrintings(ctx, repo, c); err != nil {
+		return cardJSON{}, err
+	}
+	return cardToJSON(c), nil
+}
+
+func analyticsCardPointers(a *repository.CardRaterAnalytics) []*repository.Card {
+	if a == nil {
+		return nil
+	}
+	var ptrs []*repository.Card
+	appendCard := func(c *repository.Card) {
+		if c != nil {
+			ptrs = append(ptrs, c)
+		}
+	}
+	for i := range a.TopCards {
+		appendCard(&a.TopCards[i].Card)
+	}
+	for i := range a.RatedTable.Rows {
+		appendCard(&a.RatedTable.Rows[i].Card)
+	}
+	for i := range a.ControversialTop {
+		appendCard(&a.ControversialTop[i].Card)
+	}
+	for i := range a.ControversialTable.Rows {
+		appendCard(&a.ControversialTable.Rows[i].Card)
+	}
+	for i := range a.TalkedTop {
+		appendCard(&a.TalkedTop[i].Card)
+	}
+	for i := range a.TalkedTable.Rows {
+		appendCard(&a.TalkedTable.Rows[i].Card)
+	}
+	return ptrs
 }
 
 func setToJSON(s *repository.Set) setJSON {
@@ -285,9 +374,11 @@ func (h *catalogHTTP) listCards(w http.ResponseWriter, r *http.Request) {
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
-	out := make([]cardJSON, 0, len(cards))
-	for i := range cards {
-		out = append(out, cardToJSON(&cards[i]))
+	out, err := cardsToJSON(r.Context(), h.app.Repo, cards)
+	if err != nil {
+		log.Error("catalog list cards attach printings", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
 	}
 	writeCatalogJSON(w, http.StatusOK, out)
 }
@@ -309,9 +400,11 @@ func (h *catalogHTTP) listCardsBySet(w http.ResponseWriter, r *http.Request) {
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
-	out := make([]cardJSON, 0, len(cards))
-	for i := range cards {
-		out = append(out, cardToJSON(&cards[i]))
+	out, err := cardsToJSON(r.Context(), h.app.Repo, cards)
+	if err != nil {
+		log.Error("catalog list cards by set attach printings", "error", err, "set_id", setID)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
 	}
 	writeCatalogJSON(w, http.StatusOK, out)
 }
@@ -342,7 +435,13 @@ func (h *catalogHTTP) getCard(w http.ResponseWriter, r *http.Request) {
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
-	writeCatalogJSON(w, http.StatusOK, cardToJSON(c))
+	out, err := cardWithPrintingsJSON(r.Context(), h.app.Repo, c)
+	if err != nil {
+		log.Error("catalog get card attach printings", "error", err, "key", key)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	writeCatalogJSON(w, http.StatusOK, out)
 }
 
 func (h *catalogHTTP) createCard(w http.ResponseWriter, r *http.Request) {
@@ -406,9 +505,11 @@ func (h *catalogHTTP) createCardsBatch(w http.ResponseWriter, r *http.Request) {
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
-	out := make([]cardJSON, 0, len(cards))
-	for i := range cards {
-		out = append(out, cardToJSON(&cards[i]))
+	out, err := cardsToJSON(r.Context(), h.app.Repo, cards)
+	if err != nil {
+		log.Error("catalog create cards batch attach printings", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
 	}
 	writeCatalogJSON(w, http.StatusCreated, out)
 }

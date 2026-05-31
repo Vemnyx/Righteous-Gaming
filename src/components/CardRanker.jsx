@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { userSettingsFromProfile } from "../auth/sessionProfile";
+import { cardImageUrl } from "../utils/cardPrintings";
 
 /** @typedef {{ id: number, name: string, code: string, image_url?: string | null }} CatalogSet */
 
 /** @typedef {{ id: number, set_id: number, format: number }} ActiveCardRater */
 
-/** @typedef {{ id: number, name?: string, image_url?: string | null, [key: string]: unknown }} RankerCard */
+/** @typedef {{ id: number, name?: string, printings?: { image_url?: string | null }[], [key: string]: unknown }} RankerCard */
 
 /**
  * @typedef {{ kind: 'pending', card: RankerCard }} PendingEntry
@@ -656,10 +657,7 @@ export function CardRanker({ isLight, active }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [active, user, queue.length, rankLoading, goPrev, goNext, current, canSubmit, submitRanking, pickStarRating]);
 
-  const imgUrl =
-    current?.card?.image_url != null && String(current.card.image_url).trim() !== ""
-      ? String(current.card.image_url).trim()
-      : null;
+  const imgUrl = current?.card ? cardImageUrl(current.card) : null;
 
   const rankStats = useMemo(() => {
     let unranked = 0;

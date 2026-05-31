@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { cardClassName } from "../constants/cardClass";
 import { cardFormatName } from "../constants/cardFormat";
@@ -6,6 +6,7 @@ import { cardRarityName } from "../constants/cardRarity";
 import { cardSubtypeToken } from "../constants/cardSubtype";
 import { cardTalentName } from "../constants/cardTalent";
 import { cardTypeName } from "../constants/cardType";
+import { cardImageUrl } from "../utils/cardPrintings";
 
 /** FAB-style collector number: OMN001 */
 function formatCollectorCode(setCode, setNum) {
@@ -31,7 +32,7 @@ function formatEnumList(arr, nameFn) {
  *   set_id: number,
  *   name: string,
  *   card_identifier: string | null,
- *   image_url: string | null,
+ *   printings?: { image_url?: string | null, set_code?: string, set_num?: number, rarity?: number | null }[],
  *   functional_text: string | null,
  *   rarity: number | null,
  *   set_code: string,
@@ -100,6 +101,8 @@ export function CardDetailPage({ isLight, identifier, active }) {
   const labelCls = `text-[0.75rem] font-semibold uppercase tracking-wide ${muted}`;
   const ddCls = "text-[0.9rem] text-[#f4f0fa]/95";
 
+  const cardImgUrl = useMemo(() => (card ? cardImageUrl(card) : null), [card]);
+
   return (
     <div className="relative flex w-full flex-1 flex-col gap-5 px-1 py-2 sm:px-2">
       {loading ? <p className={`text-[0.9rem] ${muted}`}>Loading…</p> : null}
@@ -135,9 +138,9 @@ export function CardDetailPage({ isLight, identifier, active }) {
             <div
               className={`overflow-hidden rounded-xl border bg-black/25 ${panelBorder}`}
             >
-              {card.image_url ? (
+              {cardImgUrl ? (
                 <img
-                  src={card.image_url}
+                  src={cardImgUrl}
                   alt={card.name || ""}
                   className="h-auto w-full object-contain"
                   draggable={false}

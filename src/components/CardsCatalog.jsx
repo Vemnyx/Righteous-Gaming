@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
 import { cardTypeName } from "../constants/cardType";
+import { cardImageUrl } from "../utils/cardPrintings";
 
 const MD_MIN = 768;
 const TABLE_PAGE_SIZE = 25;
@@ -149,7 +150,7 @@ function GridDensityIcon({ level }) {
  *   set_name?: string,
  *   type: number,
  *   pitch: number | null,
- *   image_url: string | null,
+ *   printings?: { image_url?: string | null }[],
  *   card_identifier: string | null
  * }} CatalogCard
  */
@@ -395,7 +396,9 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                 </tr>
               </thead>
               <tbody>
-                {pagedTable.map((c) => (
+                {pagedTable.map((c) => {
+                  const imgUrl = cardImageUrl(c);
+                  return (
                   <tr
                     key={c.id}
                     className={`cursor-default border-b transition-colors hover:bg-white/[0.04] ${tableRowBorder}`}
@@ -403,16 +406,16 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                     <td
                       className="relative max-w-[min(28rem,50vw)] px-4 py-2.5 font-medium"
                       onMouseEnter={(e) => {
-                        if (!c.image_url) return;
+                        if (!imgUrl) return;
                         setImagePreview({
-                          url: c.image_url,
+                          url: imgUrl,
                           ...clampPreviewPosition(e),
                         });
                       }}
                       onMouseMove={(e) => {
-                        if (!c.image_url) return;
+                        if (!imgUrl) return;
                         setImagePreview({
-                          url: c.image_url,
+                          url: imgUrl,
                           ...clampPreviewPosition(e),
                         });
                       }}
@@ -450,7 +453,8 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                       {cardTypeName(c.type) ?? c.type}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
             {cards.length === 0 ? (
@@ -486,23 +490,25 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
       {!loading && view !== "table" && !error ? (
         <>
           <div className={`grid gap-2 ${gridColClass} sm:gap-2 md:gap-3`}>
-            {pagedGrid.map((c) => (
+            {pagedGrid.map((c) => {
+              const imgUrl = cardImageUrl(c);
+              return (
               <div key={c.id} className="min-w-0 overflow-visible px-0.5 pb-1 pt-0.5">
-                {c.image_url ? (
+                {imgUrl ? (
                   <button
                     type="button"
                     className={`flex aspect-[63/88] w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg border bg-black/30 p-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 ${gridThumbBorder} ${gridCardLift}`}
                     aria-label={`Open full image: ${c.name}`}
                     onClick={() =>
                       setGridImageModal({
-                        url: c.image_url,
+                        url: imgUrl,
                         name: c.name ?? "",
                         card_identifier: c.card_identifier ?? null,
                       })
                     }
                   >
                     <img
-                      src={c.image_url}
+                      src={imgUrl}
                       alt=""
                       className="h-full w-full object-contain"
                       draggable={false}
@@ -518,7 +524,8 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
           {cards.length === 0 ? (
             <p className="text-center text-[#f4f0fa]/55">No cards in the database.</p>

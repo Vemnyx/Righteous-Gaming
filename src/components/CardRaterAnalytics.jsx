@@ -4,6 +4,7 @@ import { cardFormatName } from "../constants/cardFormat";
 import { cardClassName } from "../constants/cardClass";
 import { cardTalentName } from "../constants/cardTalent";
 import { cardTypeName } from "../constants/cardType";
+import { cardImageUrl } from "../utils/cardPrintings";
 
 /** @param {unknown} v */
 function numOrNull(v) {
@@ -598,7 +599,7 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
                   const r = /** @type {Record<string, unknown>} */ (row);
                   const card = r.card && typeof r.card === "object" ? /** @type {Record<string, unknown>} */ (r.card) : null;
                   const cid = cardIdFromRecord(card);
-                  const img = card && card.image_url != null ? String(card.image_url) : "";
+                  const img = cardImageUrl(card) ?? "";
                   const name = card && card.name != null ? String(card.name) : "Card";
                   const avg = typeof r.avg_rating === "number" ? r.avg_rating : Number(r.avg_rating);
                   const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
@@ -753,7 +754,7 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
                       const r = /** @type {Record<string, unknown>} */ (row);
                       const card = r.card && typeof r.card === "object" ? /** @type {Record<string, unknown>} */ (r.card) : null;
                       const cid = cardIdFromRecord(card);
-                      const img = card && card.image_url != null ? String(card.image_url) : "";
+                      const img = cardImageUrl(card) ?? "";
                       const name = card && card.name != null ? String(card.name) : "Card";
                       const variance =
                         typeof r.rating_variance === "number" ? r.rating_variance : Number(r.rating_variance);
@@ -895,7 +896,7 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
                       const r = /** @type {Record<string, unknown>} */ (row);
                       const card = r.card && typeof r.card === "object" ? /** @type {Record<string, unknown>} */ (r.card) : null;
                       const cid = cardIdFromRecord(card);
-                      const img = card && card.image_url != null ? String(card.image_url) : "";
+                      const img = cardImageUrl(card) ?? "";
                       const name = card && card.name != null ? String(card.name) : "Card";
                       const avg = typeof r.avg_rating === "number" ? r.avg_rating : Number(r.avg_rating);
                       const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
@@ -1041,9 +1042,9 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
               ) : (
                 <div className="flex flex-col gap-6 md:flex-row md:items-start md:gap-8">
                   <div className="mx-auto w-full max-w-[22rem] shrink-0 sm:max-w-[26rem] md:mx-0 md:max-w-[28rem] lg:max-w-[32rem]">
-                    {cardDetailModal.card && cardDetailModal.card.image_url != null ? (
+                    {cardDetailModal.card && cardImageUrl(cardDetailModal.card) ? (
                       <img
-                        src={String(cardDetailModal.card.image_url)}
+                        src={cardImageUrl(cardDetailModal.card)}
                         alt=""
                         className="aspect-[2.5/3.5] w-full rounded-xl border border-white/[0.14] object-contain shadow-[0_8px_32px_rgba(0,0,0,0.35)]"
                       />
