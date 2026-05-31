@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
+import { CARD_CLASS_NAMES } from "../constants/cardClass";
+import { CARD_RARITY_NAMES } from "../constants/cardRarity";
+import { CARD_TYPE_NAMES } from "../constants/cardType";
 import { cardTypeName } from "../constants/cardType";
-import { cardImageUrl } from "../utils/cardPrintings";
+import {
+  countActiveAdvancedFilters,
+  EMPTY_CATALOG_ADVANCED_FILTERS,
+  filterCatalogCard,
+} from "../utils/cardCatalogFilter";
+import { cardImageUrl, formatCollectorCode } from "../utils/cardPrintings";
 
 const MD_MIN = 768;
 const TABLE_PAGE_SIZE = 25;
@@ -50,10 +58,26 @@ function gridColsClass(view) {
 }
 
 /** FAB-style collector number: OMN001, OMN003 (3-digit card index). */
-function formatCollectorCode(setCode, setNum) {
-  const code = String(setCode ?? "").trim();
-  const n = Math.max(0, Number(setNum) || 0);
-  return `${code}${String(n).padStart(3, "0")}`;
+function FilterSlidersIcon() {
+  return (
+    <svg
+      className="size-5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M4 6h16" />
+      <path d="M8 12h8" />
+      <path d="M10 18h4" />
+      <circle cx="7" cy="6" r="2" />
+      <circle cx="15" cy="12" r="2" />
+      <circle cx="11" cy="18" r="2" />
+    </svg>
+  );
 }
 
 function PitchDot({ pitch }) {
@@ -150,9 +174,14 @@ function GridDensityIcon({ level }) {
  *   set_name?: string,
  *   type: number,
  *   pitch: number | null,
- *   printings?: { image_url?: string | null }[],
+ *   rarity?: number | null,
+ *   classes?: number[],
+ *   printings?: { set_code?: string, image_url?: string | null }[],
  *   card_identifier: string | null
  * }} CatalogCard
+ */
+
+/** @typedef {{ id: number, name: string, code: string }} CatalogSetOption
  */
 
 /**
@@ -193,6 +222,12 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
   const [gridPage, setGridPage] = useState(1);
   const [tablePage, setTablePage] = useState(1);
   const [cards, setCards] = useState(/** @type {CatalogCard[]} */ ([]));
+  const [sets, setSets] = useState(/** @type {CatalogSetOption[]} */ ([]));
+  const [searchQuery, setSearchQuery] = useState("");
+  const [setFilter, setSetFilter] = useState("");
+  const [advancedFilters, setAdvancedFilters] = useState(EMPTY_CATALOG_ADVANCED_FILTERS);
+  const [draftAdvancedFilters, setDraftAdvancedFilters] = useState(EMPTY_CATALOG_ADVANCED_FILTERS);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
   /** @type {[{ url: string, x: number, y: number } | null, (v: { url: string, x: number, y: number } | null) => void]} */
@@ -201,15 +236,44 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
   const [gridImageModal, setGridImageModal] = useState(null);
 
   const gridPageSizeVal = useMemo(() => gridPageSize(view, narrow), [view, narrow]);
+
+  const filteredCards = useMemo(
+    () =>
+      cards.filter((c) =>
+        filterCatalogCard(c, {
+          query: searchQuery,
+          setCode: setFilter,
+          advanced: advancedFilters,
+        }),
+      ),
+    [cards, searchQuery, setFilter, advancedFilters],
+  );
+
+  const activeAdvancedCount = useMemo(
+    () => countActiveAdvancedFilters(advancedFilters),
+    [advancedFilters],
+  );
+
+  const setOptions = useMemo(() => {
+    const next = [...sets];
+    next.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+    return next;
+  }, [sets]);
+
   const totalGridPages = useMemo(() => {
     if (view === "table" || gridPageSizeVal <= 0 || !Number.isFinite(gridPageSizeVal)) return 1;
-    return Math.max(1, Math.ceil(cards.length / gridPageSizeVal));
-  }, [view, gridPageSizeVal, cards.length]);
+    return Math.max(1, Math.ceil(filteredCards.length / gridPageSizeVal));
+  }, [view, gridPageSizeVal, filteredCards.length]);
 
   const totalTablePages = useMemo(
-    () => Math.max(1, Math.ceil(cards.length / TABLE_PAGE_SIZE)),
-    [cards.length]
+    () => Math.max(1, Math.ceil(filteredCards.length / TABLE_PAGE_SIZE)),
+    [filteredCards.length],
   );
+
+  useEffect(() => {
+    setGridPage(1);
+    setTablePage(1);
+  }, [searchQuery, setFilter, advancedFilters]);
 
   useEffect(() => {
     setGridPage(1);
@@ -236,6 +300,20 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
   }, [active]);
 
   useEffect(() => {
+    if (!filterModalOpen) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => {
+      if (e.key === "Escape") setFilterModalOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [filterModalOpen]);
+
+  useEffect(() => {
     if (!gridImageModal) return undefined;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -260,12 +338,28 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
         headers.Authorization = `Bearer ${token}`;
       }
       const res = await fetch("/api/cards", { headers });
+      const setsRes = await fetch("/api/sets", { headers });
       if (!res.ok) {
         const t = await res.text();
         throw new Error(t?.trim() || res.statusText || `HTTP ${res.status}`);
       }
       const data = await res.json();
       setCards(Array.isArray(data) ? data : []);
+      if (setsRes.ok) {
+        const setsData = await setsRes.json();
+        const list = Array.isArray(setsData) ? setsData : [];
+        /** @type {CatalogSetOption[]} */
+        const next = [];
+        for (const s of list) {
+          if (!s || typeof s.id !== "number") continue;
+          next.push({
+            id: s.id,
+            name: String(s.name ?? "").trim() || `Set ${s.id}`,
+            code: String(s.code ?? "").trim(),
+          });
+        }
+        setSets(next);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load cards");
     } finally {
@@ -280,16 +374,16 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
   }, [active, load]);
 
   const pagedGrid = useMemo(() => {
-    if (view === "table" || !Number.isFinite(gridPageSizeVal)) return cards;
+    if (view === "table" || !Number.isFinite(gridPageSizeVal)) return filteredCards;
     const start = (gridPage - 1) * gridPageSizeVal;
-    return cards.slice(start, start + gridPageSizeVal);
-  }, [cards, view, gridPage, gridPageSizeVal]);
+    return filteredCards.slice(start, start + gridPageSizeVal);
+  }, [filteredCards, view, gridPage, gridPageSizeVal]);
 
   const pagedTable = useMemo(() => {
     if (view !== "table") return [];
     const start = (tablePage - 1) * TABLE_PAGE_SIZE;
-    return cards.slice(start, start + TABLE_PAGE_SIZE);
-  }, [cards, view, tablePage]);
+    return filteredCards.slice(start, start + TABLE_PAGE_SIZE);
+  }, [filteredCards, view, tablePage]);
 
   const gridColClass = gridColsClass(view);
 
@@ -317,6 +411,27 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
     (isLight
       ? "shadow-sm shadow-black/15 hover:z-10 hover:-translate-y-2 hover:shadow-[0_14px_32px_-8px_rgba(0,0,0,0.22)] focus-visible:z-10 focus-visible:-translate-y-2 focus-visible:shadow-[0_14px_32px_-8px_rgba(0,0,0,0.22)]"
       : "shadow-none hover:z-10 hover:-translate-y-2 hover:shadow-[0_18px_44px_-10px_rgba(0,0,0,0.72)] focus-visible:z-10 focus-visible:-translate-y-2 focus-visible:shadow-[0_18px_44px_-10px_rgba(0,0,0,0.72)]");
+
+  const fieldCls = isLight
+    ? "min-w-0 rounded-lg border border-white/[0.24] bg-black/25 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/45 focus:border-purple-400/55"
+    : "min-w-0 rounded-lg border border-white/[0.22] bg-black/30 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/55";
+
+  const hasActiveFilters =
+    searchQuery.trim() !== "" || setFilter !== "" || activeAdvancedCount > 0;
+
+  const openFilterModal = () => {
+    setDraftAdvancedFilters(advancedFilters);
+    setFilterModalOpen(true);
+  };
+
+  const applyAdvancedFilters = () => {
+    setAdvancedFilters(draftAdvancedFilters);
+    setFilterModalOpen(false);
+  };
+
+  const clearAdvancedDraft = () => {
+    setDraftAdvancedFilters(EMPTY_CATALOG_ADVANCED_FILTERS);
+  };
 
   return (
     <div className="relative flex w-full flex-1 flex-col gap-4 px-1 py-2 sm:px-2">
@@ -365,6 +480,61 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
           </button>
         </div>
       </div>
+
+      {!loading && !error ? (
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <label className="relative min-w-0 flex-1">
+              <span className="sr-only">Search cards</span>
+              <input
+                type="search"
+                className={`${fieldCls} w-full pr-9`}
+                placeholder="Search name, code, set, type…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <label className="flex min-w-[10rem] flex-1 items-center gap-2 sm:flex-none">
+                <span className="sr-only">Filter by set</span>
+                <select
+                  className={`${fieldCls} w-full sm:min-w-[12rem]`}
+                  value={setFilter}
+                  onChange={(e) => setSetFilter(e.target.value)}
+                >
+                  <option value="">All sets</option>
+                  {setOptions.map((s) => (
+                    <option key={s.id} value={s.code}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className={`relative inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[0.875rem] font-medium ${iconIdle}`}
+                onClick={openFilterModal}
+                aria-haspopup="dialog"
+              >
+                <FilterSlidersIcon />
+                <span>Filters</span>
+                {activeAdvancedCount > 0 ? (
+                  <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-purple-500/80 px-1.5 py-0.5 text-[0.6875rem] font-semibold leading-none text-white">
+                    {activeAdvancedCount}
+                  </span>
+                ) : null}
+              </button>
+            </div>
+          </div>
+          <p className="m-0 text-[0.8125rem] text-[#f4f0fa]/60">
+            {hasActiveFilters
+              ? `Showing ${filteredCards.length.toLocaleString()} of ${cards.length.toLocaleString()} cards`
+              : `${cards.length.toLocaleString()} cards`}
+          </p>
+        </div>
+      ) : null}
 
       {error ? (
         <div
@@ -457,11 +627,13 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                 })}
               </tbody>
             </table>
-            {cards.length === 0 ? (
-              <p className="px-4 py-8 text-center text-[#f4f0fa]/55">No cards in the database.</p>
+            {filteredCards.length === 0 ? (
+              <p className="px-4 py-8 text-center text-[#f4f0fa]/55">
+                {cards.length === 0 ? "No cards in the database." : "No cards match your filters."}
+              </p>
             ) : null}
           </div>
-          {cards.length > TABLE_PAGE_SIZE ? (
+          {filteredCards.length > TABLE_PAGE_SIZE ? (
             <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
               <button
                 type="button"
@@ -527,10 +699,12 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
               );
             })}
           </div>
-          {cards.length === 0 ? (
-            <p className="text-center text-[#f4f0fa]/55">No cards in the database.</p>
+          {filteredCards.length === 0 ? (
+            <p className="text-center text-[#f4f0fa]/55">
+              {cards.length === 0 ? "No cards in the database." : "No cards match your filters."}
+            </p>
           ) : null}
-          {cards.length > 0 && totalGridPages > 1 ? (
+          {filteredCards.length > 0 && totalGridPages > 1 ? (
             <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
               <button
                 type="button"
@@ -612,6 +786,142 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                     </a>
                   </div>
                 ) : null}
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {filterModalOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[10002] flex items-end justify-center bg-black/70 p-3 sm:items-center sm:p-6"
+              role="presentation"
+              onClick={() => setFilterModalOpen(false)}
+            >
+              <div
+                className={`w-full max-w-md rounded-xl border bg-[#1a1524] p-4 shadow-2xl sm:p-5 ${
+                  isLight ? "border-white/20" : "border-white/[0.28]"
+                }`}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="catalog-filter-title"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div>
+                    <h3 id="catalog-filter-title" className="m-0 text-lg font-semibold text-[#f4f0fa]">
+                      Filter cards
+                    </h3>
+                    <p className="mt-1 text-[0.8125rem] text-[#f4f0fa]/60">
+                      Narrow results by type, rarity, pitch, or class.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className={`${iconBtn} ${iconIdle} size-9 shrink-0`}
+                    aria-label="Close filters"
+                    onClick={() => setFilterModalOpen(false)}
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
+                      Type
+                    </span>
+                    <select
+                      className={fieldCls}
+                      value={draftAdvancedFilters.type}
+                      onChange={(e) =>
+                        setDraftAdvancedFilters((f) => ({ ...f, type: e.target.value }))
+                      }
+                    >
+                      <option value="">Any type</option>
+                      {CARD_TYPE_NAMES.map((name, id) => (
+                        <option key={id} value={String(id)}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
+                      Rarity
+                    </span>
+                    <select
+                      className={fieldCls}
+                      value={draftAdvancedFilters.rarity}
+                      onChange={(e) =>
+                        setDraftAdvancedFilters((f) => ({ ...f, rarity: e.target.value }))
+                      }
+                    >
+                      <option value="">Any rarity</option>
+                      {CARD_RARITY_NAMES.map((name, id) => (
+                        <option key={id} value={String(id)}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
+                      Pitch
+                    </span>
+                    <select
+                      className={fieldCls}
+                      value={draftAdvancedFilters.pitch}
+                      onChange={(e) =>
+                        setDraftAdvancedFilters((f) => ({ ...f, pitch: e.target.value }))
+                      }
+                    >
+                      <option value="">Any pitch</option>
+                      <option value="1">Red (1)</option>
+                      <option value="2">Yellow (2)</option>
+                      <option value="3">Blue (3)</option>
+                    </select>
+                  </label>
+
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
+                      Class
+                    </span>
+                    <select
+                      className={fieldCls}
+                      value={draftAdvancedFilters.cardClass}
+                      onChange={(e) =>
+                        setDraftAdvancedFilters((f) => ({ ...f, cardClass: e.target.value }))
+                      }
+                    >
+                      <option value="">Any class</option>
+                      {CARD_CLASS_NAMES.map((name, id) => (
+                        <option key={id} value={String(id)}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+                  <button type="button" className={paginatorBtn} onClick={clearAdvancedDraft}>
+                    Clear
+                  </button>
+                  <button type="button" className={paginatorBtn} onClick={() => setFilterModalOpen(false)}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-white/[0.28] bg-violet-600/90 px-4 py-2 text-[0.875rem] font-semibold text-white hover:bg-violet-600"
+                    onClick={applyAdvancedFilters}
+                  >
+                    Apply filters
+                  </button>
+                </div>
               </div>
             </div>,
             document.body,

@@ -6,14 +6,14 @@ import { cardRarityName } from "../constants/cardRarity";
 import { cardSubtypeToken } from "../constants/cardSubtype";
 import { cardTalentName } from "../constants/cardTalent";
 import { cardTypeName } from "../constants/cardType";
-import { cardImageUrl } from "../utils/cardPrintings";
-
-/** FAB-style collector number: OMN001 */
-function formatCollectorCode(setCode, setNum) {
-  const code = String(setCode ?? "").trim();
-  const n = Math.max(0, Number(setNum) || 0);
-  return `${code}${String(n).padStart(3, "0")}`;
-}
+import {
+  cardPrintings,
+  formatCollectorCode,
+  printingImageUrl,
+  printingSetLabel,
+  printingSummary,
+  selectedPrinting,
+} from "../utils/cardPrintings";
 
 /**
  * @param {number[] | undefined} arr
@@ -32,7 +32,14 @@ function formatEnumList(arr, nameFn) {
  *   set_id: number,
  *   name: string,
  *   card_identifier: string | null,
- *   printings?: { image_url?: string | null, set_code?: string, set_num?: number, rarity?: number | null }[],
+ *   printings?: {
+ *     id: number,
+ *     set_code: string,
+ *     set_num: number,
+ *     set_name?: string | null,
+ *     rarity?: number | null,
+ *     image_url?: string | null,
+ *   }[],
  *   functional_text: string | null,
  *   rarity: number | null,
  *   set_code: string,
@@ -55,6 +62,7 @@ export function CardDetailPage({ isLight, identifier, active }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [notFound, setNotFound] = useState(false);
+  const [selectedPrintingId, setSelectedPrintingId] = useState(/** @type {number | null} */ (null));
 
   const load = useCallback(async () => {
     if (!active || !identifier.trim()) return;
@@ -94,6 +102,18 @@ export function CardDetailPage({ isLight, identifier, active }) {
     return undefined;
   }, [active, load]);
 
+  useEffect(() => {
+    setSelectedPrintingId(null);
+  }, [card?.id]);
+
+  const printings = useMemo(() => cardPrintings(card), [card]);
+  const activePrinting = useMemo(
+    () => selectedPrinting(printings, selectedPrintingId),
+    [printings, selectedPrintingId],
+  );
+  const activeImgUrl = useMemo(() => printingImageUrl(activePrinting), [activePrinting]);
+  const activeRarity = activePrinting?.rarity ?? card?.rarity ?? null;
+
   const panelBorder = isLight
     ? "border-white/[0.12]"
     : "border-white/[0.24] ring-1 ring-white/[0.05]";
@@ -101,7 +121,12 @@ export function CardDetailPage({ isLight, identifier, active }) {
   const labelCls = `text-[0.75rem] font-semibold uppercase tracking-wide ${muted}`;
   const ddCls = "text-[0.9rem] text-[#f4f0fa]/95";
 
-  const cardImgUrl = useMemo(() => (card ? cardImageUrl(card) : null), [card]);
+  const printingBtnIdle = isLight
+    ? "border-white/[0.22] bg-black/25 text-[#f4f0fa]/88 hover:border-white/35 hover:bg-black/35"
+    : "border-white/[0.24] bg-black/30 text-[#f4f0fa]/90 hover:border-white/38 hover:bg-black/40";
+  const printingBtnActive = isLight
+    ? "border-[#b998e8]/55 bg-[#7b4cb8]/35 text-white shadow-inner"
+    : "border-purple-400/45 bg-purple-950/50 text-white";
 
   return (
     <div className="relative flex w-full flex-1 flex-col gap-5 px-1 py-2 sm:px-2">
@@ -134,13 +159,11 @@ export function CardDetailPage({ isLight, identifier, active }) {
 
       {!loading && !error && card ? (
         <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10">
-          <div className="mx-auto flex w-full max-w-[min(100%,22rem)] shrink-0 lg:mx-0 lg:w-[min(100%,22rem)]">
-            <div
-              className={`overflow-hidden rounded-xl border bg-black/25 ${panelBorder}`}
-            >
-              {cardImgUrl ? (
+          <div className="mx-auto flex w-full max-w-[min(100%,22rem)] shrink-0 flex-col gap-3 lg:mx-0 lg:w-[min(100%,22rem)]">
+            <div className={`overflow-hidden rounded-xl border bg-black/25 ${panelBorder}`}>
+              {activeImgUrl ? (
                 <img
-                  src={cardImgUrl}
+                  src={activeImgUrl}
                   alt={card.name || ""}
                   className="h-auto w-full object-contain"
                   draggable={false}
@@ -151,18 +174,54 @@ export function CardDetailPage({ isLight, identifier, active }) {
                 </div>
               )}
             </div>
+
+            {printings.length > 0 ? (
+              <div
+                className={`rounded-xl border bg-black/20 p-3 ${panelBorder}`}
+                role="group"
+                aria-label="Card printings"
+              >
+                <p className={`m-0 mb-2 text-[0.75rem] font-semibold uppercase tracking-wide ${muted}`}>
+                  Printings
+                </p>
+                <div className="flex flex-col gap-2">
+                  {printings.map((printing) => {
+                    if (!printing || typeof printing.id !== "number") return null;
+                    const isActive = activePrinting?.id === printing.id;
+                    const rarityLabel =
+                      printing.rarity != null ? cardRarityName(printing.rarity) : null;
+                    return (
+                      <button
+                        key={printing.id}
+                        type="button"
+                        aria-pressed={isActive}
+                        className={`flex w-full flex-col items-start gap-0.5 rounded-lg border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 ${
+                          isActive ? printingBtnActive : printingBtnIdle
+                        }`}
+                        onClick={() => setSelectedPrintingId(printing.id)}
+                      >
+                        <span className="text-[0.875rem] font-medium leading-snug">
+                          {printingSetLabel(printing)}
+                        </span>
+                        <span className="font-mono text-[0.75rem] opacity-85">
+                          {formatCollectorCode(printing.set_code, printing.set_num)}
+                          {rarityLabel ? ` · ${rarityLabel}` : ""}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
           </div>
 
           <section className={`min-w-0 flex-1 rounded-xl border bg-black/20 p-4 sm:p-5 ${panelBorder}`}>
             <header className="space-y-1">
               <h2 className="m-0 text-xl font-semibold tracking-tight text-[#f4f0fa]">{card.name}</h2>
               <p className={`m-0 text-[0.9rem] leading-snug ${muted}`}>
-                {(() => {
-                  const setName = card.set_name?.trim();
-                  const code = formatCollectorCode(card.set_code, card.set_num);
-                  if (setName) return `${setName} - ${code}`;
-                  return code;
-                })()}
+                {activePrinting
+                  ? printingSummary(activePrinting)
+                  : formatCollectorCode(card.set_code, card.set_num)}
               </p>
             </header>
 
@@ -171,10 +230,37 @@ export function CardDetailPage({ isLight, identifier, active }) {
                 isLight ? "border-white/[0.12]" : "border-white/[0.18]"
               }`}
             >
-              {card.rarity != null ? (
+              {printings.length > 1 ? (
+                <>
+                  <dt className={labelCls}>Printed in</dt>
+                  <dd className={ddCls}>
+                    <ul className="m-0 list-none space-y-1 p-0">
+                      {printings.map((printing) => {
+                        if (!printing || typeof printing.id !== "number") return null;
+                        const isActive = activePrinting?.id === printing.id;
+                        return (
+                          <li key={printing.id}>
+                            <button
+                              type="button"
+                              className={`text-left underline-offset-2 hover:underline ${
+                                isActive ? "font-medium text-[#f4f0fa]" : "text-[#f4f0fa]/80"
+                              }`}
+                              onClick={() => setSelectedPrintingId(printing.id)}
+                            >
+                              {printingSummary(printing)}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </dd>
+                </>
+              ) : null}
+
+              {activeRarity != null ? (
                 <>
                   <dt className={labelCls}>Rarity</dt>
-                  <dd className={ddCls}>{cardRarityName(card.rarity) ?? card.rarity}</dd>
+                  <dd className={ddCls}>{cardRarityName(activeRarity) ?? activeRarity}</dd>
                 </>
               ) : null}
 

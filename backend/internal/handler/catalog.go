@@ -97,6 +97,7 @@ type printingJSON struct {
 	ID       int     `json:"id"`
 	SetCode  string  `json:"set_code"`
 	SetNum   int16   `json:"set_num"`
+	SetName  string  `json:"set_name,omitempty"`
 	Rarity   *int16  `json:"rarity"`
 	ImageURL *string `json:"image_url"`
 }
@@ -140,6 +141,7 @@ func printingsToJSON(ps []repository.CardPrinting) []printingJSON {
 			ID:       ps[i].ID,
 			SetCode:  ps[i].SetCode,
 			SetNum:   ps[i].SetNum,
+			SetName:  ps[i].SetName,
 			Rarity:   ps[i].Rarity,
 			ImageURL: ps[i].ImageURL,
 		}

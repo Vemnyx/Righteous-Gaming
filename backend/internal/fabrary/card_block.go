@@ -35,7 +35,16 @@ var (
 	reSetIdentifiers  = regexp.MustCompile(`(?m)\bsetIdentifiers:\s*\[([^\]]+)\]`)
 )
 
-// BlockMatchesRelease returns true if block contains the substring (e.g. "Release.OmensOfTheThirdAge").
+// CardIdentifierFromBlock returns the cardIdentifier string from a fabrary card object block.
+func CardIdentifierFromBlock(block string) (string, bool) {
+	m := reCardIdentifier.FindStringSubmatch(block)
+	if len(m) < 2 {
+		return "", false
+	}
+	id := strings.TrimSpace(m[1])
+	return id, id != ""
+}
+
 // If token is empty, any block matches.
 func BlockMatchesRelease(block, token string) bool {
 	token = strings.TrimSpace(token)
