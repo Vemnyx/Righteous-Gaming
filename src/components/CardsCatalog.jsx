@@ -14,6 +14,8 @@ import {
   filterCatalogCard,
 } from "../utils/cardCatalogFilter";
 import { cardImageUrl, formatCollectorCode } from "../utils/cardPrintings";
+import { cardGridLiftClass } from "../utils/cardGridLift";
+import { CardImageLightbox } from "./CardImageLightbox";
 
 const MD_MIN = 768;
 const TABLE_PAGE_SIZE = 25;
@@ -117,24 +119,6 @@ function TableIcon() {
       <path d="M12 3v18" />
       <path d="M3 12h18" />
       <rect x="3" y="3" width="18" height="18" rx="2" />
-    </svg>
-  );
-}
-
-function EyeViewDetailsIcon() {
-  return (
-    <svg
-      className="size-5 shrink-0"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-      <circle cx="12" cy="12" r="3" />
     </svg>
   );
 }
@@ -438,11 +422,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
     : "border-white/[0.24] ring-1 ring-white/[0.05]";
   const tableHeadBorder = isLight ? "border-white/[0.12]" : "border-white/[0.20]";
   const tableRowBorder = isLight ? "border-white/[0.06]" : "border-white/[0.12]";
-  const gridCardLift =
-    "relative z-0 transition-[transform,box-shadow] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform " +
-    (isLight
-      ? "shadow-sm shadow-black/15 hover:z-10 hover:scale-[1.055] hover:-translate-y-1.5 hover:shadow-[0_14px_32px_-8px_rgba(0,0,0,0.22)] focus-visible:z-10 focus-visible:scale-[1.055] focus-visible:-translate-y-1.5 focus-visible:shadow-[0_14px_32px_-8px_rgba(0,0,0,0.22)]"
-      : "shadow-none hover:z-10 hover:scale-[1.055] hover:-translate-y-1.5 hover:shadow-[0_18px_44px_-10px_rgba(0,0,0,0.72)] focus-visible:z-10 focus-visible:scale-[1.055] focus-visible:-translate-y-1.5 focus-visible:shadow-[0_18px_44px_-10px_rgba(0,0,0,0.72)]");
+  const gridCardLift = cardGridLiftClass(isLight);
 
   const fieldCls = isLight
     ? "min-w-0 rounded-lg border border-white/[0.24] bg-black/25 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/45 focus:border-purple-400/55"
@@ -804,48 +784,11 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
           )
         : null}
 
-      {gridImageModal && typeof document !== "undefined"
-        ? createPortal(
-            <div
-              className="fixed inset-0 z-[10001] flex cursor-default items-center justify-center bg-black/80 p-3 sm:p-6"
-              role="dialog"
-              aria-modal="true"
-              aria-label={gridImageModal.name ? `Card: ${gridImageModal.name}` : "Card image"}
-              onClick={() => setGridImageModal(null)}
-            >
-              <div className="flex h-[85vh] w-full max-w-[min(100%,96vw)] flex-col items-center justify-center gap-4">
-                <div className="flex min-h-0 w-full flex-1 items-center justify-center">
-                  <img
-                    src={gridImageModal.url}
-                    alt={gridImageModal.name || "Card"}
-                    className="max-h-full max-w-full object-contain select-none"
-                    draggable={false}
-                  />
-                </div>
-                {gridImageModal.card_identifier && onOpenCardDetail ? (
-                  <div className="flex shrink-0 justify-center" onClick={(e) => e.stopPropagation()}>
-                    <a
-                      href={`/resources/cards/${encodeURIComponent(gridImageModal.card_identifier)}`}
-                      className="inline-flex items-center gap-2 rounded-lg border border-white/[0.28] bg-black/40 px-4 py-2.5 text-[0.875rem] font-medium text-[#c4a9ef] shadow-lg transition-colors hover:border-[#c4a9ef]/45 hover:bg-black/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55"
-                      aria-label="Open the card details page"
-                      title="Go to the full card details page"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        const id = gridImageModal.card_identifier;
-                        setGridImageModal(null);
-                        onOpenCardDetail(id);
-                      }}
-                    >
-                      <EyeViewDetailsIcon />
-                      View Card Details
-                    </a>
-                  </div>
-                ) : null}
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
+      <CardImageLightbox
+        image={gridImageModal}
+        onClose={() => setGridImageModal(null)}
+        onOpenCardDetail={onOpenCardDetail}
+      />
 
       {filterModalOpen && typeof document !== "undefined"
         ? createPortal(

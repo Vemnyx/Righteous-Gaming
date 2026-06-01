@@ -13,23 +13,28 @@ var ErrDeckNotFound = errors.New("repository: deck not found")
 
 // Deck is a row from decks.
 type Deck struct {
-	ID          int
-	UserID      int
-	Name        string
-	Format      int16
-	Hero        int16
-	HeroName    *string
-	FabraryLink *string
+	ID             int
+	UserID         int
+	Name           string
+	Format         int16
+	Hero           int16
+	SetID          *int
+	FabraryFormat  *string
+	DeckSourceID   int
+	DeckSourceName string
+	FabraryLink    *string
 }
 
 // CreateDeckInput holds fields for inserting a deck and its cards.
 type CreateDeckInput struct {
-	UserID      int
-	Name        string
-	Format      int16
-	Hero        int16
-	HeroName    *string
-	FabraryLink *string
+	UserID        int
+	Name          string
+	Format        int16
+	Hero          int16
+	SetID         *int
+	FabraryFormat *string
+	DeckSourceID  int
+	FabraryLink   *string
 }
 
 // DeckCardInput is one deck_cards row.
@@ -49,10 +54,11 @@ func (r *Repository) ListDecksByUserID(ctx context.Context, userID int) ([]Deck,
 	}
 
 	const q = `
-SELECT id, user_id, name, format, hero, hero_name, fabrary_link
-FROM decks
-WHERE user_id = $1
-ORDER BY id DESC`
+SELECT d.id, d.user_id, d.name, d.format, d.hero, d.set_id, d.fabrary_format, d.deck_source_id, ds.source, d.fabrary_link
+FROM decks d
+INNER JOIN deck_source ds ON ds.id = d.deck_source_id
+WHERE d.user_id = $1
+ORDER BY d.id DESC`
 
 	rows, err := r.pool.Query(ctx, q, userID)
 	if err != nil {
@@ -63,7 +69,10 @@ ORDER BY id DESC`
 	var out []Deck
 	for rows.Next() {
 		var d Deck
-		if err := rows.Scan(&d.ID, &d.UserID, &d.Name, &d.Format, &d.Hero, &d.HeroName, &d.FabraryLink); err != nil {
+		if err := rows.Scan(
+			&d.ID, &d.UserID, &d.Name, &d.Format, &d.Hero, &d.SetID, &d.FabraryFormat,
+			&d.DeckSourceID, &d.DeckSourceName, &d.FabraryLink,
+		); err != nil {
 			return nil, fmt.Errorf("repository: scan deck: %w", err)
 		}
 		out = append(out, d)
@@ -92,13 +101,15 @@ func (r *Repository) GetDeckByIDForUser(ctx context.Context, deckID, userID int)
 	}
 
 	const deckQ = `
-SELECT id, user_id, name, format, hero, hero_name, fabrary_link
-FROM decks
-WHERE id = $1 AND user_id = $2`
+SELECT d.id, d.user_id, d.name, d.format, d.hero, d.set_id, d.fabrary_format, d.deck_source_id, ds.source, d.fabrary_link
+FROM decks d
+INNER JOIN deck_source ds ON ds.id = d.deck_source_id
+WHERE d.id = $1 AND d.user_id = $2`
 
 	var deck Deck
 	err := r.pool.QueryRow(ctx, deckQ, deckID, userID).Scan(
-		&deck.ID, &deck.UserID, &deck.Name, &deck.Format, &deck.Hero, &deck.HeroName, &deck.FabraryLink,
+		&deck.ID, &deck.UserID, &deck.Name, &deck.Format, &deck.Hero,
+		&deck.SetID, &deck.FabraryFormat, &deck.DeckSourceID, &deck.DeckSourceName, &deck.FabraryLink,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -173,6 +184,10 @@ func (r *Repository) CreateDeckWithCards(ctx context.Context, in CreateDeckInput
 		return nil, fmt.Errorf("repository: name required")
 	}
 
+	if in.DeckSourceID <= 0 {
+		return nil, fmt.Errorf("repository: deck_source_id required")
+	}
+
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("repository: create deck begin: %w", err)
@@ -180,15 +195,22 @@ func (r *Repository) CreateDeckWithCards(ctx context.Context, in CreateDeckInput
 	defer tx.Rollback(ctx)
 
 	const insertDeck = `
-INSERT INTO decks (user_id, name, format, hero, hero_name, fabrary_link)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, name, format, hero, hero_name, fabrary_link`
+INSERT INTO decks (user_id, name, format, hero, set_id, fabrary_format, deck_source_id, fabrary_link)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, user_id, name, format, hero, set_id, fabrary_format, deck_source_id, fabrary_link`
 
 	var deck Deck
-	if err := tx.QueryRow(ctx, insertDeck, in.UserID, in.Name, in.Format, in.Hero, in.HeroName, in.FabraryLink).Scan(
-		&deck.ID, &deck.UserID, &deck.Name, &deck.Format, &deck.Hero, &deck.HeroName, &deck.FabraryLink,
+	if err := tx.QueryRow(ctx, insertDeck,
+		in.UserID, in.Name, in.Format, in.Hero, in.SetID, in.FabraryFormat, in.DeckSourceID, in.FabraryLink,
+	).Scan(
+		&deck.ID, &deck.UserID, &deck.Name, &deck.Format, &deck.Hero,
+		&deck.SetID, &deck.FabraryFormat, &deck.DeckSourceID, &deck.FabraryLink,
 	); err != nil {
 		return nil, fmt.Errorf("repository: insert deck: %w", err)
+	}
+
+	if src, err := r.DeckSourceByID(ctx, deck.DeckSourceID); err == nil && src != nil {
+		deck.DeckSourceName = src.Source
 	}
 
 	if len(cards) > 0 {
@@ -223,4 +245,35 @@ ON CONFLICT (deck_id, card_id, mainboard) DO NOTHING`
 		return nil, fmt.Errorf("repository: create deck commit: %w", err)
 	}
 	return &deck, nil
+}
+
+// MajoritySetIDForCardIDs returns the most common set_id among the given catalog card ids.
+func (r *Repository) MajoritySetIDForCardIDs(ctx context.Context, cardIDs []int) (*int, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	if len(cardIDs) == 0 {
+		return nil, nil
+	}
+
+	const q = `
+SELECT set_id
+FROM cards
+WHERE id = ANY($1)
+GROUP BY set_id
+ORDER BY COUNT(*) DESC, set_id ASC
+LIMIT 1`
+
+	var setID int
+	err := r.pool.QueryRow(ctx, q, cardIDs).Scan(&setID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("repository: majority set for cards: %w", err)
+	}
+	if setID <= 0 {
+		return nil, nil
+	}
+	return &setID, nil
 }

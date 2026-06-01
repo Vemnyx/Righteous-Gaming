@@ -1,0 +1,5 @@
+DROP INDEX IF EXISTS decks_set_id_idx;
+
+ALTER TABLE decks DROP COLUMN IF EXISTS fabrary_format;
+
+ALTER TABLE decks DROP COLUMN IF EXISTS set_id;

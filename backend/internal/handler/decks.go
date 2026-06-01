@@ -22,17 +22,30 @@ type decksHTTP struct {
 }
 
 type importFabraryDeckRequest struct {
-	FabraryLink string `json:"fabrary_link"`
+	FabraryLink  string `json:"fabrary_link"`
+	DeckSourceID int    `json:"deck_source_id"`
+}
+
+type createDeckSourceRequest struct {
+	Source string `json:"source"`
+}
+
+type deckSourceJSON struct {
+	ID     int    `json:"id"`
+	Source string `json:"source"`
 }
 
 type deckJSON struct {
-	ID          int     `json:"id"`
-	UserID      int     `json:"user_id"`
-	Name        string  `json:"name"`
-	Format      int16   `json:"format"`
-	Hero        int16   `json:"hero"`
-	HeroName    *string `json:"hero_name,omitempty"`
-	FabraryLink *string `json:"fabrary_link,omitempty"`
+	ID            int     `json:"id"`
+	UserID        int     `json:"user_id"`
+	Name          string  `json:"name"`
+	Format        int16   `json:"format"`
+	Hero          int16   `json:"hero"`
+	SetID         *int    `json:"set_id,omitempty"`
+	FabraryFormat  *string `json:"fabrary_format,omitempty"`
+	DeckSourceID   int     `json:"deck_source_id"`
+	Source         string  `json:"source"`
+	FabraryLink    *string `json:"fabrary_link,omitempty"`
 }
 
 type deckCardLineJSON struct {
@@ -58,13 +71,16 @@ func deckToJSON(d *repository.Deck) deckJSON {
 		return deckJSON{}
 	}
 	return deckJSON{
-		ID:          d.ID,
-		UserID:      d.UserID,
-		Name:        d.Name,
-		Format:      d.Format,
-		Hero:        d.Hero,
-		HeroName:    d.HeroName,
-		FabraryLink: d.FabraryLink,
+		ID:            d.ID,
+		UserID:        d.UserID,
+		Name:          d.Name,
+		Format:        d.Format,
+		Hero:          d.Hero,
+		SetID:          d.SetID,
+		FabraryFormat:  d.FabraryFormat,
+		DeckSourceID:   d.DeckSourceID,
+		Source:         d.DeckSourceName,
+		FabraryLink:    d.FabraryLink,
 	}
 }
 
@@ -93,6 +109,62 @@ func (h *decksHTTP) sessionUser(w http.ResponseWriter, r *http.Request) (*domain
 		return nil, false
 	}
 	return u, true
+}
+
+func (h *decksHTTP) listDeckSources(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := h.sessionUser(w, r); !ok {
+		return
+	}
+
+	sources, err := h.app.Repo.ListDeckSources(r.Context())
+	if err != nil {
+		log.Error("list deck sources", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	out := make([]deckSourceJSON, 0, len(sources))
+	for i := range sources {
+		out = append(out, deckSourceJSON{ID: sources[i].ID, Source: sources[i].Source})
+	}
+	writeCatalogJSON(w, http.StatusOK, map[string]any{"sources": out})
+}
+
+func (h *decksHTTP) createDeckSource(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := h.sessionUser(w, r); !ok {
+		return
+	}
+
+	var body createDeckSourceRequest
+	if err := decodeCatalogJSON(w, r, &body); err != nil {
+		return
+	}
+	source := strings.TrimSpace(body.Source)
+	if source == "" {
+		writeFieldError(w, http.StatusBadRequest, "source", "required")
+		return
+	}
+
+	created, err := h.app.Repo.CreateDeckSource(r.Context(), source)
+	if err != nil {
+		if errors.Is(err, repository.ErrDeckSourceDuplicate) {
+			writeFieldError(w, http.StatusConflict, "source", "already exists")
+			return
+		}
+		log.Error("create deck source", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	writeCatalogJSON(w, http.StatusCreated, deckSourceJSON{ID: created.ID, Source: created.Source})
 }
 
 func (h *decksHTTP) listMyDecks(w http.ResponseWriter, r *http.Request) {
@@ -221,6 +293,19 @@ func (h *decksHTTP) importFabraryDeck(w http.ResponseWriter, r *http.Request) {
 		writeFieldError(w, http.StatusBadRequest, "fabrary_link", "required")
 		return
 	}
+	if body.DeckSourceID <= 0 {
+		writeFieldError(w, http.StatusBadRequest, "deck_source_id", "required")
+		return
+	}
+	if _, err := h.app.Repo.DeckSourceByID(r.Context(), body.DeckSourceID); err != nil {
+		if errors.Is(err, repository.ErrDeckSourceNotFound) {
+			writeFieldError(w, http.StatusBadRequest, "deck_source_id", "invalid deck source")
+			return
+		}
+		log.Error("import fabrary deck source lookup", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
 
 	deckID, normalizedLink, err := fabrary.ParseDeckURL(link)
 	if err != nil {
@@ -277,14 +362,16 @@ func (h *decksHTTP) importFabraryDeck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	linkCopy := normalizedLink
-	heroName := deckHeroNameForImport(fetched.HeroIdentifier, hero)
+	setID, fabraryFormat := limitedDeckSetFields(ctx, h.app.Repo, format, fetched.Format, cardInputs)
 	created, err := h.app.Repo.CreateDeckWithCards(ctx, repository.CreateDeckInput{
-		UserID:      u.ID,
-		Name:        fetched.Name,
-		Format:      format,
-		Hero:        hero,
-		HeroName:    &heroName,
-		FabraryLink: &linkCopy,
+		UserID:        u.ID,
+		Name:          fetched.Name,
+		Format:        format,
+		Hero:          hero,
+		SetID:         setID,
+		FabraryFormat: fabraryFormat,
+		DeckSourceID:  body.DeckSourceID,
+		FabraryLink:   &linkCopy,
 	}, cardInputs)
 	if err != nil {
 		log.Error("import fabrary deck insert", "error", err, "user_id", u.ID)
@@ -310,12 +397,41 @@ func sumDeckCardCounts(cards []repository.DeckCardInput) int {
 	return n
 }
 
-// deckHeroNameForImport picks Fabrary's short hero label when known, else the domain hero name.
-func deckHeroNameForImport(heroIdentifier string, hero int16) string {
-	if name := fabrary.HeroShortNameFromIdentifier(heroIdentifier); name != "" {
-		return name
+// limitedDeckSetFields returns set_id and fabrary_format only for Draft, Limited, or Sealed.
+func limitedDeckSetFields(
+	ctx context.Context,
+	repo *repository.Repository,
+	format int16,
+	fabraryFormatRaw string,
+	cards []repository.DeckCardInput,
+) (*int, *string) {
+	if format != int16(domain.CardFormatLimited) {
+		return nil, nil
 	}
-	return domain.CardHero(hero).String()
+	raw := strings.TrimSpace(fabraryFormatRaw)
+	if !fabrary.IsLimitedFamilyFormatLabel(raw) {
+		return nil, nil
+	}
+	label := raw
+	fabFormat := &label
+
+	ids := make([]int, 0, len(cards))
+	seen := make(map[int]struct{}, len(cards))
+	for _, c := range cards {
+		if c.CardID <= 0 {
+			continue
+		}
+		if _, ok := seen[c.CardID]; ok {
+			continue
+		}
+		seen[c.CardID] = struct{}{}
+		ids = append(ids, c.CardID)
+	}
+	setID, err := repo.MajoritySetIDForCardIDs(ctx, ids)
+	if err != nil {
+		return nil, fabFormat
+	}
+	return setID, fabFormat
 }
 
 func resolveFabraryHero(ctx context.Context, repo *repository.Repository, heroIdentifier string) (int16, error) {

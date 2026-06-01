@@ -34,3 +34,13 @@ func FormatFromFabrary(raw string) (int16, error) {
 	}
 	return 0, fmt.Errorf("fabrary: unknown format %q", raw)
 }
+
+// IsLimitedFamilyFormatLabel reports whether label is Draft, Limited, or Sealed (all map to CardFormatLimited).
+func IsLimitedFamilyFormatLabel(label string) bool {
+	switch strings.TrimSpace(label) {
+	case "Limited", "Draft", "Sealed":
+		return true
+	default:
+		return false
+	}
+}
