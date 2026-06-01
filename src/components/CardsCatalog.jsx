@@ -270,7 +270,9 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
   );
 
   const setOptions = useMemo(() => {
-    const next = [...sets];
+    const next = sets.filter(
+      (s) => String(s?.name ?? "").trim().toLowerCase() !== "promos",
+    );
     next.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
     return next;
   }, [sets]);
@@ -543,7 +545,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
               <input
                 type="search"
                 className={`${fieldCls} w-full pr-9`}
-                placeholder="Search name, code, set, type…"
+                placeholder="Search name, class, talent…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 autoComplete="off"

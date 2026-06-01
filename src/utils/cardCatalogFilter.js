@@ -1,8 +1,6 @@
 import { cardClassName } from "../constants/cardClass";
-import { cardRarityName } from "../constants/cardRarity";
-import { cardTypeName } from "../constants/cardType";
+import { cardTalentName } from "../constants/cardTalent";
 import { cardNameMatchesSearch, fuzzyMatch, normalizeForSearch } from "./fuzzyMatch";
-import { formatCollectorCode } from "./cardPrintings";
 
 /**
  * @param {{ set_code?: string, printings?: { set_code?: string }[] | null } | null | undefined} card
@@ -87,16 +85,16 @@ export function cardSearchHaystack(card, opts = {}) {
   const includeName = opts.includeName !== false;
   const parts = [
     includeName ? card.name : null,
-    card.card_identifier,
-    card.set_name,
-    card.set_code,
-    formatCollectorCode(card.set_code, card.set_num),
-    cardTypeName(card.type),
-    card.rarity != null ? cardRarityName(card.rarity) : null,
   ];
   if (Array.isArray(card.classes)) {
     for (const id of card.classes) {
       const name = cardClassName(id);
+      if (name) parts.push(name);
+    }
+  }
+  if (Array.isArray(card.talents)) {
+    for (const id of card.talents) {
+      const name = cardTalentName(id);
       if (name) parts.push(name);
     }
   }
@@ -119,12 +117,13 @@ export function cardMatchesSearch(card, query) {
     if (allTokensMatchName) return true;
   }
 
-  const haystack = cardSearchHaystack(card);
+  const haystack = cardSearchHaystack(card, { includeName: false });
+  const normalizedHaystack = normalizeForSearch(haystack);
   return tokens.every((token) => {
     const n = normalizeForSearch(token);
     if (!n) return true;
     // Short tokens should not use subsequence matching; require a contiguous substring.
-    if (n.length <= 4) return normalizeForSearch(haystack).includes(n);
+    if (n.length <= 4) return normalizedHaystack.includes(n);
     return fuzzyMatch(haystack, token);
   });
 }
