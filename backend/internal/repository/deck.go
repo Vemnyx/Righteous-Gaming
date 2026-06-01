@@ -19,6 +19,7 @@ type Deck struct {
 	Format         int16
 	HeroID         int
 	HeroName       string
+	HeroArtImageURL *string
 	SetID          *int
 	FabraryFormat  *string
 	DeckSourceID   int
@@ -39,7 +40,7 @@ type CreateDeckInput struct {
 }
 
 const deckSelectColumns = `
-d.id, d.user_id, d.name, d.format, d.hero_id, h.name, d.set_id, d.fabrary_format, d.deck_source_id, ds.source, d.fabrary_link`
+d.id, d.user_id, d.name, d.format, d.hero_id, h.name, h.art_image_url, d.set_id, d.fabrary_format, d.deck_source_id, ds.source, d.fabrary_link`
 
 // DeckCardInput is one deck_cards row.
 type DeckCardInput struct {
@@ -95,7 +96,7 @@ WHERE 1=1`
 	for rows.Next() {
 		var d Deck
 		if err := rows.Scan(
-			&d.ID, &d.UserID, &d.Name, &d.Format, &d.HeroID, &d.HeroName, &d.SetID, &d.FabraryFormat,
+			&d.ID, &d.UserID, &d.Name, &d.Format, &d.HeroID, &d.HeroName, &d.HeroArtImageURL, &d.SetID, &d.FabraryFormat,
 			&d.DeckSourceID, &d.DeckSourceName, &d.FabraryLink,
 		); err != nil {
 			return nil, fmt.Errorf("repository: scan deck: %w", err)
@@ -156,7 +157,7 @@ WHERE d.id = $1`
 
 	var deck Deck
 	err := r.pool.QueryRow(ctx, deckQ, args...).Scan(
-		&deck.ID, &deck.UserID, &deck.Name, &deck.Format, &deck.HeroID, &deck.HeroName,
+		&deck.ID, &deck.UserID, &deck.Name, &deck.Format, &deck.HeroID, &deck.HeroName, &deck.HeroArtImageURL,
 		&deck.SetID, &deck.FabraryFormat, &deck.DeckSourceID, &deck.DeckSourceName, &deck.FabraryLink,
 	)
 	if err != nil {
@@ -306,7 +307,7 @@ WHERE d.id = $1 AND d.user_id = $2`
 
 	var deck Deck
 	err := r.pool.QueryRow(ctx, q, deckID, userID).Scan(
-		&deck.ID, &deck.UserID, &deck.Name, &deck.Format, &deck.HeroID, &deck.HeroName,
+		&deck.ID, &deck.UserID, &deck.Name, &deck.Format, &deck.HeroID, &deck.HeroName, &deck.HeroArtImageURL,
 		&deck.SetID, &deck.FabraryFormat, &deck.DeckSourceID, &deck.DeckSourceName, &deck.FabraryLink,
 	)
 	if err != nil {

@@ -40,9 +40,10 @@ type deckJSON struct {
 	UserID        int     `json:"user_id"`
 	Name          string  `json:"name"`
 	Format        int16   `json:"format"`
-	HeroID        int     `json:"hero_id"`
-	HeroName      string  `json:"hero_name"`
-	SetID         *int    `json:"set_id,omitempty"`
+	HeroID          int     `json:"hero_id"`
+	HeroName        string  `json:"hero_name"`
+	HeroArtImageURL *string `json:"hero_art_image_url,omitempty"`
+	SetID           *int    `json:"set_id,omitempty"`
 	FabraryFormat  *string `json:"fabrary_format,omitempty"`
 	DeckSourceID    int     `json:"deck_source_id"`
 	Source          string  `json:"source"`
@@ -78,9 +79,10 @@ func deckToJSON(d *repository.Deck) deckJSON {
 		UserID:        d.UserID,
 		Name:          d.Name,
 		Format:        d.Format,
-		HeroID:        d.HeroID,
-		HeroName:      d.HeroName,
-		SetID:          d.SetID,
+		HeroID:          d.HeroID,
+		HeroName:        d.HeroName,
+		HeroArtImageURL: d.HeroArtImageURL,
+		SetID:           d.SetID,
 		FabraryFormat:  d.FabraryFormat,
 		DeckSourceID:   d.DeckSourceID,
 		Source:         d.DeckSourceName,

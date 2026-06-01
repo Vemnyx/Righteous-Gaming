@@ -14,15 +14,15 @@ var ErrHeroNotFound = errors.New("repository: hero not found")
 
 // Hero is a row from heroes.
 type Hero struct {
-	ID            int
-	Name          string
-	Type          int16
-	Young         bool
-	Classes       []int16
-	Talents       []int16
-	CardID        *int
-	CardImageURL  *string
-	ArtImageURL   *string
+	ID           int
+	Name         string
+	Type         int16
+	Young        bool
+	Classes      []int16
+	Talents      []int16
+	CardID       *int
+	CardImageURL *string
+	ArtImageURL  *string
 }
 
 // HeroByID loads one hero row.
@@ -91,6 +91,72 @@ func (r *Repository) HeroIDByCardIdentifier(ctx context.Context, identifierLower
 		return 0, ErrHeroNotFound
 	}
 	return r.HeroIDByCardID(ctx, cardID)
+}
+
+// HeroArtCropRow is a hero with a source card image URL for portrait cropping.
+type HeroArtCropRow struct {
+	HeroID         int
+	CardID         *int
+	CardIdentifier *string
+	CardImageURL   string
+}
+
+// ListHeroesForArtCrop returns heroes that have a non-empty card_image_url.
+func (r *Repository) ListHeroesForArtCrop(ctx context.Context) ([]HeroArtCropRow, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	const q = `
+SELECT h.id, h.card_id, c.card_identifier, h.card_image_url
+FROM heroes h
+LEFT JOIN cards c ON c.id = h.card_id
+WHERE h.card_image_url IS NOT NULL AND btrim(h.card_image_url) <> ''
+ORDER BY h.id ASC`
+	rows, err := r.pool.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list heroes for art crop: %w", err)
+	}
+	defer rows.Close()
+
+	var out []HeroArtCropRow
+	for rows.Next() {
+		var row HeroArtCropRow
+		var cardID *int
+		var ident *string
+		if err := rows.Scan(&row.HeroID, &cardID, &ident, &row.CardImageURL); err != nil {
+			return nil, fmt.Errorf("repository: list heroes for art crop scan: %w", err)
+		}
+		row.CardID = cardID
+		row.CardIdentifier = ident
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: list heroes for art crop rows: %w", err)
+	}
+	return out, nil
+}
+
+// UpdateHeroArtImageURL sets heroes.art_image_url for one row.
+func (r *Repository) UpdateHeroArtImageURL(ctx context.Context, heroID int, artURL string) error {
+	if r.pool == nil {
+		return fmt.Errorf("repository: pool is closed")
+	}
+	if heroID <= 0 {
+		return fmt.Errorf("repository: invalid hero id")
+	}
+	artURL = strings.TrimSpace(artURL)
+	if artURL == "" {
+		return fmt.Errorf("repository: empty art url")
+	}
+	const q = `UPDATE heroes SET art_image_url = $2 WHERE id = $1`
+	tag, err := r.pool.Exec(ctx, q, heroID, artURL)
+	if err != nil {
+		return fmt.Errorf("repository: update hero art url: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrHeroNotFound
+	}
+	return nil
 }
 
 // HeroIDByType returns a heroes.id for the given CardHero enum type (prefers adult, then lowest id).

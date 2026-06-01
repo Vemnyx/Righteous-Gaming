@@ -14,7 +14,7 @@ import {
   matchesDeckTableFilters,
 } from "../utils/deckTableFilters";
 
-/** @typedef {{ id: number, user_id: number, name: string, format: number, hero_id: number, hero_name?: string | null, set_id?: number | null, fabrary_format?: string | null, deck_source_id: number, source: string, fabrary_link?: string | null }} DeckRow */
+/** @typedef {{ id: number, user_id: number, name: string, format: number, hero_id: number, hero_name?: string | null, hero_art_image_url?: string | null, set_id?: number | null, fabrary_format?: string | null, deck_source_id: number, source: string, fabrary_link?: string | null }} DeckRow */
 
 /** @typedef {{ id: number, source: string }} DeckSourceOption */
 
@@ -48,8 +48,8 @@ function parseApiError(errText) {
  * @param {{ isLight: boolean, active: boolean, onOpenDeck?: (deckId: number) => void }} props
  */
 export function DecksList({ isLight, active, onOpenDeck }) {
-  const { user } = useAuth();
-  const isAdmin = sessionProfile?.role === 0;
+  const { user, sessionProfile } = useAuth();
+  const isAdmin = Number(sessionProfile?.role) === 0;
   const [rows, setRows] = useState(/** @type {DeckRow[]} */ ([]));
   const [sets, setSets] = useState(/** @type {{ id: number, name: string }[]} */ ([]));
   const [loading, setLoading] = useState(false);
@@ -105,6 +105,10 @@ export function DecksList({ isLight, active, onOpenDeck }) {
           hero_id: d.hero_id,
           hero_name:
             d.hero_name != null && String(d.hero_name).trim() !== "" ? String(d.hero_name).trim() : null,
+          hero_art_image_url:
+            d.hero_art_image_url != null && String(d.hero_art_image_url).trim() !== ""
+              ? String(d.hero_art_image_url).trim()
+              : null,
           set_id: typeof d.set_id === "number" ? d.set_id : null,
           fabrary_format:
             d.fabrary_format != null && String(d.fabrary_format).trim() !== ""
@@ -419,11 +423,9 @@ export function DecksList({ isLight, active, onOpenDeck }) {
   const btnPrimary =
     "rounded-lg border border-white/[0.22] bg-gradient-to-br from-[#7b4cb8] to-[#5a2f8f] px-4 py-2 text-[0.8125rem] font-semibold text-white shadow-[0_3px_14px_rgba(90,47,143,0.38)] hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-45";
 
-  const tableChromeBorder = isLight
-    ? "border-white/[0.12]"
-    : "border-white/[0.24] ring-1 ring-white/[0.05]";
-  const tableHeadBorder = isLight ? "border-white/12" : "border-white/[0.20]";
-  const tableRowBorder = isLight ? "border-white/[0.08]" : "border-white/[0.12]";
+  const cardChromeBorder = isLight
+    ? "border-white/[0.12] bg-black/25"
+    : "border-white/[0.20] bg-black/20 ring-1 ring-white/[0.05]";
 
   const modalPanel = isLight
     ? "border border-white/[0.14] bg-gradient-to-b from-[#434054] to-[#2d2a38] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
@@ -538,64 +540,77 @@ export function DecksList({ isLight, active, onOpenDeck }) {
         </div>
       </div>
 
-      <div className={`overflow-x-auto rounded-xl border bg-black/20 ${tableChromeBorder}`}>
-        <table className="w-full min-w-[36rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
-          <thead>
-            <tr className={`border-b text-[0.68rem] uppercase tracking-wider text-[#f4f0fa]/55 ${tableHeadBorder}`}>
-              <th className="px-3 py-2.5 font-semibold sm:px-4">Name</th>
-              <th className="px-3 py-2.5 font-semibold sm:px-4">Source</th>
-              <th className="px-3 py-2.5 font-semibold sm:px-4">Format</th>
-              <th className="px-3 py-2.5 font-semibold sm:px-4">Hero</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={4} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
-                  Loading…
-                </td>
-              </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={4} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
-                  No decks yet. Import one from Fabrary to get started.
-                </td>
-              </tr>
-            ) : filteredRows.length === 0 ? (
-              <tr>
-                <td colSpan={4} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
-                  No decks match the selected filters.
-                </td>
-              </tr>
-            ) : (
-              filteredRows.map((row) => {
-                const fmtLabel = deckFormatColumnLabel(row, setNameById);
-                const heroLabel = deckHeroLabel(row);
-                const displayName = deckDisplayName(row, setNameById);
-                return (
-                  <tr key={row.id} className={`border-b ${tableRowBorder} last:border-b-0`}>
-                    <td className="max-w-[18rem] truncate px-3 py-2.5 text-[#f4f0fa]/85 sm:px-4" title={displayName}>
-                      {typeof onOpenDeck === "function" ? (
-                        <button
-                          type="button"
-                          className="max-w-full truncate text-left text-purple-300/95 underline decoration-purple-300/35 underline-offset-2 hover:text-purple-200"
-                          onClick={() => onOpenDeck(row.id)}
-                        >
-                          {displayName}
-                        </button>
-                      ) : (
-                        displayName
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 sm:px-4">{row.source || "—"}</td>
-                    <td className="px-3 py-2.5 sm:px-4">{fmtLabel}</td>
-                    <td className="px-3 py-2.5 sm:px-4">{heroLabel}</td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {loading ? (
+          <div
+            className={`col-span-full rounded-xl border px-4 py-10 text-center text-[0.875rem] text-[#f4f0fa]/65 ${cardChromeBorder}`}
+          >
+            Loading…
+          </div>
+        ) : rows.length === 0 ? (
+          <div
+            className={`col-span-full rounded-xl border px-4 py-10 text-center text-[0.875rem] text-[#f4f0fa]/65 ${cardChromeBorder}`}
+          >
+            No decks yet. Import one from Fabrary to get started.
+          </div>
+        ) : filteredRows.length === 0 ? (
+          <div
+            className={`col-span-full rounded-xl border px-4 py-10 text-center text-[0.875rem] text-[#f4f0fa]/65 ${cardChromeBorder}`}
+          >
+            No decks match the selected filters.
+          </div>
+        ) : (
+          filteredRows.map((row) => {
+            const fmtLabel = deckFormatColumnLabel(row, setNameById);
+            const heroLabel = deckHeroLabel(row);
+            const displayName = deckDisplayName(row, setNameById);
+            const heroArt = row.hero_art_image_url ?? null;
+            const openDeck = typeof onOpenDeck === "function" ? () => onOpenDeck(row.id) : undefined;
+
+            return (
+              <button
+                key={row.id}
+                type="button"
+                disabled={!openDeck}
+                onClick={openDeck}
+                className={`group relative flex min-h-[6.25rem] w-full cursor-pointer overflow-hidden rounded-xl border text-right transition-[border-color,box-shadow,filter] hover:border-purple-400/45 hover:shadow-[0_6px_28px_rgba(90,47,143,0.22)] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 disabled:cursor-default ${cardChromeBorder}`}
+                aria-label={displayName ? `Open deck: ${displayName}` : "Open deck"}
+              >
+                <div
+                  className="pointer-events-none absolute inset-y-0 left-0 w-[min(62%,13rem)]"
+                  aria-hidden
+                >
+                  {heroArt ? (
+                    <img
+                      src={heroArt}
+                      alt=""
+                      className="h-full w-full object-cover object-[center_35%] [mask-image:linear-gradient(to_right,black_48%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_48%,transparent_100%)]"
+                      draggable={false}
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent" />
+                  )}
+                  <div
+                    className={`absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-black/35 ${
+                      isLight ? "to-[#2d2a38]/95" : "to-[rgba(12,6,22,0.92)]"
+                    }`}
+                  />
+                </div>
+
+                <div className="relative z-[1] flex min-h-[6.25rem] w-full flex-col items-end justify-center gap-1 px-4 py-3.5 pl-[38%] sm:pl-[42%]">
+                  <p className="m-0 max-w-full truncate text-[0.95rem] font-semibold leading-snug text-[#f4f0fa] group-hover:text-purple-100">
+                    {displayName}
+                  </p>
+                  <p className="m-0 max-w-full truncate text-[0.8125rem] text-[#f4f0fa]/72">{fmtLabel}</p>
+                  <p className="m-0 max-w-full truncate text-[0.8125rem] text-[#f4f0fa]/72">{heroLabel || "—"}</p>
+                  <p className="m-0 max-w-full truncate text-[0.75rem] text-[#f4f0fa]/55">
+                    {row.source || "—"}
+                  </p>
+                </div>
+              </button>
+            );
+          })
+        )}
       </div>
 
       {importModalOpen && typeof document !== "undefined"

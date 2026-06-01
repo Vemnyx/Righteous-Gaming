@@ -13,6 +13,13 @@ import (
 // asset URLs use storage.googleapis.com/righteous-assets/...).
 const AssetsBucketName = "righteous-assets"
 
+// AssetsPublicURL returns the public HTTPS URL for an object in righteous-assets.
+func AssetsPublicURL(objectPath string) string {
+	objectPath = strings.TrimSpace(objectPath)
+	objectPath = strings.TrimPrefix(objectPath, "/")
+	return "https://storage.googleapis.com/" + AssetsBucketName + "/" + objectPath
+}
+
 // GCS is a Google Cloud Storage client using Application Default Credentials
 // (ADC). Use the same GCP project and service account (or
 // GOOGLE_APPLICATION_CREDENTIALS) as other server-side Google APIs: grant
