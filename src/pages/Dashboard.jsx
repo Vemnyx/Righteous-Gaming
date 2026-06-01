@@ -12,6 +12,7 @@ import { CardRaterRedirect } from "../components/CardRaterRedirect";
 import { CardRaterAnalytics } from "../components/CardRaterAnalytics";
 import { CardRatingsList } from "../components/CardRatingsList";
 import { DecksList } from "../components/DecksList";
+import { DeckDetailPage } from "../components/DeckDetailPage";
 import { SetsAdmin } from "../components/SetsAdmin";
 import { UserAccountMenu } from "../components/UserAccountMenu";
 import { UserSettings } from "../components/UserSettings";
@@ -69,6 +70,7 @@ const ADMIN_SUB_LINKS = [
  * @param {AnnouncementAdminForm} [announcementForm] — announcements list vs `/new` vs `/:id/edit`
  * @param {string | null} [dataChild] — segment after `/data/`, e.g. `card-ratings`
  * @param {string | null} [dataCardRaterId] — numeric id for `/data/card-ratings/:id` analytics
+ * @param {string | null} [resourcesDeckId] — numeric id for `/resources/decks/:id`
  */
 function buildDashboardPathname(
   tabId,
@@ -79,6 +81,7 @@ function buildDashboardPathname(
   announcementForm = null,
   dataChild = null,
   dataCardRaterId = null,
+  resourcesDeckId = null,
 ) {
   if (tabId === SETTINGS_TAB_ID) return "/settings";
   if (tabId === DATA_TAB_ID) {
@@ -139,6 +142,16 @@ function buildDashboardPathname(
       }
       return "/resources/card-rater";
     }
+    if (seg === "decks") {
+      const rawId = resourcesDeckId != null ? String(resourcesDeckId).trim() : "";
+      if (rawId !== "") {
+        const did = parseInt(rawId, 10);
+        if (Number.isFinite(did) && did > 0 && String(did) === rawId) {
+          return `/resources/decks/${did}`;
+        }
+      }
+      return "/resources/decks";
+    }
     return `/resources/${seg}`;
   }
   return `/${tabId}`;
@@ -153,6 +166,7 @@ function replaceDashboardUrl(
   announcementForm = null,
   dataChild = null,
   dataCardRaterId = null,
+  resourcesDeckId = null,
 ) {
   try {
     const u = new URL(window.location.href);
@@ -165,6 +179,7 @@ function replaceDashboardUrl(
       announcementForm,
       dataChild,
       dataCardRaterId,
+      resourcesDeckId,
     );
     u.search = "";
     const next = `${u.pathname}${u.search}${u.hash}`;
@@ -184,6 +199,7 @@ function pushDashboardUrl(
   announcementForm = null,
   dataChild = null,
   dataCardRaterId = null,
+  resourcesDeckId = null,
 ) {
   try {
     const u = new URL(window.location.href);
@@ -196,6 +212,7 @@ function pushDashboardUrl(
       announcementForm,
       dataChild,
       dataCardRaterId,
+      resourcesDeckId,
     );
     u.search = "";
     const next = `${u.pathname}${u.search}${u.hash}`;
@@ -278,16 +295,32 @@ function parseDashboardPathname(pathname) {
       return { kind: "invalid" };
     }
     if (b === "decks") {
-      if (c !== undefined || rest.length > 0) return { kind: "invalid" };
-      return {
-        kind: "ok",
-        tabId: RESOURCES_TAB_ID,
-        resourcesChild: "decks",
-        resourcesCardIdentifier: null,
-        resourcesCardRaterId: null,
-        adminChild: null,
-        adminAnnouncementForm: null,
-      };
+      if (c === undefined) {
+        return {
+          kind: "ok",
+          tabId: RESOURCES_TAB_ID,
+          resourcesChild: "decks",
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
+          resourcesDeckId: null,
+          adminChild: null,
+          adminAnnouncementForm: null,
+        };
+      }
+      const did = parseInt(String(c), 10);
+      if (Number.isFinite(did) && did > 0 && String(did) === String(c)) {
+        return {
+          kind: "ok",
+          tabId: RESOURCES_TAB_ID,
+          resourcesChild: "decks",
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
+          resourcesDeckId: String(did),
+          adminChild: null,
+          adminAnnouncementForm: null,
+        };
+      }
+      return { kind: "invalid" };
     }
     return { kind: "invalid" };
   }
@@ -596,6 +629,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
     resourcesChild,
     resourcesCardIdentifier,
     resourcesCardRaterId,
+    resourcesDeckId: parsed.resourcesDeckId ?? null,
     adminChild,
     adminAnnouncementForm,
     dataChild,
@@ -745,6 +779,8 @@ export default function Dashboard({ onNavigate }) {
   );
   /** Numeric `card_rater.id` when URL is `/resources/card-rater/:id` (analytics). */
   const [resourcesCardRaterId, setResourcesCardRaterId] = useState(/** @type {string | null} */ (null));
+  /** Numeric `decks.id` when URL is `/resources/decks/:id`. */
+  const [resourcesDeckId, setResourcesDeckId] = useState(/** @type {string | null} */ (null));
   /** True while showing CardRanker at `/resources/card-rater` (active session; no id in URL). */
   const [cardRaterPlayAtRoot, setCardRaterPlayAtRoot] = useState(false);
   /** When `activeTab === admin`, which sub-route is shown (`/admin/...`). */
@@ -805,6 +841,7 @@ export default function Dashboard({ onNavigate }) {
       setResourcesChild(DEFAULT_RESOURCES_SEGMENT);
       setResourcesCardIdentifier(null);
       setResourcesCardRaterId(null);
+      setResourcesDeckId(null);
       setCardRaterPlayAtRoot(false);
       setAdminChild(null);
       setAdminAnnouncementForm(null);
@@ -816,6 +853,7 @@ export default function Dashboard({ onNavigate }) {
       setResourcesChild(null);
       setResourcesCardIdentifier(null);
       setResourcesCardRaterId(null);
+      setResourcesDeckId(null);
       setCardRaterPlayAtRoot(false);
       setAdminAnnouncementForm(null);
       setDataChild(null);
@@ -827,6 +865,7 @@ export default function Dashboard({ onNavigate }) {
       setResourcesChild(null);
       setResourcesCardIdentifier(null);
       setResourcesCardRaterId(null);
+      setResourcesDeckId(null);
       setCardRaterPlayAtRoot(false);
       setAdminChild(null);
       setAdminAnnouncementForm(null);
@@ -835,6 +874,7 @@ export default function Dashboard({ onNavigate }) {
       setResourcesChild(null);
       setResourcesCardIdentifier(null);
       setResourcesCardRaterId(null);
+      setResourcesDeckId(null);
       setCardRaterPlayAtRoot(false);
       setAdminChild(null);
       setAdminAnnouncementForm(null);
@@ -852,6 +892,7 @@ export default function Dashboard({ onNavigate }) {
     setResourcesChild(segment);
     setResourcesCardIdentifier(null);
     setResourcesCardRaterId(null);
+    setResourcesDeckId(null);
     if (segment === "card-rater") setCardRaterPlayAtRoot(false);
     setAdminChild(null);
     setAdminAnnouncementForm(null);
@@ -906,12 +947,35 @@ export default function Dashboard({ onNavigate }) {
     setResourcesChild("cards");
     setResourcesCardIdentifier(id);
     setResourcesCardRaterId(null);
+    setResourcesDeckId(null);
     setCardRaterPlayAtRoot(false);
     setAdminChild(null);
     setAdminAnnouncementForm(null);
     setDataChild(null);
     setDataCardRaterId(null);
     pushDashboardUrl(RESOURCES_TAB_ID, "cards", id, null, null, null);
+  }, []);
+
+  const openDeckDetail = useCallback((deckId) => {
+    const sid = String(deckId).trim();
+    if (!/^\d+$/.test(sid)) return;
+    setActiveTab(RESOURCES_TAB_ID);
+    setResourcesChild("decks");
+    setResourcesDeckId(sid);
+    setResourcesCardIdentifier(null);
+    setResourcesCardRaterId(null);
+    setCardRaterPlayAtRoot(false);
+    setAdminChild(null);
+    setAdminAnnouncementForm(null);
+    setDataChild(null);
+    setDataCardRaterId(null);
+    pushDashboardUrl(RESOURCES_TAB_ID, "decks", null, null, null, null, null, null, sid);
+  }, []);
+
+  const closeDeckDetail = useCallback(() => {
+    setResourcesChild("decks");
+    setResourcesDeckId(null);
+    pushDashboardUrl(RESOURCES_TAB_ID, "decks", null, null, null, null, null, null, null);
   }, []);
 
   const openDataCardRaterAnalytics = useCallback((raterId) => {
@@ -975,6 +1039,7 @@ export default function Dashboard({ onNavigate }) {
         nextTab === RESOURCES_TAB_ID ? resolved.resourcesCardIdentifier : null;
       const nextRaterId =
         nextTab === RESOURCES_TAB_ID ? resolved.resourcesCardRaterId : null;
+      const nextDeckId = nextTab === RESOURCES_TAB_ID ? resolved.resourcesDeckId : null;
       const nextAdminChild = nextTab === ADMIN_TAB_ID ? resolved.adminChild : null;
       const nextAnnouncementForm =
         nextTab === ADMIN_TAB_ID && nextAdminChild === "announcements"
@@ -986,6 +1051,7 @@ export default function Dashboard({ onNavigate }) {
       setResourcesChild(nextChild);
       setResourcesCardIdentifier(nextCardId);
       setResourcesCardRaterId(nextRaterId);
+      setResourcesDeckId(nextDeckId);
       const cardRaterAtRoot =
         nextTab === RESOURCES_TAB_ID &&
         nextChild === "card-rater" &&
@@ -1004,6 +1070,7 @@ export default function Dashboard({ onNavigate }) {
         nextAnnouncementForm,
         nextTab === DATA_TAB_ID ? nextDataChild : null,
         nextTab === DATA_TAB_ID ? nextDataRaterId : null,
+        nextTab === RESOURCES_TAB_ID ? nextDeckId : null,
       );
       setMobileResourcesOpen(false);
       setMobileAdminOpen(false);
@@ -1519,8 +1586,24 @@ export default function Dashboard({ onNavigate }) {
                   }
                   onOpenCardDetail={openCardDetail}
                 />
+              ) : resourcesChild === "decks" && resourcesDeckId ? (
+                <DeckDetailPage
+                  isLight={isLight}
+                  deckId={resourcesDeckId}
+                  active={
+                    activeTab === RESOURCES_TAB_ID &&
+                    resourcesChild === "decks" &&
+                    Boolean(resourcesDeckId)
+                  }
+                  onBack={closeDeckDetail}
+                  onOpenCard={openCardDetail}
+                />
               ) : resourcesChild === "decks" ? (
-                <DecksList isLight={isLight} active={activeTab === RESOURCES_TAB_ID && resourcesChild === "decks"} />
+                <DecksList
+                  isLight={isLight}
+                  active={activeTab === RESOURCES_TAB_ID && resourcesChild === "decks"}
+                  onOpenDeck={openDeckDetail}
+                />
               ) : showCardRankerResources ? (
                 <CardRanker
                   isLight={isLight}

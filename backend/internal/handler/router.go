@@ -25,6 +25,8 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("POST /api/me/settings", uh.saveMySettings)
 	mux.HandleFunc("PATCH /api/me/settings", uh.saveMySettings)
 	mux.HandleFunc("GET /api/me/decks", dh.listMyDecks)
+	mux.HandleFunc("GET /api/me/decks/{id}", dh.getMyDeck)
+	mux.HandleFunc("DELETE /api/me/decks/{id}", dh.deleteMyDeck)
 	mux.HandleFunc("POST /api/me/decks/import-fabrary", dh.importFabraryDeck)
 	mux.HandleFunc("GET /api/me/card-ratings", rh.listMyRatings)
 	mux.HandleFunc("POST /api/me/card-ratings", rh.saveMyRating)

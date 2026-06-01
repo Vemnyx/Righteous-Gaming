@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"righteous-gaming/backend/internal/app"
@@ -30,13 +31,26 @@ type deckJSON struct {
 	Name        string  `json:"name"`
 	Format      int16   `json:"format"`
 	Hero        int16   `json:"hero"`
+	HeroName    *string `json:"hero_name,omitempty"`
 	FabraryLink *string `json:"fabrary_link,omitempty"`
 }
 
+type deckCardLineJSON struct {
+	CardID    int      `json:"card_id"`
+	Mainboard bool     `json:"mainboard"`
+	Count     int      `json:"count"`
+	Card      cardJSON `json:"card"`
+}
+
+type deckDetailJSON struct {
+	Deck  deckJSON           `json:"deck"`
+	Cards []deckCardLineJSON `json:"cards"`
+}
+
 type importFabraryDeckResponse struct {
-	Deck           deckJSON `json:"deck"`
-	CardsImported  int      `json:"cards_imported"`
-	UnknownCards   []string `json:"unknown_cards,omitempty"`
+	Deck          deckJSON `json:"deck"`
+	CardsImported int      `json:"cards_imported"`
+	UnknownCards  []string `json:"unknown_cards,omitempty"`
 }
 
 func deckToJSON(d *repository.Deck) deckJSON {
@@ -49,6 +63,7 @@ func deckToJSON(d *repository.Deck) deckJSON {
 		Name:        d.Name,
 		Format:      d.Format,
 		Hero:        d.Hero,
+		HeroName:    d.HeroName,
 		FabraryLink: d.FabraryLink,
 	}
 }
@@ -102,6 +117,89 @@ func (h *decksHTTP) listMyDecks(w http.ResponseWriter, r *http.Request) {
 		out = append(out, deckToJSON(&decks[i]))
 	}
 	writeCatalogJSON(w, http.StatusOK, map[string]any{"decks": out})
+}
+
+func (h *decksHTTP) getMyDeck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+
+	idStr := strings.TrimSpace(r.PathValue("id"))
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id <= 0 {
+		writeMessageError(w, http.StatusBadRequest, "invalid deck id")
+		return
+	}
+
+	deck, entries, err := h.app.Repo.GetDeckByIDForUser(r.Context(), id, u.ID)
+	if err != nil {
+		if errors.Is(err, repository.ErrDeckNotFound) {
+			writeMessageError(w, http.StatusNotFound, "deck not found")
+			return
+		}
+		log.Error("get my deck", "error", err, "deck_id", id, "user_id", u.ID)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	cardPtrs := make([]*repository.Card, len(entries))
+	for i := range entries {
+		cardPtrs[i] = &entries[i].Card
+	}
+	if err := h.app.Repo.AttachPrintings(r.Context(), cardPtrs); err != nil {
+		log.Error("get my deck attach printings", "error", err, "deck_id", id)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	lines := make([]deckCardLineJSON, len(entries))
+	for i := range entries {
+		lines[i] = deckCardLineJSON{
+			CardID:    entries[i].CardID,
+			Mainboard: entries[i].Mainboard,
+			Count:     entries[i].Count,
+			Card:      cardToJSON(&entries[i].Card),
+		}
+	}
+
+	writeCatalogJSON(w, http.StatusOK, deckDetailJSON{
+		Deck:  deckToJSON(deck),
+		Cards: lines,
+	})
+}
+
+func (h *decksHTTP) deleteMyDeck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+
+	idStr := strings.TrimSpace(r.PathValue("id"))
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id <= 0 {
+		writeMessageError(w, http.StatusBadRequest, "invalid deck id")
+		return
+	}
+
+	if err := h.app.Repo.DeleteDeckByIDForUser(r.Context(), id, u.ID); err != nil {
+		if errors.Is(err, repository.ErrDeckNotFound) {
+			writeMessageError(w, http.StatusNotFound, "deck not found")
+			return
+		}
+		log.Error("delete my deck", "error", err, "deck_id", id, "user_id", u.ID)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *decksHTTP) importFabraryDeck(w http.ResponseWriter, r *http.Request) {
@@ -179,11 +277,13 @@ func (h *decksHTTP) importFabraryDeck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	linkCopy := normalizedLink
+	heroName := deckHeroNameForImport(fetched.HeroIdentifier, hero)
 	created, err := h.app.Repo.CreateDeckWithCards(ctx, repository.CreateDeckInput{
 		UserID:      u.ID,
 		Name:        fetched.Name,
 		Format:      format,
 		Hero:        hero,
+		HeroName:    &heroName,
 		FabraryLink: &linkCopy,
 	}, cardInputs)
 	if err != nil {
@@ -194,8 +294,28 @@ func (h *decksHTTP) importFabraryDeck(w http.ResponseWriter, r *http.Request) {
 
 	writeCatalogJSON(w, http.StatusCreated, importFabraryDeckResponse{
 		Deck:          deckToJSON(created),
-		CardsImported: len(cardInputs),
+		CardsImported: sumDeckCardCounts(cardInputs),
 	})
+}
+
+func sumDeckCardCounts(cards []repository.DeckCardInput) int {
+	n := 0
+	for _, c := range cards {
+		if c.Count > 0 {
+			n += c.Count
+		} else {
+			n++
+		}
+	}
+	return n
+}
+
+// deckHeroNameForImport picks Fabrary's short hero label when known, else the domain hero name.
+func deckHeroNameForImport(heroIdentifier string, hero int16) string {
+	if name := fabrary.HeroShortNameFromIdentifier(heroIdentifier); name != "" {
+		return name
+	}
+	return domain.CardHero(hero).String()
 }
 
 func resolveFabraryHero(ctx context.Context, repo *repository.Repository, heroIdentifier string) (int16, error) {
@@ -217,37 +337,44 @@ func resolveFabraryHero(ctx context.Context, repo *repository.Repository, heroId
 }
 
 func mapFabraryDeckCards(fetched *fabrary.Deck, idMap map[string]int) ([]repository.DeckCardInput, []string) {
-	seen := make(map[string]struct{})
-	var out []repository.DeckCardInput
+	type rowKey struct {
+		cardID    int
+		mainboard bool
+	}
+	counts := make(map[rowKey]int)
+	unknownSeen := make(map[string]struct{})
 	var unknown []string
 
-	add := func(identifier string, mainboard bool) {
-		key := fmt.Sprintf("%s:%t", strings.ToLower(strings.TrimSpace(identifier)), mainboard)
-		if _, ok := seen[key]; ok {
-			return
+	for _, line := range fetched.Cards {
+		ident := strings.ToLower(strings.TrimSpace(line.CardIdentifier))
+		if ident == "" {
+			continue
 		}
-		seen[key] = struct{}{}
-
-		ident := strings.ToLower(strings.TrimSpace(identifier))
 		cardID, ok := idMap[ident]
 		if !ok {
-			unknown = append(unknown, identifier)
-			return
+			if _, seen := unknownSeen[line.CardIdentifier]; !seen {
+				unknownSeen[line.CardIdentifier] = struct{}{}
+				unknown = append(unknown, line.CardIdentifier)
+			}
+			continue
 		}
-		out = append(out, repository.DeckCardInput{
-			CardID:    cardID,
-			Mainboard: mainboard,
-		})
-	}
-
-	for _, line := range fetched.Cards {
 		if line.MainboardQuantity > 0 {
-			add(line.CardIdentifier, true)
+			k := rowKey{cardID: cardID, mainboard: true}
+			counts[k] += line.MainboardQuantity
 		}
 		if line.SideboardQuantity > 0 {
-			add(line.CardIdentifier, false)
+			k := rowKey{cardID: cardID, mainboard: false}
+			counts[k] += line.SideboardQuantity
 		}
 	}
 
+	out := make([]repository.DeckCardInput, 0, len(counts))
+	for k, count := range counts {
+		out = append(out, repository.DeckCardInput{
+			CardID:    k.cardID,
+			Mainboard: k.mainboard,
+			Count:     count,
+		})
+	}
 	return out, unknown
 }
