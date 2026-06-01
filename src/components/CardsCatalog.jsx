@@ -232,6 +232,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
   const [cards, setCards] = useState(/** @type {CatalogCard[]} */ ([]));
   const [sets, setSets] = useState(/** @type {CatalogSetOption[]} */ ([]));
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [setFilter, setSetFilter] = useState("");
   const [advancedFilters, setAdvancedFilters] = useState(EMPTY_CATALOG_ADVANCED_FILTERS);
   const [draftAdvancedFilters, setDraftAdvancedFilters] = useState(EMPTY_CATALOG_ADVANCED_FILTERS);
@@ -246,16 +247,21 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
 
   const gridPageSizeVal = useMemo(() => gridPageSize(view, narrow), [view, narrow]);
 
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedSearchQuery(searchQuery), 150);
+    return () => window.clearTimeout(handle);
+  }, [searchQuery]);
+
   const filteredCards = useMemo(
     () =>
       cards.filter((c) =>
         filterCatalogCard(c, {
-          query: searchQuery,
+          query: debouncedSearchQuery,
           setCode: setFilter,
           advanced: advancedFilters,
         }),
       ),
-    [cards, searchQuery, setFilter, advancedFilters],
+    [cards, debouncedSearchQuery, setFilter, advancedFilters],
   );
 
   const activeAdvancedCount = useMemo(
@@ -305,7 +311,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
   useEffect(() => {
     setGridPage(1);
     setTablePage(1);
-  }, [searchQuery, setFilter, advancedFilters]);
+  }, [debouncedSearchQuery, setFilter, advancedFilters]);
 
   useEffect(() => {
     setGridPage(1);
@@ -449,7 +455,10 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
     : "min-w-0 rounded-lg border border-white/[0.22] bg-black/30 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/55";
 
   const hasActiveFilters =
-    searchQuery.trim() !== "" || setFilter !== "" || activeAdvancedCount > 0;
+    searchQuery.trim() !== "" ||
+    debouncedSearchQuery.trim() !== "" ||
+    setFilter !== "" ||
+    activeAdvancedCount > 0;
 
   const openFilterModal = () => {
     setDraftAdvancedFilters(advancedFilters);

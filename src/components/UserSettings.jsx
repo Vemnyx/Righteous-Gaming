@@ -44,9 +44,52 @@ function SettingsToggle({ enabled, disabled, onChange, isLight, label, descripti
 }
 
 /**
- * @param {{ isLight: boolean, active: boolean }} props
+ * @param {{ theme: string, onChange: (next: "light" | "dark") => void, className?: string }} props
  */
-export function UserSettings({ isLight, active }) {
+function ThemeToggle({ theme, onChange, className = "" }) {
+  const lightMode = theme === "light";
+  return (
+    <div
+      className={`flex min-h-11 min-w-0 items-stretch gap-0 overflow-hidden rounded-lg border p-0.5 text-[0.74rem] font-semibold leading-none sm:min-h-12 sm:text-[0.8rem] ${
+        lightMode
+          ? "border-white/15 bg-[rgba(42,37,54,0.82)] backdrop-blur-sm"
+          : "border-white/[0.28] bg-black/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+      } ${className}`}
+      role="group"
+      aria-label="Color mode"
+    >
+      <button
+        type="button"
+        aria-pressed={lightMode}
+        onClick={() => onChange("light")}
+        className={`flex flex-1 items-center justify-center rounded-md px-3 py-2.5 sm:px-3.5 ${
+          lightMode
+            ? "bg-white/18 text-white shadow-inner"
+            : "text-[#f4f0fa]/70 hover:bg-white/10 hover:text-white"
+        }`}
+      >
+        Light
+      </button>
+      <button
+        type="button"
+        aria-pressed={!lightMode}
+        onClick={() => onChange("dark")}
+        className={`flex flex-1 items-center justify-center rounded-md px-3 py-2.5 sm:px-3.5 ${
+          !lightMode
+            ? "bg-white/15 text-white shadow-inner"
+            : "text-[#f4f0fa]/70 hover:bg-white/10 hover:text-white"
+        }`}
+      >
+        Dark
+      </button>
+    </div>
+  );
+}
+
+/**
+ * @param {{ isLight: boolean, active: boolean, theme: string, onThemeChange: (next: "light" | "dark") => void }} props
+ */
+export function UserSettings({ isLight, active, theme, onThemeChange }) {
   const { user, sessionProfile, sessionProfileLoading, updateSessionProfileSettings } = useAuth();
   const quickSubmit = userSettingsFromProfile(sessionProfile).card_rater_quick_submit;
   const [loading, setLoading] = useState(false);
@@ -111,6 +154,23 @@ export function UserSettings({ isLight, active }) {
           Manage your personal preferences for Righteous Gaming.
         </p>
       </div>
+
+      <section className={sectionCls} aria-labelledby="user-settings-appearance-heading">
+        <h2 id="user-settings-appearance-heading" className="m-0 text-[1.05rem] font-semibold text-[#f4f0fa]">
+          Appearance
+        </h2>
+        <div className="mt-4 border-t border-white/[0.1] pt-4">
+          <div className="flex flex-col gap-3">
+            <div>
+              <span className="block text-[0.95rem] font-semibold text-[#f4f0fa]">Color mode</span>
+              <span className="mt-1 block text-[0.85rem] leading-snug text-[#f4f0fa]/70">
+                Choose light or dark styling for the dashboard.
+              </span>
+            </div>
+            <ThemeToggle theme={theme} onChange={onThemeChange} className="max-w-xs" />
+          </div>
+        </div>
+      </section>
 
       <section className={sectionCls} aria-labelledby="user-settings-card-rater-heading">
         <h2 id="user-settings-card-rater-heading" className="m-0 text-[1.05rem] font-semibold text-[#f4f0fa]">

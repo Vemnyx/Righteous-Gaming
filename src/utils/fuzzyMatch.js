@@ -45,18 +45,26 @@ export function fuzzyMatchQuery(haystack, query) {
 export const CARD_NAME_FUZZY_PREFIX_LEN = 4;
 
 /**
- * Match a card name: fuzzy for queries up to four normalized characters,
- * then require an exact normalized substring for longer queries.
+ * Match a card name: fuzzy for queries up to four characters,
+ * then require an exact case-insensitive phrase (or normalized substring).
  * @param {unknown} name
  * @param {unknown} query
  */
 export function cardNameMatchesSearch(name, query) {
-  const q = normalizeForSearch(String(query ?? "").trim());
-  if (!q) return true;
-  const h = normalizeForSearch(name);
-  if (!h) return false;
-  if (q.length <= CARD_NAME_FUZZY_PREFIX_LEN) {
-    return fuzzyMatch(h, q);
+  const rawQuery = String(query ?? "").trim();
+  if (!rawQuery) return true;
+  const rawName = String(name ?? "");
+  if (!rawName) return false;
+
+  if (rawQuery.length <= CARD_NAME_FUZZY_PREFIX_LEN) {
+    return fuzzyMatch(rawName, rawQuery);
   }
-  return h.includes(q);
+
+  const queryLower = rawQuery.toLowerCase();
+  const nameLower = rawName.toLowerCase();
+  if (nameLower.includes(queryLower)) return true;
+
+  const qNorm = normalizeForSearch(rawQuery);
+  const hNorm = normalizeForSearch(rawName);
+  return qNorm.length > 0 && hNorm.includes(qNorm);
 }

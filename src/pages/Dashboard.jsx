@@ -716,46 +716,6 @@ function HamburgerIcon({ className }) {
   );
 }
 
-function ThemeToggle({ theme, onChange, className = "" }) {
-  const lightMode = theme === "light";
-  return (
-    <div
-      className={`flex min-h-11 min-w-0 items-stretch gap-0 overflow-hidden rounded-lg border p-0.5 text-[0.74rem] font-semibold leading-none sm:min-h-12 sm:text-[0.8rem] ${
-        lightMode
-          ? "border-white/15 bg-[rgba(42,37,54,0.82)] backdrop-blur-sm"
-          : "border-white/[0.28] bg-black/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
-      } ${className}`}
-      role="group"
-      aria-label="Color mode"
-    >
-      <button
-        type="button"
-        aria-pressed={lightMode}
-        onClick={() => onChange("light")}
-        className={`flex flex-1 items-center justify-center rounded-md px-3 py-2.5 sm:px-3.5 ${
-          lightMode
-            ? "bg-white/18 text-white shadow-inner"
-            : "text-[#f4f0fa]/70 hover:bg-white/10 hover:text-white"
-        }`}
-      >
-        Light
-      </button>
-      <button
-        type="button"
-        aria-pressed={!lightMode}
-        onClick={() => onChange("dark")}
-        className={`flex flex-1 items-center justify-center rounded-md px-3 py-2.5 sm:px-3.5 ${
-          !lightMode
-            ? "bg-white/15 text-white shadow-inner"
-            : "text-[#f4f0fa]/70 hover:bg-white/10 hover:text-white"
-        }`}
-      >
-        Dark
-      </button>
-    </div>
-  );
-}
-
 /**
  * @param {{ onNavigate?: (path: string) => void }} props
  */
@@ -1250,9 +1210,6 @@ export default function Dashboard({ onNavigate }) {
           </div>
 
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            <div className="hidden shrink-0 md:block">
-              <ThemeToggle theme={theme} onChange={setTheme} />
-            </div>
             <UserAccountMenu
               isLight={isLight}
               label={sessionProfileDisplayName(sessionProfile)}
@@ -1466,17 +1423,6 @@ export default function Dashboard({ onNavigate }) {
                   </button>
                 );
               })}
-              <div
-                className={`mt-3 border-t px-[1.125rem] pb-1 pt-4 ${
-                  isLight ? "border-[rgba(80,65,110,0.25)]" : "border-white/[0.18]"
-                }`}
-              >
-                <ThemeToggle
-                  theme={theme}
-                  onChange={setTheme}
-                  className="w-full"
-                />
-              </div>
             </nav>
         </div>
         </div>
@@ -1634,7 +1580,12 @@ export default function Dashboard({ onNavigate }) {
               : "border-white/[0.26] bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.06]"
           }`}
         >
-          <UserSettings isLight={isLight} active={activeTab === SETTINGS_TAB_ID} />
+          <UserSettings
+            isLight={isLight}
+            active={activeTab === SETTINGS_TAB_ID}
+            theme={theme}
+            onThemeChange={setTheme}
+          />
         </Tabs.Content>
       </Tabs.Root>
     </div>

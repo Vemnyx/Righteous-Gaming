@@ -110,11 +110,17 @@ export function cardSearchHaystack(card, opts = {}) {
 export function cardMatchesSearch(card, query) {
   const q = String(query ?? "").trim();
   if (!q) return true;
+
+  if (cardNameMatchesSearch(card.name, q)) return true;
+
   const tokens = q.split(/\s+/).filter(Boolean);
-  const haystack = cardSearchHaystack(card, { includeName: false });
-  return tokens.every(
-    (token) => cardNameMatchesSearch(card.name, token) || fuzzyMatch(haystack, token),
-  );
+  if (tokens.length > 1) {
+    const allTokensMatchName = tokens.every((token) => cardNameMatchesSearch(card.name, token));
+    if (allTokensMatchName) return true;
+  }
+
+  const haystack = cardSearchHaystack(card);
+  return tokens.every((token) => fuzzyMatch(haystack, token));
 }
 
 /**
