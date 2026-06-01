@@ -1,7 +1,7 @@
 import { cardClassName } from "../constants/cardClass";
 import { cardRarityName } from "../constants/cardRarity";
 import { cardTypeName } from "../constants/cardType";
-import { fuzzyMatchQuery } from "./fuzzyMatch";
+import { cardNameMatchesSearch, fuzzyMatch } from "./fuzzyMatch";
 import { formatCollectorCode } from "./cardPrintings";
 
 /**
@@ -23,6 +23,11 @@ export function cardHasSet(card, setCode) {
  *   rarity?: string,
  *   pitch?: string,
  *   cardClass?: string,
+ *   power?: string,
+ *   block?: string,
+ *   format?: string,
+ *   talent?: string,
+ *   keywords?: string[],
  * }} CatalogAdvancedFilters
  */
 
@@ -32,6 +37,11 @@ export const EMPTY_CATALOG_ADVANCED_FILTERS = {
   rarity: "",
   pitch: "",
   cardClass: "",
+  power: "",
+  block: "",
+  format: "",
+  talent: "",
+  keywords: [],
 };
 
 /**
@@ -43,6 +53,11 @@ export function countActiveAdvancedFilters(filters) {
   if (filters.rarity !== "") n++;
   if (filters.pitch !== "") n++;
   if (filters.cardClass !== "") n++;
+  if (filters.power !== "") n++;
+  if (filters.block !== "") n++;
+  if (filters.format !== "") n++;
+  if (filters.talent !== "") n++;
+  if (Array.isArray(filters.keywords) && filters.keywords.length > 0) n++;
   return n;
 }
 
@@ -57,11 +72,21 @@ export function countActiveAdvancedFilters(filters) {
  *   rarity?: number | null,
  *   pitch?: number | null,
  *   classes?: number[],
+ *   power?: number | null,
+ *   block?: number | null,
+ *   keywords?: number[],
+ *   formats?: number[],
+ *   talents?: number[],
  * }} card
  */
-export function cardSearchHaystack(card) {
+/**
+ * @param {Parameters<typeof cardSearchHaystack>[0]} card
+ * @param {{ includeName?: boolean }} [opts]
+ */
+export function cardSearchHaystack(card, opts = {}) {
+  const includeName = opts.includeName !== false;
   const parts = [
-    card.name,
+    includeName ? card.name : null,
     card.card_identifier,
     card.set_name,
     card.set_code,
@@ -83,7 +108,13 @@ export function cardSearchHaystack(card) {
  * @param {string} query
  */
 export function cardMatchesSearch(card, query) {
-  return fuzzyMatchQuery(cardSearchHaystack(card), query);
+  const q = String(query ?? "").trim();
+  if (!q) return true;
+  const tokens = q.split(/\s+/).filter(Boolean);
+  const haystack = cardSearchHaystack(card, { includeName: false });
+  return tokens.every(
+    (token) => cardNameMatchesSearch(card.name, token) || fuzzyMatch(haystack, token),
+  );
 }
 
 /**
@@ -103,6 +134,32 @@ export function cardMatchesAdvancedFilters(card, filters) {
     if (!Number.isFinite(want)) return false;
     const classes = Array.isArray(card.classes) ? card.classes : [];
     if (!classes.includes(want)) return false;
+  }
+  if (filters.power !== "") {
+    if (card.power == null || String(card.power) !== filters.power) return false;
+  }
+  if (filters.block !== "") {
+    if (card.block == null || String(card.block) !== filters.block) return false;
+  }
+  if (filters.format !== "") {
+    const want = Number.parseInt(filters.format, 10);
+    if (!Number.isFinite(want)) return false;
+    const formats = Array.isArray(card.formats) ? card.formats : [];
+    if (!formats.includes(want)) return false;
+  }
+  if (filters.talent !== "") {
+    const want = Number.parseInt(filters.talent, 10);
+    if (!Number.isFinite(want)) return false;
+    const talents = Array.isArray(card.talents) ? card.talents : [];
+    if (!talents.includes(want)) return false;
+  }
+  const selectedKeywords = Array.isArray(filters.keywords) ? filters.keywords : [];
+  if (selectedKeywords.length > 0) {
+    const cardKeywords = Array.isArray(card.keywords) ? card.keywords : [];
+    for (const raw of selectedKeywords) {
+      const want = Number.parseInt(raw, 10);
+      if (!Number.isFinite(want) || !cardKeywords.includes(want)) return false;
+    }
   }
   return true;
 }

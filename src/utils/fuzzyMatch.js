@@ -40,3 +40,23 @@ export function fuzzyMatchQuery(haystack, query) {
     .filter(Boolean)
     .every((token) => fuzzyMatch(haystack, token));
 }
+
+/** Card names use fuzzy matching for the first four normalized characters only. */
+export const CARD_NAME_FUZZY_PREFIX_LEN = 4;
+
+/**
+ * Match a card name: fuzzy for queries up to four normalized characters,
+ * then require an exact normalized substring for longer queries.
+ * @param {unknown} name
+ * @param {unknown} query
+ */
+export function cardNameMatchesSearch(name, query) {
+  const q = normalizeForSearch(String(query ?? "").trim());
+  if (!q) return true;
+  const h = normalizeForSearch(name);
+  if (!h) return false;
+  if (q.length <= CARD_NAME_FUZZY_PREFIX_LEN) {
+    return fuzzyMatch(h, q);
+  }
+  return h.includes(q);
+}

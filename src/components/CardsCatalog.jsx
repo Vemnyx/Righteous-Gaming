@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
 import { CARD_CLASS_NAMES } from "../constants/cardClass";
+import { CARD_FORMAT_NAMES } from "../constants/cardFormat";
+import { CARD_KEYWORD_NAMES } from "../constants/cardKeyword";
 import { CARD_RARITY_NAMES } from "../constants/cardRarity";
+import { CARD_TALENT_NAMES } from "../constants/cardTalent";
 import { CARD_TYPE_NAMES } from "../constants/cardType";
 import { cardTypeName } from "../constants/cardType";
 import {
@@ -176,6 +179,11 @@ function GridDensityIcon({ level }) {
  *   pitch: number | null,
  *   rarity?: number | null,
  *   classes?: number[],
+ *   power?: number | null,
+ *   block?: number | null,
+ *   keywords?: number[],
+ *   formats?: number[],
+ *   talents?: number[],
  *   printings?: { set_code?: string, image_url?: string | null }[],
  *   card_identifier: string | null
  * }} CatalogCard
@@ -228,6 +236,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
   const [advancedFilters, setAdvancedFilters] = useState(EMPTY_CATALOG_ADVANCED_FILTERS);
   const [draftAdvancedFilters, setDraftAdvancedFilters] = useState(EMPTY_CATALOG_ADVANCED_FILTERS);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [keywordFilterQuery, setKeywordFilterQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
   /** @type {[{ url: string, x: number, y: number } | null, (v: { url: string, x: number, y: number } | null) => void]} */
@@ -259,6 +268,29 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
     next.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
     return next;
   }, [sets]);
+
+  const powerOptions = useMemo(() => {
+    const values = new Set();
+    for (const card of cards) {
+      if (card.power != null) values.add(card.power);
+    }
+    return [...values].sort((a, b) => a - b);
+  }, [cards]);
+
+  const blockOptions = useMemo(() => {
+    const values = new Set();
+    for (const card of cards) {
+      if (card.block != null) values.add(card.block);
+    }
+    return [...values].sort((a, b) => a - b);
+  }, [cards]);
+
+  const filteredKeywordOptions = useMemo(() => {
+    const q = keywordFilterQuery.trim().toLowerCase();
+    return CARD_KEYWORD_NAMES.map((name, id) => ({ id, name })).filter(({ name }) =>
+      q === "" ? true : name.toLowerCase().includes(q),
+    );
+  }, [keywordFilterQuery]);
 
   const totalGridPages = useMemo(() => {
     if (view === "table" || gridPageSizeVal <= 0 || !Number.isFinite(gridPageSizeVal)) return 1;
@@ -421,6 +453,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
 
   const openFilterModal = () => {
     setDraftAdvancedFilters(advancedFilters);
+    setKeywordFilterQuery("");
     setFilterModalOpen(true);
   };
 
@@ -431,6 +464,18 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
 
   const clearAdvancedDraft = () => {
     setDraftAdvancedFilters(EMPTY_CATALOG_ADVANCED_FILTERS);
+    setKeywordFilterQuery("");
+  };
+
+  const toggleDraftKeyword = (id) => {
+    const idStr = String(id);
+    setDraftAdvancedFilters((filters) => {
+      const selected = Array.isArray(filters.keywords) ? filters.keywords : [];
+      const next = selected.includes(idStr)
+        ? selected.filter((k) => k !== idStr)
+        : [...selected, idStr];
+      return { ...filters, keywords: next };
+    });
   };
 
   return (
@@ -800,7 +845,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
               onClick={() => setFilterModalOpen(false)}
             >
               <div
-                className={`w-full max-w-md rounded-xl border bg-[#1a1524] p-4 shadow-2xl sm:p-5 ${
+                className={`flex max-h-[min(92vh,44rem)] w-full max-w-lg flex-col rounded-xl border bg-[#1a1524] p-4 shadow-2xl sm:p-5 ${
                   isLight ? "border-white/20" : "border-white/[0.28]"
                 }`}
                 role="dialog"
@@ -808,13 +853,13 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                 aria-labelledby="catalog-filter-title"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
                   <div>
                     <h3 id="catalog-filter-title" className="m-0 text-lg font-semibold text-[#f4f0fa]">
                       Filter cards
                     </h3>
                     <p className="mt-1 text-[0.8125rem] text-[#f4f0fa]/60">
-                      Narrow results by type, rarity, pitch, or class.
+                      Narrow results by stats, keywords, format, talent, and more.
                     </p>
                   </div>
                   <button
@@ -827,7 +872,8 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                   </button>
                 </div>
 
-                <div className="flex flex-col gap-3">
+                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                  <div className="flex flex-col gap-3">
                   <label className="flex flex-col gap-1.5">
                     <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
                       Type
@@ -905,9 +951,146 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                       ))}
                     </select>
                   </label>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
+                        Power
+                      </span>
+                      <select
+                        className={fieldCls}
+                        value={draftAdvancedFilters.power ?? ""}
+                        onChange={(e) =>
+                          setDraftAdvancedFilters((f) => ({ ...f, power: e.target.value }))
+                        }
+                      >
+                        <option value="">Any power</option>
+                        {powerOptions.map((value) => (
+                          <option key={value} value={String(value)}>
+                            {value}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
+                        Block
+                      </span>
+                      <select
+                        className={fieldCls}
+                        value={draftAdvancedFilters.block ?? ""}
+                        onChange={(e) =>
+                          setDraftAdvancedFilters((f) => ({ ...f, block: e.target.value }))
+                        }
+                      >
+                        <option value="">Any block</option>
+                        {blockOptions.map((value) => (
+                          <option key={value} value={String(value)}>
+                            {value}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
+                      Format
+                    </span>
+                    <select
+                      className={fieldCls}
+                      value={draftAdvancedFilters.format ?? ""}
+                      onChange={(e) =>
+                        setDraftAdvancedFilters((f) => ({ ...f, format: e.target.value }))
+                      }
+                    >
+                      <option value="">Any format</option>
+                      {CARD_FORMAT_NAMES.map((name, id) => (
+                        <option key={id} value={String(id)}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="flex flex-col gap-1.5">
+                    <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
+                      Talent
+                    </span>
+                    <select
+                      className={fieldCls}
+                      value={draftAdvancedFilters.talent ?? ""}
+                      onChange={(e) =>
+                        setDraftAdvancedFilters((f) => ({ ...f, talent: e.target.value }))
+                      }
+                    >
+                      <option value="">Any talent</option>
+                      {CARD_TALENT_NAMES.map((name, id) => (
+                        <option key={id} value={String(id)}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
+                    <legend className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
+                      Keywords
+                    </legend>
+                    <input
+                      type="search"
+                      className={fieldCls}
+                      placeholder="Search keywords…"
+                      value={keywordFilterQuery}
+                      onChange={(e) => setKeywordFilterQuery(e.target.value)}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                    <div
+                      className={`max-h-44 overflow-y-auto rounded-lg border bg-black/20 p-2 ${
+                        isLight ? "border-white/15" : "border-white/[0.18]"
+                      }`}
+                    >
+                      {filteredKeywordOptions.length === 0 ? (
+                        <p className="m-0 px-1 py-2 text-[0.8125rem] text-[#f4f0fa]/55">
+                          No keywords match your search.
+                        </p>
+                      ) : (
+                        <div className="flex flex-col gap-0.5">
+                          {filteredKeywordOptions.map(({ id, name }) => {
+                            const selected = Array.isArray(draftAdvancedFilters.keywords)
+                              ? draftAdvancedFilters.keywords.includes(String(id))
+                              : false;
+                            return (
+                              <label
+                                key={id}
+                                className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-[0.8125rem] text-[#f4f0fa]/90 hover:bg-white/[0.06]"
+                              >
+                                <input
+                                  type="checkbox"
+                                  className="size-3.5 shrink-0 accent-violet-500"
+                                  checked={selected}
+                                  onChange={() => toggleDraftKeyword(id)}
+                                />
+                                <span>{name}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {Array.isArray(draftAdvancedFilters.keywords) &&
+                    draftAdvancedFilters.keywords.length > 0 ? (
+                      <p className="m-0 text-[0.75rem] text-[#f4f0fa]/55">
+                        {draftAdvancedFilters.keywords.length} selected — cards must have all selected keywords.
+                      </p>
+                    ) : null}
+                  </fieldset>
+                  </div>
                 </div>
 
-                <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+                <div className="mt-5 flex shrink-0 flex-wrap items-center justify-end gap-2">
                   <button type="button" className={paginatorBtn} onClick={clearAdvancedDraft}>
                     Clear
                   </button>
