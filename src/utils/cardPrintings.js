@@ -41,22 +41,47 @@ export function cardImageUrl(card) {
 }
 
 /**
+ * Full set display name for a printing (API set_name, then sets lookup by code, else code).
  * @param {CardPrintingRow} printing
+ * @param {Record<string, string>} [setNameByCode]
  * @returns {string}
  */
-export function printingSetLabel(printing) {
-  const name = printing?.set_name?.trim();
-  if (name) return name;
+export function resolvePrintingSetName(printing, setNameByCode = {}) {
+  const direct = printing?.set_name?.trim();
+  if (direct) return direct;
+
   const code = printing?.set_code?.trim();
-  return code || "Unknown set";
+  if (code) {
+    const fromMap = setNameByCode[code]?.trim();
+    if (fromMap) return fromMap;
+    const lower = code.toLowerCase();
+    for (const [key, value] of Object.entries(setNameByCode)) {
+      if (key.toLowerCase() === lower && String(value ?? "").trim()) {
+        return String(value).trim();
+      }
+    }
+    return code;
+  }
+
+  return "Unknown set";
 }
 
 /**
  * @param {CardPrintingRow} printing
+ * @param {Record<string, string>} [setNameByCode]
  * @returns {string}
  */
-export function printingSummary(printing) {
-  const label = printingSetLabel(printing);
+export function printingSetLabel(printing, setNameByCode) {
+  return resolvePrintingSetName(printing, setNameByCode);
+}
+
+/**
+ * @param {CardPrintingRow} printing
+ * @param {Record<string, string>} [setNameByCode]
+ * @returns {string}
+ */
+export function printingSummary(printing, setNameByCode) {
+  const label = resolvePrintingSetName(printing, setNameByCode);
   const code = formatCollectorCode(printing?.set_code, printing?.set_num);
   return `${label} · ${code}`;
 }

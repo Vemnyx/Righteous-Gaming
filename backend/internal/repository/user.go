@@ -266,6 +266,42 @@ LIMIT $1 OFFSET $2`
 	return list, total, nil
 }
 
+// DeckFilterUser is a minimal user row for deck list filtering (id + display fields).
+type DeckFilterUser struct {
+	ID       int
+	Email    string
+	Username *string
+}
+
+// ListUsersForDeckFilter returns every user ordered by display name (username, else email).
+func (r *Repository) ListUsersForDeckFilter(ctx context.Context) ([]DeckFilterUser, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	const q = `
+SELECT id, email, username
+FROM users
+ORDER BY COALESCE(NULLIF(TRIM(username), ''), email) ASC, id ASC`
+	rows, err := r.pool.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list users for deck filter: %w", err)
+	}
+	defer rows.Close()
+
+	var out []DeckFilterUser
+	for rows.Next() {
+		var u DeckFilterUser
+		if err := rows.Scan(&u.ID, &u.Email, &u.Username); err != nil {
+			return nil, fmt.Errorf("repository: list users for deck filter scan: %w", err)
+		}
+		out = append(out, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: list users for deck filter rows: %w", err)
+	}
+	return out, nil
+}
+
 // DeleteUserByID removes a user row by primary key (used when compensating a failed downstream step).
 func (r *Repository) DeleteUserByID(ctx context.Context, id int) error {
 	if r.pool == nil {

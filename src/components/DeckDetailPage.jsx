@@ -85,7 +85,7 @@ function DeckViewerSection({ title, icon, lines, isLight, stacked = true, onOpen
         </span>
       </h3>
       <div
-        className={`grid grid-cols-4 items-end gap-x-1.5 gap-y-3 overflow-visible sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 md:gap-x-2 ${stacked ? "pt-8" : ""}`}
+        className={`grid grid-cols-4 items-end gap-x-3 gap-y-5 overflow-visible sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 md:gap-x-3.5 md:gap-y-6 ${stacked ? "pt-14" : ""}`}
       >
         {lines.map((line) => (
           <div key={`${line.card_id}-${line.mainboard}`} className="min-w-0 overflow-visible">

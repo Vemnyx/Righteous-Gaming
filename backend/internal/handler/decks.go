@@ -169,6 +169,10 @@ func (h *decksHTTP) createDeckSource(w http.ResponseWriter, r *http.Request) {
 	writeCatalogJSON(w, http.StatusCreated, deckSourceJSON{ID: created.ID, Source: created.Source})
 }
 
+func (h *decksHTTP) isAdmin(u *domain.User) bool {
+	return u != nil && u.Role != nil && *u.Role == domain.RoleAdmin
+}
+
 func (h *decksHTTP) listMyDecks(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -179,7 +183,34 @@ func (h *decksHTTP) listMyDecks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	decks, err := h.app.Repo.ListDecksByUserID(r.Context(), u.ID)
+	filter := repository.DeckListFilter{}
+	isAdmin := h.isAdmin(u)
+
+	if uidStr := strings.TrimSpace(r.URL.Query().Get("user_id")); uidStr != "" {
+		uid, err := strconv.Atoi(uidStr)
+		if err != nil || uid <= 0 {
+			writeFieldError(w, http.StatusBadRequest, "user_id", "invalid")
+			return
+		}
+		if !isAdmin && uid != u.ID {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		filter.UserID = &uid
+	} else if !isAdmin {
+		filter.UserID = &u.ID
+	}
+
+	if sidStr := strings.TrimSpace(r.URL.Query().Get("deck_source_id")); sidStr != "" {
+		sid, err := strconv.Atoi(sidStr)
+		if err != nil || sid <= 0 {
+			writeFieldError(w, http.StatusBadRequest, "deck_source_id", "invalid")
+			return
+		}
+		filter.DeckSourceID = &sid
+	}
+
+	decks, err := h.app.Repo.ListDecks(r.Context(), filter)
 	if err != nil {
 		log.Error("list my decks", "error", err, "user_id", u.ID)
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
@@ -191,6 +222,44 @@ func (h *decksHTTP) listMyDecks(w http.ResponseWriter, r *http.Request) {
 		out = append(out, deckToJSON(&decks[i]))
 	}
 	writeCatalogJSON(w, http.StatusOK, map[string]any{"decks": out})
+}
+
+type deckFilterUserJSON struct {
+	ID       int     `json:"id"`
+	Email    string  `json:"email"`
+	Username *string `json:"username,omitempty"`
+}
+
+func (h *decksHTTP) listDeckFilterUsers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !h.isAdmin(u) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	rows, err := h.app.Repo.ListUsersForDeckFilter(r.Context())
+	if err != nil {
+		log.Error("list deck filter users", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	out := make([]deckFilterUserJSON, 0, len(rows))
+	for i := range rows {
+		out = append(out, deckFilterUserJSON{
+			ID:       rows[i].ID,
+			Email:    rows[i].Email,
+			Username: rows[i].Username,
+		})
+	}
+	writeCatalogJSON(w, http.StatusOK, map[string]any{"users": out})
 }
 
 func (h *decksHTTP) getMyDeck(w http.ResponseWriter, r *http.Request) {
@@ -210,7 +279,13 @@ func (h *decksHTTP) getMyDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deck, entries, err := h.app.Repo.GetDeckByIDForUser(r.Context(), id, u.ID)
+	var deck *repository.Deck
+	var entries []repository.DeckCardEntry
+	if h.isAdmin(u) {
+		deck, entries, err = h.app.Repo.GetDeckByID(r.Context(), id)
+	} else {
+		deck, entries, err = h.app.Repo.GetDeckByIDForUser(r.Context(), id, u.ID)
+	}
 	if err != nil {
 		if errors.Is(err, repository.ErrDeckNotFound) {
 			writeMessageError(w, http.StatusNotFound, "deck not found")

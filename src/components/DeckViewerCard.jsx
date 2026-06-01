@@ -16,8 +16,8 @@ import { CardGridLift } from "./CardGridLift";
  * }} DeckViewerCardProps
  */
 
-/** Vertical peek per duplicate — roughly the card title bar (Fabrary-style stack). */
-const STACK_PEEK_PX = 14;
+/** Vertical peek per duplicate — exposes the title bar on cards beneath the front copy. */
+const STACK_PEEK_PX = 26;
 const MAX_VISIBLE_STACK = 3;
 
 const cardShell =
@@ -39,7 +39,6 @@ export function DeckViewerCard({ card, count, isLight, stacked = true, onOpenCar
   const [lightbox, setLightbox] = useState(
     /** @type {{ url: string, name: string, card_identifier?: string | null } | null} */ (null),
   );
-  const [hoveredLayer, setHoveredLayer] = useState(/** @type {number} */ (-1));
 
   const openLightbox = () => {
     if (!imgUrl) return;
@@ -57,9 +56,6 @@ export function DeckViewerCard({ card, count, isLight, stacked = true, onOpenCar
     const layerKey = `layer-${layerIndex}`;
     const depthFromFront = layerDepthFromFront(layerIndex);
     const copyNum = copies - depthFromFront;
-    const baseZ = layerIndex + 1;
-    const zIndex = hoveredLayer === layerIndex ? 40 : baseZ;
-
     const cardFace = imgUrl ? (
       <img src={imgUrl} alt="" className="h-full w-full object-contain" draggable={false} />
     ) : (
@@ -76,21 +72,18 @@ export function DeckViewerCard({ card, count, isLight, stacked = true, onOpenCar
         key={layerKey}
         className="absolute inset-x-0 bottom-0"
         style={{
-          zIndex,
+          zIndex: layerIndex + 1,
           transform: `translate3d(0, ${-depthFromFront * STACK_PEEK_PX}px, 0)`,
         }}
       >
         {imgUrl || identifier ? (
           <CardGridLift
             isLight={isLight}
+            elevateZIndexOnHover={false}
             className="cursor-pointer rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55"
             aria-label={layerLabel}
             disabled={!imgUrl}
             onClick={openLightbox}
-            onMouseEnter={() => setHoveredLayer(layerIndex)}
-            onMouseLeave={() => setHoveredLayer(-1)}
-            onFocus={() => setHoveredLayer(layerIndex)}
-            onBlur={() => setHoveredLayer(-1)}
           >
             <span className={cardShell}>{cardFace}</span>
           </CardGridLift>

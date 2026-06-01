@@ -48,24 +48,44 @@ type DeckCardInput struct {
 	Count     int
 }
 
-// ListDecksByUserID returns decks owned by userID, newest first.
-func (r *Repository) ListDecksByUserID(ctx context.Context, userID int) ([]Deck, error) {
+// DeckListFilter optionally restricts listed decks by owner and/or deck source.
+type DeckListFilter struct {
+	UserID       *int
+	DeckSourceID *int
+}
+
+// ListDecks returns decks matching optional filters, newest first.
+func (r *Repository) ListDecks(ctx context.Context, f DeckListFilter) ([]Deck, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
-	if userID <= 0 {
-		return nil, fmt.Errorf("repository: user_id required")
+	if f.UserID != nil && *f.UserID <= 0 {
+		return nil, fmt.Errorf("repository: invalid user_id")
+	}
+	if f.DeckSourceID != nil && *f.DeckSourceID <= 0 {
+		return nil, fmt.Errorf("repository: invalid deck_source_id")
 	}
 
-	const q = `
+	q := `
 SELECT ` + deckSelectColumns + `
 FROM decks d
 INNER JOIN heroes h ON h.id = d.hero_id
 INNER JOIN deck_source ds ON ds.id = d.deck_source_id
-WHERE d.user_id = $1
-ORDER BY d.id DESC`
+WHERE 1=1`
+	args := []any{}
+	n := 1
+	if f.UserID != nil {
+		q += fmt.Sprintf(" AND d.user_id = $%d", n)
+		args = append(args, *f.UserID)
+		n++
+	}
+	if f.DeckSourceID != nil {
+		q += fmt.Sprintf(" AND d.deck_source_id = $%d", n)
+		args = append(args, *f.DeckSourceID)
+	}
+	q += " ORDER BY d.id DESC"
 
-	rows, err := r.pool.Query(ctx, q, userID)
+	rows, err := r.pool.Query(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("repository: list decks: %w", err)
 	}
@@ -88,6 +108,11 @@ ORDER BY d.id DESC`
 	return out, nil
 }
 
+// ListDecksByUserID returns decks owned by userID, newest first.
+func (r *Repository) ListDecksByUserID(ctx context.Context, userID int) ([]Deck, error) {
+	return r.ListDecks(ctx, DeckListFilter{UserID: &userID})
+}
+
 // DeckCardEntry is one deck_cards row with its catalog card.
 type DeckCardEntry struct {
 	CardID    int
@@ -96,24 +121,41 @@ type DeckCardEntry struct {
 	Card      Card
 }
 
+// GetDeckByID loads a deck and its cards by deck id (any owner).
+func (r *Repository) GetDeckByID(ctx context.Context, deckID int) (*Deck, []DeckCardEntry, error) {
+	return r.getDeckWithCards(ctx, deckID, nil)
+}
+
 // GetDeckByIDForUser loads a deck and its cards when owned by userID.
 func (r *Repository) GetDeckByIDForUser(ctx context.Context, deckID, userID int) (*Deck, []DeckCardEntry, error) {
+	if userID <= 0 {
+		return nil, nil, fmt.Errorf("repository: invalid user id")
+	}
+	return r.getDeckWithCards(ctx, deckID, &userID)
+}
+
+func (r *Repository) getDeckWithCards(ctx context.Context, deckID int, userID *int) (*Deck, []DeckCardEntry, error) {
 	if r.pool == nil {
 		return nil, nil, fmt.Errorf("repository: pool is closed")
 	}
-	if deckID <= 0 || userID <= 0 {
-		return nil, nil, fmt.Errorf("repository: invalid deck or user id")
+	if deckID <= 0 {
+		return nil, nil, fmt.Errorf("repository: invalid deck id")
 	}
 
-	const deckQ = `
+	deckQ := `
 SELECT ` + deckSelectColumns + `
 FROM decks d
 INNER JOIN heroes h ON h.id = d.hero_id
 INNER JOIN deck_source ds ON ds.id = d.deck_source_id
-WHERE d.id = $1 AND d.user_id = $2`
+WHERE d.id = $1`
+	args := []any{deckID}
+	if userID != nil {
+		deckQ += ` AND d.user_id = $2`
+		args = append(args, *userID)
+	}
 
 	var deck Deck
-	err := r.pool.QueryRow(ctx, deckQ, deckID, userID).Scan(
+	err := r.pool.QueryRow(ctx, deckQ, args...).Scan(
 		&deck.ID, &deck.UserID, &deck.Name, &deck.Format, &deck.HeroID, &deck.HeroName,
 		&deck.SetID, &deck.FabraryFormat, &deck.DeckSourceID, &deck.DeckSourceName, &deck.FabraryLink,
 	)

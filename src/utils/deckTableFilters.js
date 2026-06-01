@@ -75,14 +75,67 @@ export function matchesDeckSourceFilter(row, sourceFilter) {
 
 /**
  * @param {DeckRowLike} row
- * @param {{ format: string, hero: string, source: string }} filters
+ * @param {string} memberUserFilter
+ * @returns {boolean}
+ */
+export function matchesDeckMemberUserFilter(row, memberUserFilter) {
+  if (memberUserFilter === DECK_FILTER_ALL) return true;
+  if (!memberUserFilter.startsWith("user:")) return true;
+  const userId = Number.parseInt(memberUserFilter.slice("user:".length), 10);
+  if (!Number.isFinite(userId)) return true;
+  return row.user_id === userId;
+}
+
+/**
+ * @param {{ username?: string | null, email?: string }} user
+ * @returns {string}
+ */
+export function deckFilterUserLabel(user) {
+  const name = user.username != null ? String(user.username).trim() : "";
+  if (name) return name;
+  const email = user.email != null ? String(user.email).trim() : "";
+  if (email) return email;
+  return "User";
+}
+
+/**
+ * @param {DeckFilterOption[]} sourceOptions
+ * @returns {string} filter value like `source:1`, or empty if Member source not in list
+ */
+export function memberSourceFilterValue(sourceOptions) {
+  const member = sourceOptions.find((o) => o.label.trim().toLowerCase() === "member");
+  return member?.value ?? DECK_FILTER_ALL;
+}
+
+/**
+ * @param {{ id: number, username?: string | null, email?: string }[]} users
+ * @returns {DeckFilterOption[]}
+ */
+export function buildDeckMemberUserFilterOptions(users) {
+  /** @type {DeckFilterOption[]} */
+  const options = [{ value: DECK_FILTER_ALL, label: "All members" }];
+  const sorted = [...users].sort((a, b) =>
+    deckFilterUserLabel(a).localeCompare(deckFilterUserLabel(b), undefined, { sensitivity: "base" }),
+  );
+  for (const u of sorted) {
+    if (!u || typeof u.id !== "number") continue;
+    options.push({ value: `user:${u.id}`, label: deckFilterUserLabel(u) });
+  }
+  return options;
+}
+
+/**
+ * @param {DeckRowLike} row
+ * @param {{ format: string, hero: string, source: string, memberUser?: string }} filters
  * @returns {boolean}
  */
 export function matchesDeckTableFilters(row, filters) {
+  const memberUser = filters.memberUser ?? DECK_FILTER_ALL;
   return (
     matchesDeckFormatFilter(row, filters.format) &&
     matchesDeckHeroFilter(row, filters.hero) &&
-    matchesDeckSourceFilter(row, filters.source)
+    matchesDeckSourceFilter(row, filters.source) &&
+    matchesDeckMemberUserFilter(row, memberUser)
   );
 }
 

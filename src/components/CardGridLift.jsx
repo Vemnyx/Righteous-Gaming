@@ -11,14 +11,15 @@ const EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
 /**
  * @param {boolean} isLight
  * @param {boolean} hovered
+ * @param {boolean} elevateZIndexOnHover
  * @returns {import("react").CSSProperties}
  */
-function liftInnerStyle(isLight, hovered) {
+function liftInnerStyle(isLight, hovered, elevateZIndexOnHover) {
   return {
     display: "block",
     width: "100%",
     position: "relative",
-    zIndex: hovered ? 10 : 0,
+    zIndex: hovered && elevateZIndexOnHover ? 10 : 0,
     transform: hovered
       ? `translate3d(0, ${-LIFT_Y}px, 0) scale(${HOVER_SCALE})`
       : "translate3d(0, 0, 0) scale(1)",
@@ -43,6 +44,7 @@ function liftInnerStyle(isLight, hovered) {
  *   as?: "button" | "div",
  *   className?: string,
  *   innerClassName?: string,
+ *   elevateZIndexOnHover?: boolean,
  *   children: import("react").ReactNode,
  * } & import("react").ButtonHTMLAttributes<HTMLButtonElement> &
  *   import("react").HTMLAttributes<HTMLDivElement>} props
@@ -52,6 +54,7 @@ export function CardGridLift({
   as = "button",
   className = "",
   innerClassName = "",
+  elevateZIndexOnHover = true,
   children,
   onMouseEnter,
   onMouseLeave,
@@ -102,7 +105,7 @@ export function CardGridLift({
     [onBlur],
   );
 
-  const innerStyle = liftInnerStyle(isLight, hovered && !disabled);
+  const innerStyle = liftInnerStyle(isLight, hovered && !disabled, elevateZIndexOnHover);
 
   const outerCls = `relative z-0 block w-full p-0 ${className}`.trim();
 

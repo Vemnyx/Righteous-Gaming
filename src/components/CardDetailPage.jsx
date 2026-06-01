@@ -10,6 +10,7 @@ import {
   cardPrintings,
   formatCollectorCode,
   printingImageUrl,
+  resolvePrintingSetName,
   selectedPrinting,
 } from "../utils/cardPrintings";
 import { FunctionalText } from "../utils/functionalText";
@@ -103,7 +104,9 @@ export function CardDetailPage({ isLight, identifier, active }) {
           if (!s || typeof s !== "object") continue;
           const code = String(s.code ?? "").trim();
           const name = String(s.name ?? "").trim();
-          if (code && name) next[code] = name;
+          if (!code || !name) continue;
+          next[code] = name;
+          next[code.toLowerCase()] = name;
         }
         setSetNameByCode(next);
       }
@@ -133,14 +136,7 @@ export function CardDetailPage({ isLight, identifier, active }) {
   const activeImgUrl = useMemo(() => printingImageUrl(activePrinting), [activePrinting]);
   const activeRarity = activePrinting?.rarity ?? card?.rarity ?? null;
   const printingSetName = useCallback(
-    (printing) => {
-      const direct = typeof printing?.set_name === "string" ? printing.set_name.trim() : "";
-      if (direct) return direct;
-      const code = typeof printing?.set_code === "string" ? printing.set_code.trim() : "";
-      const fromMap = code ? String(setNameByCode?.[code] ?? "").trim() : "";
-      if (fromMap) return fromMap;
-      return code || "Unknown set";
-    },
+    (printing) => resolvePrintingSetName(printing, setNameByCode),
     [setNameByCode],
   );
 
@@ -237,18 +233,22 @@ export function CardDetailPage({ isLight, identifier, active }) {
                             <button
                               type="button"
                               aria-pressed={isActive}
-                              className={`flex w-full flex-col items-start gap-0.5 rounded-md px-1 py-0.5 text-left underline-offset-2 transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 ${
-                                isActive ? "text-[#f4f0fa]" : "text-[#f4f0fa]/80"
+                              className={`w-full rounded-md px-1 py-0.5 text-left text-[0.9rem] leading-snug underline-offset-2 transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 ${
+                                isActive ? "font-medium text-[#f4f0fa]" : "text-[#f4f0fa]/80"
                               }`}
                               onClick={() => setSelectedPrintingId(printing.id)}
                             >
-                              <span className={isActive ? "font-medium" : undefined}>
-                                {printingSetName(printing)}
-                              </span>
-                              <span className="font-mono text-[0.8125rem] text-[#f4f0fa]/70">
+                              {printingSetName(printing)}
+                              {" · "}
+                              <span className="font-mono text-[0.8125rem] font-normal text-[#f4f0fa]/70">
                                 {formatCollectorCode(printing.set_code, printing.set_num)}
-                                {rarityLabel ? ` · ${rarityLabel}` : ""}
                               </span>
+                              {rarityLabel ? (
+                                <span className="text-[0.8125rem] font-normal text-[#f4f0fa]/70">
+                                  {" · "}
+                                  {rarityLabel}
+                                </span>
+                              ) : null}
                             </button>
                           </li>
                         );

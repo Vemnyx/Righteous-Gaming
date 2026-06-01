@@ -27,6 +27,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("GET /api/deck-sources", dh.listDeckSources)
 	mux.HandleFunc("POST /api/deck-sources", dh.createDeckSource)
 	mux.HandleFunc("GET /api/me/decks", dh.listMyDecks)
+	mux.HandleFunc("GET /api/me/decks/filter-users", dh.listDeckFilterUsers)
 	mux.HandleFunc("GET /api/me/decks/{id}", dh.getMyDeck)
 	mux.HandleFunc("DELETE /api/me/decks/{id}", dh.deleteMyDeck)
 	mux.HandleFunc("POST /api/me/decks/import-fabrary", dh.importFabraryDeck)

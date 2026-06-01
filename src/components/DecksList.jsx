@@ -7,14 +7,18 @@ import {
   DECK_FILTER_ALL,
   buildDeckFormatFilterOptions,
   buildDeckHeroFilterOptions,
+  buildDeckMemberUserFilterOptions,
   buildDeckSourceFilterOptions,
   deckFormatColumnLabel,
+  memberSourceFilterValue,
   matchesDeckTableFilters,
 } from "../utils/deckTableFilters";
 
 /** @typedef {{ id: number, user_id: number, name: string, format: number, hero_id: number, hero_name?: string | null, set_id?: number | null, fabrary_format?: string | null, deck_source_id: number, source: string, fabrary_link?: string | null }} DeckRow */
 
 /** @typedef {{ id: number, source: string }} DeckSourceOption */
+
+/** @typedef {{ id: number, username?: string | null, email?: string }} DeckFilterUser */
 
 const CREATE_SOURCE_VALUE = "__create__";
 
@@ -46,6 +50,7 @@ function parseApiError(errText) {
 export function DecksList({ isLight, active, onOpenDeck }) {
   const { user, sessionProfile } = useAuth();
   const myUserId = typeof sessionProfile?.id === "number" ? sessionProfile.id : null;
+  const isAdmin = sessionProfile?.role === 0;
   const [rows, setRows] = useState(/** @type {DeckRow[]} */ ([]));
   const [sets, setSets] = useState(/** @type {{ id: number, name: string }[]} */ ([]));
   const [loading, setLoading] = useState(false);
@@ -72,6 +77,9 @@ export function DecksList({ isLight, active, onOpenDeck }) {
   const [filterFormat, setFilterFormat] = useState(DECK_FILTER_ALL);
   const [filterHero, setFilterHero] = useState(DECK_FILTER_ALL);
   const [filterSource, setFilterSource] = useState(DECK_FILTER_ALL);
+  const [filterMemberUser, setFilterMemberUser] = useState(DECK_FILTER_ALL);
+  const [filterUsers, setFilterUsers] = useState(/** @type {DeckFilterUser[]} */ ([]));
+  const [filterUsersLoading, setFilterUsersLoading] = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -160,6 +168,19 @@ export function DecksList({ isLight, active, onOpenDeck }) {
 
   const sourceFilterOptions = useMemo(() => buildDeckSourceFilterOptions(rows), [rows]);
 
+  const memberSourceValue = useMemo(
+    () => memberSourceFilterValue(sourceFilterOptions),
+    [sourceFilterOptions],
+  );
+
+  const showMemberUserFilter =
+    isAdmin && memberSourceValue !== DECK_FILTER_ALL && filterSource === memberSourceValue;
+
+  const memberUserFilterOptions = useMemo(
+    () => buildDeckMemberUserFilterOptions(filterUsers),
+    [filterUsers],
+  );
+
   const filteredRows = useMemo(
     () =>
       rows.filter((row) =>
@@ -167,9 +188,10 @@ export function DecksList({ isLight, active, onOpenDeck }) {
           format: filterFormat,
           hero: filterHero,
           source: filterSource,
+          memberUser: showMemberUserFilter ? filterMemberUser : DECK_FILTER_ALL,
         }),
       ),
-    [rows, filterFormat, filterHero, filterSource],
+    [rows, filterFormat, filterHero, filterSource, filterMemberUser, showMemberUserFilter],
   );
 
   const loadDeckSources = useCallback(async () => {
@@ -209,6 +231,55 @@ export function DecksList({ isLight, active, onOpenDeck }) {
       cancelled = true;
     };
   }, [active, user, load, reloadSeq]);
+
+  useEffect(() => {
+    if (!active || !user || !isAdmin) {
+      setFilterUsers([]);
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      setFilterUsersLoading(true);
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch("/api/me/decks/filter-users", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(parseApiError(await res.text()));
+        const data = await res.json();
+        if (cancelled) return;
+        const list = Array.isArray(data.users) ? data.users : [];
+        /** @type {DeckFilterUser[]} */
+        const next = [];
+        for (const u of list) {
+          if (!u || typeof u.id !== "number") continue;
+          next.push({
+            id: u.id,
+            username: u.username != null ? String(u.username) : null,
+            email: typeof u.email === "string" ? u.email : "",
+          });
+        }
+        setFilterUsers(next);
+      } catch {
+        if (!cancelled) setFilterUsers([]);
+      } finally {
+        if (!cancelled) setFilterUsersLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [active, user, isAdmin]);
+
+  const handleSourceFilterChange = useCallback(
+    (/** @type {string} */ value) => {
+      setFilterSource(value);
+      if (value !== memberSourceValue) {
+        setFilterMemberUser(DECK_FILTER_ALL);
+      }
+    },
+    [memberSourceValue],
+  );
 
   const openImportModal = useCallback(() => {
     setImportError(null);
@@ -469,21 +540,42 @@ export function DecksList({ isLight, active, onOpenDeck }) {
             ))}
           </select>
         </label>
-        <label className="flex min-w-[10rem] flex-1 flex-col gap-1 sm:max-w-[14rem]">
-          <span className="text-[0.72rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">Source</span>
-          <select
-            className={selectCls}
-            value={filterSource}
-            disabled={loading || rows.length === 0}
-            onChange={(e) => setFilterSource(e.target.value)}
-          >
-            {sourceFilterOptions.map((opt) => (
-              <option key={opt.value || "all"} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+          <label className="flex min-w-[10rem] flex-1 flex-col gap-1 sm:max-w-[14rem]">
+            <span className="text-[0.72rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">Source</span>
+            <select
+              className={selectCls}
+              value={filterSource}
+              disabled={loading || rows.length === 0}
+              onChange={(e) => handleSourceFilterChange(e.target.value)}
+            >
+              {sourceFilterOptions.map((opt) => (
+                <option key={opt.value || "all"} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {showMemberUserFilter ? (
+            <label className="flex min-w-[10rem] flex-1 flex-col gap-1 sm:max-w-[14rem]">
+              <span className="text-[0.72rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
+                Member
+              </span>
+              <select
+                className={selectCls}
+                value={filterMemberUser}
+                disabled={loading || filterUsersLoading || memberUserFilterOptions.length <= 1}
+                onChange={(e) => setFilterMemberUser(e.target.value)}
+              >
+                {memberUserFilterOptions.map((opt) => (
+                  <option key={opt.value || "all-members"} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
       </div>
 
       <div className={`overflow-x-auto rounded-xl border bg-black/20 ${tableChromeBorder}`}>
@@ -605,6 +697,21 @@ export function DecksList({ isLight, active, onOpenDeck }) {
 
                 <label className="mt-4 flex flex-col gap-1.5">
                   <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
+                    Fabrary deck URL
+                  </span>
+                  <input
+                    type="url"
+                    className={inputCls}
+                    value={importUrl}
+                    onChange={(e) => setImportUrl(e.target.value)}
+                    placeholder="https://fabrary.net/decks/..."
+                    disabled={importSubmitting}
+                    autoComplete="off"
+                  />
+                </label>
+
+                <label className="mt-4 flex flex-col gap-1.5">
+                  <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
                     Deck source
                   </span>
                   {sourcesLoading ? (
@@ -631,21 +738,6 @@ export function DecksList({ isLight, active, onOpenDeck }) {
                       ))}
                     </select>
                   )}
-                </label>
-
-                <label className="mt-4 flex flex-col gap-1.5">
-                  <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
-                    Fabrary deck URL
-                  </span>
-                  <input
-                    type="url"
-                    className={inputCls}
-                    value={importUrl}
-                    onChange={(e) => setImportUrl(e.target.value)}
-                    placeholder="https://fabrary.net/decks/..."
-                    disabled={importSubmitting}
-                    autoComplete="off"
-                  />
                 </label>
 
                 {importError ? (
