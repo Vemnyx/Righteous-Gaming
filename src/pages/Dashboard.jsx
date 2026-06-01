@@ -11,6 +11,7 @@ import { CardRaterAdmin } from "../components/CardRaterAdmin";
 import { CardRaterRedirect } from "../components/CardRaterRedirect";
 import { CardRaterAnalytics } from "../components/CardRaterAnalytics";
 import { CardRatingsList } from "../components/CardRatingsList";
+import { DecksList } from "../components/DecksList";
 import { SetsAdmin } from "../components/SetsAdmin";
 import { UserAccountMenu } from "../components/UserAccountMenu";
 import { UserSettings } from "../components/UserSettings";
@@ -42,6 +43,7 @@ const FALLBACK_TAB_ID = "announcements";
 /** @type {ResourceSubLink[]} */
 const RESOURCE_SUB_LINKS = [
   { segment: "cards", label: "Cards", path: "/resources/cards" },
+  { segment: "decks", label: "Decks", path: "/resources/decks" },
   { segment: "card-rater", label: "Card Rater", path: "/resources/card-rater" },
 ];
 
@@ -112,6 +114,7 @@ function buildDashboardPathname(
   if (tabId === RESOURCES_TAB_ID) {
     const seg =
       resourcesChild === "cards" ||
+      resourcesChild === "decks" ||
       resourcesChild === "card-rater" ||
       resourcesChild === "card-rater-play"
         ? resourcesChild
@@ -273,6 +276,18 @@ function parseDashboardPathname(pathname) {
         };
       }
       return { kind: "invalid" };
+    }
+    if (b === "decks") {
+      if (c !== undefined || rest.length > 0) return { kind: "invalid" };
+      return {
+        kind: "ok",
+        tabId: RESOURCES_TAB_ID,
+        resourcesChild: "decks",
+        resourcesCardIdentifier: null,
+        resourcesCardRaterId: null,
+        adminChild: null,
+        adminAnnouncementForm: null,
+      };
     }
     return { kind: "invalid" };
   }
@@ -1504,6 +1519,8 @@ export default function Dashboard({ onNavigate }) {
                   }
                   onOpenCardDetail={openCardDetail}
                 />
+              ) : resourcesChild === "decks" ? (
+                <DecksList isLight={isLight} active={activeTab === RESOURCES_TAB_ID && resourcesChild === "decks"} />
               ) : showCardRankerResources ? (
                 <CardRanker
                   isLight={isLight}

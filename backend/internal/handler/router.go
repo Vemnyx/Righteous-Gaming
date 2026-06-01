@@ -16,6 +16,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	rh := &cardRatingsHTTP{app: application, svc: userSvc}
 	upload := &uploadHTTP{app: application, svc: userSvc}
 	ah := &announcementHTTP{app: application, svc: userSvc}
+	dh := &decksHTTP{app: application, svc: userSvc}
 
 	mux.HandleFunc("POST /api/users", uh.createUser)
 	mux.HandleFunc("POST /api/complete-registration", uh.completeRegistration)
@@ -23,6 +24,8 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("GET /api/me/settings", uh.getMySettings)
 	mux.HandleFunc("POST /api/me/settings", uh.saveMySettings)
 	mux.HandleFunc("PATCH /api/me/settings", uh.saveMySettings)
+	mux.HandleFunc("GET /api/me/decks", dh.listMyDecks)
+	mux.HandleFunc("POST /api/me/decks/import-fabrary", dh.importFabraryDeck)
 	mux.HandleFunc("GET /api/me/card-ratings", rh.listMyRatings)
 	mux.HandleFunc("POST /api/me/card-ratings", rh.saveMyRating)
 	mux.HandleFunc("GET /api/me/cards-to-rate", rh.listMyCardsToRate)

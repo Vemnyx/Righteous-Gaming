@@ -439,10 +439,10 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
   const tableHeadBorder = isLight ? "border-white/[0.12]" : "border-white/[0.20]";
   const tableRowBorder = isLight ? "border-white/[0.06]" : "border-white/[0.12]";
   const gridCardLift =
-    "relative z-0 transition-[transform,box-shadow] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform " +
+    "relative z-0 transition-[transform,box-shadow] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform " +
     (isLight
-      ? "shadow-sm shadow-black/15 hover:z-10 hover:scale-[1.06] hover:shadow-[0_14px_32px_-8px_rgba(0,0,0,0.22)] focus-visible:z-10 focus-visible:scale-[1.06] focus-visible:shadow-[0_14px_32px_-8px_rgba(0,0,0,0.22)]"
-      : "shadow-none hover:z-10 hover:scale-[1.06] hover:shadow-[0_18px_44px_-10px_rgba(0,0,0,0.72)] focus-visible:z-10 focus-visible:scale-[1.06] focus-visible:shadow-[0_18px_44px_-10px_rgba(0,0,0,0.72)]");
+      ? "shadow-sm shadow-black/15 hover:z-10 hover:scale-[1.055] hover:-translate-y-1.5 hover:shadow-[0_14px_32px_-8px_rgba(0,0,0,0.22)] focus-visible:z-10 focus-visible:scale-[1.055] focus-visible:-translate-y-1.5 focus-visible:shadow-[0_14px_32px_-8px_rgba(0,0,0,0.22)]"
+      : "shadow-none hover:z-10 hover:scale-[1.055] hover:-translate-y-1.5 hover:shadow-[0_18px_44px_-10px_rgba(0,0,0,0.72)] focus-visible:z-10 focus-visible:scale-[1.055] focus-visible:-translate-y-1.5 focus-visible:shadow-[0_18px_44px_-10px_rgba(0,0,0,0.72)]");
 
   const fieldCls = isLight
     ? "min-w-0 rounded-lg border border-white/[0.24] bg-black/25 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/45 focus:border-purple-400/55"
