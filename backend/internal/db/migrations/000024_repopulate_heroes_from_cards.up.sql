@@ -1,6 +1,5 @@
--- Seed heroes from catalog hero cards (cards.type = CardTypeHero / 8).
--- heroes.type = first cards.heroes enum; young = Young subtype (54).
--- See 000024 for idempotent backfill after more cards are imported.
+-- Idempotent: seed any hero cards missing from heroes (e.g. 000021 ran before catalog had hero cards).
+-- Uses primary printing image when cards.image_url is empty.
 
 INSERT INTO heroes (name, type, young, classes, talents, card_id, card_image_url, art_image_url)
 SELECT

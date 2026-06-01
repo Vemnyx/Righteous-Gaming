@@ -63,8 +63,8 @@ export function AuthProvider({ children }) {
         setSessionProfile(profile);
       } catch {
         if (cancelled) return;
-        clearSessionProfile();
-        setSessionProfile(null);
+        // Keep cached profile when the API is down (502) so the header still shows the user name.
+        setSessionProfile((prev) => prev ?? cached);
       } finally {
         if (!cancelled) setSessionProfileLoading(false);
       }
