@@ -30,7 +30,7 @@ BEGIN
 
     IF EXISTS (SELECT 1 FROM decks WHERE hero_id IS NULL) THEN
         IF EXISTS (SELECT 1 FROM decks) AND NOT EXISTS (SELECT 1 FROM heroes) THEN
-            RAISE EXCEPTION 'decks.hero_id backfill failed: heroes table is empty (run migration 000021 first)';
+            RAISE EXCEPTION 'decks.hero_id backfill failed: heroes table is empty';
         END IF;
     END IF;
 
