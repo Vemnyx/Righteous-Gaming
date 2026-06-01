@@ -12,7 +12,7 @@ import {
   matchesDeckTableFilters,
 } from "../utils/deckTableFilters";
 
-/** @typedef {{ id: number, user_id: number, name: string, format: number, hero: number, set_id?: number | null, fabrary_format?: string | null, deck_source_id: number, source: string, fabrary_link?: string | null }} DeckRow */
+/** @typedef {{ id: number, user_id: number, name: string, format: number, hero_id: number, hero_name?: string | null, set_id?: number | null, fabrary_format?: string | null, deck_source_id: number, source: string, fabrary_link?: string | null }} DeckRow */
 
 /** @typedef {{ id: number, source: string }} DeckSourceOption */
 
@@ -92,14 +92,16 @@ export function DecksList({ isLight, active, onOpenDeck }) {
       const next = [];
       for (const d of list) {
         if (!d || typeof d.id !== "number" || typeof d.name !== "string") continue;
-        if (typeof d.format !== "number" || typeof d.hero !== "number") continue;
+        if (typeof d.format !== "number" || typeof d.hero_id !== "number") continue;
         if (typeof d.user_id !== "number") continue;
         next.push({
           id: d.id,
           user_id: d.user_id,
           name: String(d.name).trim() || `Deck #${d.id}`,
           format: d.format,
-          hero: d.hero,
+          hero_id: d.hero_id,
+          hero_name:
+            d.hero_name != null && String(d.hero_name).trim() !== "" ? String(d.hero_name).trim() : null,
           set_id: typeof d.set_id === "number" ? d.set_id : null,
           fabrary_format:
             d.fabrary_format != null && String(d.fabrary_format).trim() !== ""

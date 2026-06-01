@@ -40,7 +40,8 @@ type deckJSON struct {
 	UserID        int     `json:"user_id"`
 	Name          string  `json:"name"`
 	Format        int16   `json:"format"`
-	Hero          int16   `json:"hero"`
+	HeroID        int     `json:"hero_id"`
+	HeroName      string  `json:"hero_name"`
 	SetID         *int    `json:"set_id,omitempty"`
 	FabraryFormat  *string `json:"fabrary_format,omitempty"`
 	DeckSourceID   int     `json:"deck_source_id"`
@@ -75,7 +76,8 @@ func deckToJSON(d *repository.Deck) deckJSON {
 		UserID:        d.UserID,
 		Name:          d.Name,
 		Format:        d.Format,
-		Hero:          d.Hero,
+		HeroID:        d.HeroID,
+		HeroName:      d.HeroName,
 		SetID:          d.SetID,
 		FabraryFormat:  d.FabraryFormat,
 		DeckSourceID:   d.DeckSourceID,
@@ -331,13 +333,9 @@ func (h *decksHTTP) importFabraryDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hero, err := resolveFabraryHero(ctx, h.app.Repo, fetched.HeroIdentifier)
+	heroID, err := resolveFabraryHeroID(ctx, h.app.Repo, fetched.HeroIdentifier)
 	if err != nil {
 		writeFieldError(w, http.StatusBadRequest, "fabrary_link", err.Error())
-		return
-	}
-	if !domain.CardHero(hero).Valid() {
-		writeFieldError(w, http.StatusBadRequest, "fabrary_link", "unsupported hero")
 		return
 	}
 
@@ -367,7 +365,7 @@ func (h *decksHTTP) importFabraryDeck(w http.ResponseWriter, r *http.Request) {
 		UserID:        u.ID,
 		Name:          fetched.Name,
 		Format:        format,
-		Hero:          hero,
+		HeroID:        heroID,
 		SetID:         setID,
 		FabraryFormat: fabraryFormat,
 		DeckSourceID:  body.DeckSourceID,
@@ -434,22 +432,34 @@ func limitedDeckSetFields(
 	return setID, fabFormat
 }
 
-func resolveFabraryHero(ctx context.Context, repo *repository.Repository, heroIdentifier string) (int16, error) {
+func resolveFabraryHeroID(ctx context.Context, repo *repository.Repository, heroIdentifier string) (int, error) {
 	ident := strings.ToLower(strings.TrimSpace(heroIdentifier))
 	if ident == "" {
 		return 0, fmt.Errorf("deck has no hero")
 	}
-	idMap, err := repo.ListCardIDsByIdentifierLower(ctx)
-	if err != nil {
+
+	if heroID, err := repo.HeroIDByCardIdentifier(ctx, ident); err == nil {
+		return heroID, nil
+	} else if !errors.Is(err, repository.ErrHeroNotFound) {
 		return 0, fmt.Errorf("could not resolve hero")
 	}
-	if cardID, ok := idMap[ident]; ok {
-		card, err := repo.CardByID(ctx, cardID)
-		if err == nil && len(card.Heroes) > 0 {
-			return card.Heroes[0], nil
-		}
+
+	heroType, err := fabrary.HeroFromIdentifier(heroIdentifier)
+	if err != nil {
+		return 0, err
 	}
-	return fabrary.HeroFromIdentifier(heroIdentifier)
+	if !domain.CardHero(heroType).Valid() {
+		return 0, fmt.Errorf("unsupported hero")
+	}
+
+	heroID, err := repo.HeroIDByType(ctx, heroType)
+	if err != nil {
+		if errors.Is(err, repository.ErrHeroNotFound) {
+			return 0, fmt.Errorf("hero not found in catalog")
+		}
+		return 0, fmt.Errorf("could not resolve hero")
+	}
+	return heroID, nil
 }
 
 func mapFabraryDeckCards(fetched *fabrary.Deck, idMap map[string]int) ([]repository.DeckCardInput, []string) {

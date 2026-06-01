@@ -11,13 +11,14 @@ import (
 // ErrDeckNotFound is returned when no deck row matches the given id and owner.
 var ErrDeckNotFound = errors.New("repository: deck not found")
 
-// Deck is a row from decks.
+// Deck is a row from decks with joined hero display name.
 type Deck struct {
 	ID             int
 	UserID         int
 	Name           string
 	Format         int16
-	Hero           int16
+	HeroID         int
+	HeroName       string
 	SetID          *int
 	FabraryFormat  *string
 	DeckSourceID   int
@@ -30,12 +31,15 @@ type CreateDeckInput struct {
 	UserID        int
 	Name          string
 	Format        int16
-	Hero          int16
+	HeroID        int
 	SetID         *int
 	FabraryFormat *string
 	DeckSourceID  int
 	FabraryLink   *string
 }
+
+const deckSelectColumns = `
+d.id, d.user_id, d.name, d.format, d.hero_id, h.name, d.set_id, d.fabrary_format, d.deck_source_id, ds.source, d.fabrary_link`
 
 // DeckCardInput is one deck_cards row.
 type DeckCardInput struct {
@@ -54,8 +58,9 @@ func (r *Repository) ListDecksByUserID(ctx context.Context, userID int) ([]Deck,
 	}
 
 	const q = `
-SELECT d.id, d.user_id, d.name, d.format, d.hero, d.set_id, d.fabrary_format, d.deck_source_id, ds.source, d.fabrary_link
+SELECT ` + deckSelectColumns + `
 FROM decks d
+INNER JOIN heroes h ON h.id = d.hero_id
 INNER JOIN deck_source ds ON ds.id = d.deck_source_id
 WHERE d.user_id = $1
 ORDER BY d.id DESC`
@@ -70,7 +75,7 @@ ORDER BY d.id DESC`
 	for rows.Next() {
 		var d Deck
 		if err := rows.Scan(
-			&d.ID, &d.UserID, &d.Name, &d.Format, &d.Hero, &d.SetID, &d.FabraryFormat,
+			&d.ID, &d.UserID, &d.Name, &d.Format, &d.HeroID, &d.HeroName, &d.SetID, &d.FabraryFormat,
 			&d.DeckSourceID, &d.DeckSourceName, &d.FabraryLink,
 		); err != nil {
 			return nil, fmt.Errorf("repository: scan deck: %w", err)
@@ -101,14 +106,15 @@ func (r *Repository) GetDeckByIDForUser(ctx context.Context, deckID, userID int)
 	}
 
 	const deckQ = `
-SELECT d.id, d.user_id, d.name, d.format, d.hero, d.set_id, d.fabrary_format, d.deck_source_id, ds.source, d.fabrary_link
+SELECT ` + deckSelectColumns + `
 FROM decks d
+INNER JOIN heroes h ON h.id = d.hero_id
 INNER JOIN deck_source ds ON ds.id = d.deck_source_id
 WHERE d.id = $1 AND d.user_id = $2`
 
 	var deck Deck
 	err := r.pool.QueryRow(ctx, deckQ, deckID, userID).Scan(
-		&deck.ID, &deck.UserID, &deck.Name, &deck.Format, &deck.Hero,
+		&deck.ID, &deck.UserID, &deck.Name, &deck.Format, &deck.HeroID, &deck.HeroName,
 		&deck.SetID, &deck.FabraryFormat, &deck.DeckSourceID, &deck.DeckSourceName, &deck.FabraryLink,
 	)
 	if err != nil {
@@ -187,6 +193,9 @@ func (r *Repository) CreateDeckWithCards(ctx context.Context, in CreateDeckInput
 	if in.DeckSourceID <= 0 {
 		return nil, fmt.Errorf("repository: deck_source_id required")
 	}
+	if in.HeroID <= 0 {
+		return nil, fmt.Errorf("repository: hero_id required")
+	}
 
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -195,22 +204,15 @@ func (r *Repository) CreateDeckWithCards(ctx context.Context, in CreateDeckInput
 	defer tx.Rollback(ctx)
 
 	const insertDeck = `
-INSERT INTO decks (user_id, name, format, hero, set_id, fabrary_format, deck_source_id, fabrary_link)
+INSERT INTO decks (user_id, name, format, hero_id, set_id, fabrary_format, deck_source_id, fabrary_link)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, user_id, name, format, hero, set_id, fabrary_format, deck_source_id, fabrary_link`
+RETURNING id`
 
-	var deck Deck
+	var deckID int
 	if err := tx.QueryRow(ctx, insertDeck,
-		in.UserID, in.Name, in.Format, in.Hero, in.SetID, in.FabraryFormat, in.DeckSourceID, in.FabraryLink,
-	).Scan(
-		&deck.ID, &deck.UserID, &deck.Name, &deck.Format, &deck.Hero,
-		&deck.SetID, &deck.FabraryFormat, &deck.DeckSourceID, &deck.FabraryLink,
-	); err != nil {
+		in.UserID, in.Name, in.Format, in.HeroID, in.SetID, in.FabraryFormat, in.DeckSourceID, in.FabraryLink,
+	).Scan(&deckID); err != nil {
 		return nil, fmt.Errorf("repository: insert deck: %w", err)
-	}
-
-	if src, err := r.DeckSourceByID(ctx, deck.DeckSourceID); err == nil && src != nil {
-		deck.DeckSourceName = src.Source
 	}
 
 	if len(cards) > 0 {
@@ -227,7 +229,7 @@ ON CONFLICT (deck_id, card_id, mainboard) DO NOTHING`
 			if count <= 0 {
 				count = 1
 			}
-			batch.Queue(insertCard, deck.ID, c.CardID, c.Mainboard, count)
+			batch.Queue(insertCard, deckID, c.CardID, c.Mainboard, count)
 		}
 		br := tx.SendBatch(ctx, batch)
 		for range cards {
@@ -243,6 +245,33 @@ ON CONFLICT (deck_id, card_id, mainboard) DO NOTHING`
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("repository: create deck commit: %w", err)
+	}
+
+	deck, err := r.getDeckByIDForUserAfterCommit(ctx, deckID, in.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return deck, nil
+}
+
+func (r *Repository) getDeckByIDForUserAfterCommit(ctx context.Context, deckID, userID int) (*Deck, error) {
+	const q = `
+SELECT ` + deckSelectColumns + `
+FROM decks d
+INNER JOIN heroes h ON h.id = d.hero_id
+INNER JOIN deck_source ds ON ds.id = d.deck_source_id
+WHERE d.id = $1 AND d.user_id = $2`
+
+	var deck Deck
+	err := r.pool.QueryRow(ctx, q, deckID, userID).Scan(
+		&deck.ID, &deck.UserID, &deck.Name, &deck.Format, &deck.HeroID, &deck.HeroName,
+		&deck.SetID, &deck.FabraryFormat, &deck.DeckSourceID, &deck.DeckSourceName, &deck.FabraryLink,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrDeckNotFound
+		}
+		return nil, fmt.Errorf("repository: load created deck: %w", err)
 	}
 	return &deck, nil
 }

@@ -1,7 +1,7 @@
 import { CARD_FORMAT_NAMES, CardFormat, cardFormatName } from "../constants/cardFormat";
 import { deckHeroLabel } from "./deckHeroLabel";
 
-/** @typedef {{ id: number, name: string, format: number, hero: number, set_id?: number | null, fabrary_format?: string | null, deck_source_id: number, source: string }} DeckRowLike */
+/** @typedef {{ id: number, name: string, format: number, hero_id: number, hero_name?: string | null, set_id?: number | null, fabrary_format?: string | null, deck_source_id: number, source: string }} DeckRowLike */
 
 /** @typedef {{ value: string, label: string }} DeckFilterOption */
 
@@ -55,9 +55,9 @@ export function matchesDeckFormatFilter(row, formatFilter) {
 export function matchesDeckHeroFilter(row, heroFilter) {
   if (heroFilter === DECK_FILTER_ALL) return true;
   if (!heroFilter.startsWith("hero:")) return true;
-  const hero = Number.parseInt(heroFilter.slice("hero:".length), 10);
-  if (!Number.isFinite(hero)) return true;
-  return row.hero === hero;
+  const heroID = Number.parseInt(heroFilter.slice("hero:".length), 10);
+  if (!Number.isFinite(heroID)) return true;
+  return row.hero_id === heroID;
 }
 
 /**
@@ -148,8 +148,8 @@ export function buildDeckHeroFilterOptions(rows) {
   /** @type {Map<number, string>} */
   const byId = new Map();
   for (const row of rows) {
-    if (byId.has(row.hero)) continue;
-    byId.set(row.hero, deckHeroLabel(row));
+    if (byId.has(row.hero_id)) continue;
+    byId.set(row.hero_id, deckHeroLabel(row));
   }
 
   const sorted = [...byId.entries()].sort((a, b) =>

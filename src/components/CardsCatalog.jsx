@@ -14,8 +14,8 @@ import {
   filterCatalogCard,
 } from "../utils/cardCatalogFilter";
 import { cardImageUrl, formatCollectorCode } from "../utils/cardPrintings";
-import { cardGridLiftClass } from "../utils/cardGridLift";
 import { CardImageLightbox } from "./CardImageLightbox";
+import { CardGridLift } from "./CardGridLift";
 
 const MD_MIN = 768;
 const TABLE_PAGE_SIZE = 25;
@@ -422,8 +422,6 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
     : "border-white/[0.24] ring-1 ring-white/[0.05]";
   const tableHeadBorder = isLight ? "border-white/[0.12]" : "border-white/[0.20]";
   const tableRowBorder = isLight ? "border-white/[0.06]" : "border-white/[0.12]";
-  const gridCardLift = cardGridLiftClass(isLight);
-
   const fieldCls = isLight
     ? "min-w-0 rounded-lg border border-white/[0.24] bg-black/25 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/45 focus:border-purple-400/55"
     : "min-w-0 rounded-lg border border-white/[0.22] bg-black/30 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/55";
@@ -700,11 +698,11 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
             {pagedGrid.map((c) => {
               const imgUrl = cardImageUrl(c);
               return (
-              <div key={c.id} className="min-w-0 overflow-visible px-0.5 pb-1 pt-0.5">
+              <div key={c.id} className="min-w-0 overflow-visible px-0.5 pb-3 pt-0.5">
                 {imgUrl ? (
-                  <button
-                    type="button"
-                    className={`flex aspect-[63/88] w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-black/30 p-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 ${gridCardLift}`}
+                  <CardGridLift
+                    isLight={isLight}
+                    className="cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55"
                     aria-label={`Open full image: ${c.name}`}
                     onClick={() =>
                       setGridImageModal({
@@ -714,13 +712,15 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                       })
                     }
                   >
-                    <img
-                      src={imgUrl}
-                      alt=""
-                      className="h-full w-full object-contain"
-                      draggable={false}
-                    />
-                  </button>
+                    <span className="flex aspect-[63/88] w-full items-center justify-center overflow-hidden rounded-lg bg-black/30">
+                      <img
+                        src={imgUrl}
+                        alt=""
+                        className="h-full w-full object-contain"
+                        draggable={false}
+                      />
+                    </span>
+                  </CardGridLift>
                 ) : (
                   <div
                     className="flex aspect-[63/88] items-center justify-center overflow-hidden rounded-lg bg-black/30"

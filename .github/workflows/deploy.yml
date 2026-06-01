@@ -78,6 +78,11 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
+      # IAP TCP forwarding uses gcloud's bundled Python for bulk upload; NumPy speeds scp/ssh.
+      # See https://cloud.google.com/iap/docs/using-tcp-forwarding#increasing_the_tcp_upload_bandwidth
+      - name: Install NumPy for gcloud IAP tunnel
+        run: bash scripts/setup_gcloud_iap_numpy.sh
+
       - name: Deploy dist to VM
         env:
           GCE_USERNAME: ${{ secrets.GCE_USERNAME }}

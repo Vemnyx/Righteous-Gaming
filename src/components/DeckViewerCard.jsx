@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { cardImageUrl } from "../utils/cardPrintings";
-import { cardGridLiftClass } from "../utils/cardGridLift";
 import { CardImageLightbox } from "./CardImageLightbox";
+import { CardGridLift } from "./CardGridLift";
 
 /**
  * @typedef {{
@@ -16,6 +16,10 @@ import { CardImageLightbox } from "./CardImageLightbox";
  * }} DeckViewerCardProps
  */
 
+/** Vertical peek per duplicate — roughly the card title bar (Fabrary-style stack). */
+const STACK_PEEK_PX = 14;
+const MAX_VISIBLE_STACK = 3;
+
 const cardShell =
   "flex aspect-[63/88] w-full items-center justify-center overflow-hidden rounded-md bg-black/30";
 
@@ -29,63 +33,13 @@ const cardShell =
 export function DeckViewerCard({ card, count, isLight, stacked = true, onOpenCard }) {
   const imgUrl = cardImageUrl(card);
   const copies = count > 0 ? count : 1;
-  const visibleStack = stacked ? Math.min(copies, 3) : 1;
-  const stackOffsetPx = 10;
-  const extraPadTop = stacked && visibleStack > 1 ? (visibleStack - 1) * stackOffsetPx : 0;
+  const visibleStack = stacked ? Math.min(copies, MAX_VISIBLE_STACK) : 1;
   const identifier = card.card_identifier != null ? String(card.card_identifier).trim() : "";
-  const lift = cardGridLiftClass(isLight);
 
   const [lightbox, setLightbox] = useState(
     /** @type {{ url: string, name: string, card_identifier?: string | null } | null} */ (null),
   );
-
-  const inner = imgUrl ? (
-    <img src={imgUrl} alt={card.name || "Card"} className="h-full w-full object-contain" draggable={false} />
-  ) : (
-    <span className="px-1 text-center text-[0.62rem] leading-tight text-[#f4f0fa]/45">{card.name}</span>
-  );
-
-  const backLayers =
-    stacked && visibleStack > 1
-      ? Array.from({ length: visibleStack - 1 }, (_, i) => {
-          const depth = visibleStack - 1 - i;
-          return (
-            <div
-              key={`back-${depth}`}
-              className={`pointer-events-none absolute left-0 w-full ${cardShell}`}
-              style={{
-                top: -depth * stackOffsetPx,
-                zIndex: depth,
-                transform: `scale(${1 - depth * 0.02})`,
-                transformOrigin: "center bottom",
-                opacity: 0.92 - depth * 0.06,
-              }}
-              aria-hidden
-            >
-              {inner}
-            </div>
-          );
-        })
-      : null;
-
-  const frontLayer = (
-    <div
-      className={`relative w-full ${cardShell}`}
-      style={{ zIndex: visibleStack > 1 ? visibleStack : 1 }}
-    >
-      {inner}
-    </div>
-  );
-
-  const stackBody = (
-    <div className="relative w-full" style={{ paddingTop: extraPadTop }}>
-      {backLayers}
-      {frontLayer}
-      <div className={`relative ${cardShell}`} style={{ visibility: "hidden" }} aria-hidden>
-        {inner}
-      </div>
-    </div>
-  );
+  const [hoveredLayer, setHoveredLayer] = useState(/** @type {number} */ (-1));
 
   const openLightbox = () => {
     if (!imgUrl) return;
@@ -96,24 +50,60 @@ export function DeckViewerCard({ card, count, isLight, stacked = true, onOpenCar
     });
   };
 
-  const interactive =
-    imgUrl || identifier ? (
-      <button
-        type="button"
-        className={`block w-full cursor-pointer rounded-md p-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 ${lift}`}
-        aria-label={`${card.name}${copies > 1 ? `, ${copies} copies` : ""}`}
-        onClick={openLightbox}
-        disabled={!imgUrl}
-      >
-        {stackBody}
-      </button>
+  /** @param {number} layerIndex 0 = backmost, visibleStack-1 = front */
+  const layerDepthFromFront = (layerIndex) => visibleStack - 1 - layerIndex;
+
+  const layers = Array.from({ length: visibleStack }, (_, layerIndex) => {
+    const layerKey = `layer-${layerIndex}`;
+    const depthFromFront = layerDepthFromFront(layerIndex);
+    const copyNum = copies - depthFromFront;
+    const baseZ = layerIndex + 1;
+    const zIndex = hoveredLayer === layerIndex ? 40 : baseZ;
+
+    const cardFace = imgUrl ? (
+      <img src={imgUrl} alt="" className="h-full w-full object-contain" draggable={false} />
     ) : (
-      <div className="w-full">{stackBody}</div>
+      <span className="px-1 text-center text-[0.62rem] leading-tight text-[#f4f0fa]/45">{card.name}</span>
     );
+
+    const layerLabel =
+      copies > 1
+        ? `${card.name || "Card"}, copy ${copyNum} of ${copies}`
+        : `${card.name || "Card"}`;
+
+    return (
+      <div
+        key={layerKey}
+        className="absolute inset-x-0 bottom-0"
+        style={{
+          zIndex,
+          transform: `translate3d(0, ${-depthFromFront * STACK_PEEK_PX}px, 0)`,
+        }}
+      >
+        {imgUrl || identifier ? (
+          <CardGridLift
+            isLight={isLight}
+            className="cursor-pointer rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55"
+            aria-label={layerLabel}
+            disabled={!imgUrl}
+            onClick={openLightbox}
+            onMouseEnter={() => setHoveredLayer(layerIndex)}
+            onMouseLeave={() => setHoveredLayer(-1)}
+            onFocus={() => setHoveredLayer(layerIndex)}
+            onBlur={() => setHoveredLayer(-1)}
+          >
+            <span className={cardShell}>{cardFace}</span>
+          </CardGridLift>
+        ) : (
+          <div className={cardShell}>{cardFace}</div>
+        )}
+      </div>
+    );
+  });
 
   return (
     <>
-      {interactive}
+      <div className="relative w-full aspect-[63/88] overflow-visible">{layers}</div>
       <CardImageLightbox
         image={lightbox}
         onClose={() => setLightbox(null)}

@@ -84,9 +84,11 @@ function DeckViewerSection({ title, icon, lines, isLight, stacked = true, onOpen
           {title} <span className="font-normal text-[#f4f0fa]/55">({count})</span>
         </span>
       </h3>
-      <div className="grid grid-cols-4 gap-2 overflow-visible sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 md:gap-2.5">
+      <div
+        className={`grid grid-cols-4 items-end gap-x-1.5 gap-y-3 overflow-visible sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 md:gap-x-2 ${stacked ? "pt-8" : ""}`}
+      >
         {lines.map((line) => (
-          <div key={`${line.card_id}-${line.mainboard}`} className="min-w-0 overflow-visible px-0.5 pb-1 pt-0.5">
+          <div key={`${line.card_id}-${line.mainboard}`} className="min-w-0 overflow-visible">
             <DeckViewerCard
               card={line.card}
               count={line.count}
@@ -114,7 +116,7 @@ export function DeckDetailPage({ isLight, deckId, active, onBack, onOpenCard }) 
   const { user } = useAuth();
   const [cardLines, setCardLines] = useState(/** @type {import("../utils/deckSections").DeckCardLine[] | null} */ (null));
   const [meta, setMeta] = useState(
-    /** @type {{ id: number, name: string, format: number, hero: number, set_id?: number | null, fabrary_format?: string | null, fabrary_link?: string | null } | null} */ (null),
+    /** @type {{ id: number, name: string, format: number, hero_id: number, hero_name?: string | null, set_id?: number | null, fabrary_format?: string | null, fabrary_link?: string | null } | null} */ (null),
   );
   const [sets, setSets] = useState(/** @type {{ id: number, name: string }[]} */ ([]));
   const [loading, setLoading] = useState(false);
@@ -157,7 +159,9 @@ export function DeckDetailPage({ isLight, deckId, active, onBack, onOpenCard }) 
         id: d.id,
         name: String(d.name).trim() || `Deck #${d.id}`,
         format: typeof d.format === "number" ? d.format : 0,
-        hero: typeof d.hero === "number" ? d.hero : 0,
+        hero_id: typeof d.hero_id === "number" ? d.hero_id : 0,
+        hero_name:
+          d.hero_name != null && String(d.hero_name).trim() !== "" ? String(d.hero_name).trim() : null,
         set_id: typeof d.set_id === "number" ? d.set_id : null,
         fabrary_format:
           d.fabrary_format != null && String(d.fabrary_format).trim() !== ""
