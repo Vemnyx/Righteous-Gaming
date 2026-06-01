@@ -57,7 +57,12 @@ export function cardNameMatchesSearch(name, query) {
   if (!rawName) return false;
 
   if (rawQuery.length <= CARD_NAME_FUZZY_PREFIX_LEN) {
-    return fuzzyMatch(rawName, rawQuery);
+    // Short queries must be a real contiguous substring (normalized).
+    // Using subsequence matching here is far too permissive (e.g. "fate" matches "Deflate").
+    const qNorm = normalizeForSearch(rawQuery);
+    if (!qNorm) return true;
+    const hNorm = normalizeForSearch(rawName);
+    return Boolean(hNorm) && hNorm.includes(qNorm);
   }
 
   const queryLower = rawQuery.toLowerCase();

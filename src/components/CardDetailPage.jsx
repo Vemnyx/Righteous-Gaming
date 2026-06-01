@@ -10,7 +10,6 @@ import {
   cardPrintings,
   formatCollectorCode,
   printingImageUrl,
-  printingSetLabel,
   selectedPrinting,
 } from "../utils/cardPrintings";
 import { FunctionalText } from "../utils/functionalText";
@@ -63,6 +62,7 @@ export function CardDetailPage({ isLight, identifier, active }) {
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [notFound, setNotFound] = useState(false);
   const [selectedPrintingId, setSelectedPrintingId] = useState(/** @type {number | null} */ (null));
+  const [setNameByCode, setSetNameByCode] = useState(() => ({}));
 
   const load = useCallback(async () => {
     if (!active || !identifier.trim()) return;
@@ -75,19 +75,38 @@ export function CardDetailPage({ isLight, identifier, active }) {
         const token = await user.getIdToken();
         headers.Authorization = `Bearer ${token}`;
       }
-      const path = `/api/cards/${encodeURIComponent(identifier.trim())}`;
-      const res = await fetch(path, { headers });
-      if (res.status === 404) {
+
+      const cardPath = `/api/cards/${encodeURIComponent(identifier.trim())}`;
+      const [cardRes, setsRes] = await Promise.all([
+        fetch(cardPath, { headers }),
+        fetch("/api/sets", { headers }).catch(() => null),
+      ]);
+
+      if (cardRes.status === 404) {
         setCard(null);
         setNotFound(true);
         return;
       }
-      if (!res.ok) {
-        const t = await res.text();
-        throw new Error(t?.trim() || res.statusText || `HTTP ${res.status}`);
+      if (!cardRes.ok) {
+        const t = await cardRes.text();
+        throw new Error(t?.trim() || cardRes.statusText || `HTTP ${cardRes.status}`);
       }
-      const data = await res.json();
+      const data = await cardRes.json();
       setCard(data);
+
+      if (setsRes && setsRes.ok) {
+        const setsData = await setsRes.json();
+        const list = Array.isArray(setsData) ? setsData : [];
+        /** @type {Record<string, string>} */
+        const next = {};
+        for (const s of list) {
+          if (!s || typeof s !== "object") continue;
+          const code = String(s.code ?? "").trim();
+          const name = String(s.name ?? "").trim();
+          if (code && name) next[code] = name;
+        }
+        setSetNameByCode(next);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load card");
       setCard(null);
@@ -113,6 +132,17 @@ export function CardDetailPage({ isLight, identifier, active }) {
   );
   const activeImgUrl = useMemo(() => printingImageUrl(activePrinting), [activePrinting]);
   const activeRarity = activePrinting?.rarity ?? card?.rarity ?? null;
+  const printingSetName = useCallback(
+    (printing) => {
+      const direct = typeof printing?.set_name === "string" ? printing.set_name.trim() : "";
+      if (direct) return direct;
+      const code = typeof printing?.set_code === "string" ? printing.set_code.trim() : "";
+      const fromMap = code ? String(setNameByCode?.[code] ?? "").trim() : "";
+      if (fromMap) return fromMap;
+      return code || "Unknown set";
+    },
+    [setNameByCode],
+  );
 
   const panelBorder = isLight
     ? "border-white/[0.12]"
@@ -175,7 +205,7 @@ export function CardDetailPage({ isLight, identifier, active }) {
               <p className={`m-0 text-[0.9rem] leading-snug ${muted}`}>
                 {activePrinting ? (
                   <>
-                    {printingSetLabel(activePrinting)}
+                    {printingSetName(activePrinting)}
                     {" · "}
                     <span className="font-mono text-[0.8125rem]">
                       {formatCollectorCode(activePrinting.set_code, activePrinting.set_num)}
@@ -213,7 +243,7 @@ export function CardDetailPage({ isLight, identifier, active }) {
                               onClick={() => setSelectedPrintingId(printing.id)}
                             >
                               <span className={isActive ? "font-medium" : undefined}>
-                                {printingSetLabel(printing)}
+                                {printingSetName(printing)}
                               </span>
                               <span className="font-mono text-[0.8125rem] text-[#f4f0fa]/70">
                                 {formatCollectorCode(printing.set_code, printing.set_num)}

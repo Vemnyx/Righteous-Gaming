@@ -1,7 +1,7 @@
 import { cardClassName } from "../constants/cardClass";
 import { cardRarityName } from "../constants/cardRarity";
 import { cardTypeName } from "../constants/cardType";
-import { cardNameMatchesSearch, fuzzyMatch } from "./fuzzyMatch";
+import { cardNameMatchesSearch, fuzzyMatch, normalizeForSearch } from "./fuzzyMatch";
 import { formatCollectorCode } from "./cardPrintings";
 
 /**
@@ -120,7 +120,13 @@ export function cardMatchesSearch(card, query) {
   }
 
   const haystack = cardSearchHaystack(card);
-  return tokens.every((token) => fuzzyMatch(haystack, token));
+  return tokens.every((token) => {
+    const n = normalizeForSearch(token);
+    if (!n) return true;
+    // Short tokens should not use subsequence matching; require a contiguous substring.
+    if (n.length <= 4) return normalizeForSearch(haystack).includes(n);
+    return fuzzyMatch(haystack, token);
+  });
 }
 
 /**

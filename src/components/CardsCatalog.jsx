@@ -237,7 +237,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
   const [advancedFilters, setAdvancedFilters] = useState(EMPTY_CATALOG_ADVANCED_FILTERS);
   const [draftAdvancedFilters, setDraftAdvancedFilters] = useState(EMPTY_CATALOG_ADVANCED_FILTERS);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
-  const [keywordFilterQuery, setKeywordFilterQuery] = useState("");
+  const [keywordToAdd, setKeywordToAdd] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
   /** @type {[{ url: string, x: number, y: number } | null, (v: { url: string, x: number, y: number } | null) => void]} */
@@ -290,13 +290,6 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
     }
     return [...values].sort((a, b) => a - b);
   }, [cards]);
-
-  const filteredKeywordOptions = useMemo(() => {
-    const q = keywordFilterQuery.trim().toLowerCase();
-    return CARD_KEYWORD_NAMES.map((name, id) => ({ id, name })).filter(({ name }) =>
-      q === "" ? true : name.toLowerCase().includes(q),
-    );
-  }, [keywordFilterQuery]);
 
   const totalGridPages = useMemo(() => {
     if (view === "table" || gridPageSizeVal <= 0 || !Number.isFinite(gridPageSizeVal)) return 1;
@@ -462,7 +455,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
 
   const openFilterModal = () => {
     setDraftAdvancedFilters(advancedFilters);
-    setKeywordFilterQuery("");
+    setKeywordToAdd("");
     setFilterModalOpen(true);
   };
 
@@ -473,17 +466,24 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
 
   const clearAdvancedDraft = () => {
     setDraftAdvancedFilters(EMPTY_CATALOG_ADVANCED_FILTERS);
-    setKeywordFilterQuery("");
+    setKeywordToAdd("");
   };
 
-  const toggleDraftKeyword = (id) => {
+  const addDraftKeyword = (id) => {
     const idStr = String(id);
     setDraftAdvancedFilters((filters) => {
       const selected = Array.isArray(filters.keywords) ? filters.keywords : [];
-      const next = selected.includes(idStr)
-        ? selected.filter((k) => k !== idStr)
-        : [...selected, idStr];
-      return { ...filters, keywords: next };
+      if (selected.includes(idStr)) return filters;
+      return { ...filters, keywords: [...selected, idStr] };
+    });
+  };
+
+  const removeDraftKeyword = (id) => {
+    const idStr = String(id);
+    setDraftAdvancedFilters((filters) => {
+      const selected = Array.isArray(filters.keywords) ? filters.keywords : [];
+      if (!selected.includes(idStr)) return filters;
+      return { ...filters, keywords: selected.filter((k) => k !== idStr) };
     });
   };
 
@@ -903,25 +903,89 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                     </select>
                   </label>
 
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
-                      Rarity
-                    </span>
-                    <select
-                      className={fieldCls}
-                      value={draftAdvancedFilters.rarity}
-                      onChange={(e) =>
-                        setDraftAdvancedFilters((f) => ({ ...f, rarity: e.target.value }))
-                      }
-                    >
-                      <option value="">Any rarity</option>
-                      {CARD_RARITY_NAMES.map((name, id) => (
-                        <option key={id} value={String(id)}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
+                        Format
+                      </span>
+                      <select
+                        className={fieldCls}
+                        value={draftAdvancedFilters.format ?? ""}
+                        onChange={(e) =>
+                          setDraftAdvancedFilters((f) => ({ ...f, format: e.target.value }))
+                        }
+                      >
+                        <option value="">Any format</option>
+                        {CARD_FORMAT_NAMES.map((name, id) => (
+                          <option key={id} value={String(id)}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
+                        Rarity
+                      </span>
+                      <select
+                        className={fieldCls}
+                        value={draftAdvancedFilters.rarity}
+                        onChange={(e) =>
+                          setDraftAdvancedFilters((f) => ({ ...f, rarity: e.target.value }))
+                        }
+                      >
+                        <option value="">Any rarity</option>
+                        {CARD_RARITY_NAMES.map((name, id) => (
+                          <option key={id} value={String(id)}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
+                        Class
+                      </span>
+                      <select
+                        className={fieldCls}
+                        value={draftAdvancedFilters.cardClass}
+                        onChange={(e) =>
+                          setDraftAdvancedFilters((f) => ({ ...f, cardClass: e.target.value }))
+                        }
+                      >
+                        <option value="">Any class</option>
+                        {CARD_CLASS_NAMES.map((name, id) => (
+                          <option key={id} value={String(id)}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
+                        Talent
+                      </span>
+                      <select
+                        className={fieldCls}
+                        value={draftAdvancedFilters.talent ?? ""}
+                        onChange={(e) =>
+                          setDraftAdvancedFilters((f) => ({ ...f, talent: e.target.value }))
+                        }
+                      >
+                        <option value="">Any talent</option>
+                        {CARD_TALENT_NAMES.map((name, id) => (
+                          <option key={id} value={String(id)}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
 
                   <label className="flex flex-col gap-1.5">
                     <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
@@ -938,26 +1002,6 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                       <option value="1">Red (1)</option>
                       <option value="2">Yellow (2)</option>
                       <option value="3">Blue (3)</option>
-                    </select>
-                  </label>
-
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
-                      Class
-                    </span>
-                    <select
-                      className={fieldCls}
-                      value={draftAdvancedFilters.cardClass}
-                      onChange={(e) =>
-                        setDraftAdvancedFilters((f) => ({ ...f, cardClass: e.target.value }))
-                      }
-                    >
-                      <option value="">Any class</option>
-                      {CARD_CLASS_NAMES.map((name, id) => (
-                        <option key={id} value={String(id)}>
-                          {name}
-                        </option>
-                      ))}
                     </select>
                   </label>
 
@@ -1003,97 +1047,62 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                     </label>
                   </div>
 
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
-                      Format
-                    </span>
-                    <select
-                      className={fieldCls}
-                      value={draftAdvancedFilters.format ?? ""}
-                      onChange={(e) =>
-                        setDraftAdvancedFilters((f) => ({ ...f, format: e.target.value }))
-                      }
-                    >
-                      <option value="">Any format</option>
-                      {CARD_FORMAT_NAMES.map((name, id) => (
-                        <option key={id} value={String(id)}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
-                      Talent
-                    </span>
-                    <select
-                      className={fieldCls}
-                      value={draftAdvancedFilters.talent ?? ""}
-                      onChange={(e) =>
-                        setDraftAdvancedFilters((f) => ({ ...f, talent: e.target.value }))
-                      }
-                    >
-                      <option value="">Any talent</option>
-                      {CARD_TALENT_NAMES.map((name, id) => (
-                        <option key={id} value={String(id)}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
                   <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
                     <legend className="text-[0.75rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/70">
                       Keywords
                     </legend>
-                    <input
-                      type="search"
+                    <select
                       className={fieldCls}
-                      placeholder="Search keywords…"
-                      value={keywordFilterQuery}
-                      onChange={(e) => setKeywordFilterQuery(e.target.value)}
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                    <div
-                      className={`max-h-44 overflow-y-auto rounded-lg border bg-black/20 p-2 ${
-                        isLight ? "border-white/15" : "border-white/[0.18]"
-                      }`}
+                      value={keywordToAdd}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setKeywordToAdd("");
+                        if (v) addDraftKeyword(v);
+                      }}
                     >
-                      {filteredKeywordOptions.length === 0 ? (
-                        <p className="m-0 px-1 py-2 text-[0.8125rem] text-[#f4f0fa]/55">
-                          No keywords match your search.
-                        </p>
-                      ) : (
-                        <div className="flex flex-col gap-0.5">
-                          {filteredKeywordOptions.map(({ id, name }) => {
-                            const selected = Array.isArray(draftAdvancedFilters.keywords)
-                              ? draftAdvancedFilters.keywords.includes(String(id))
-                              : false;
+                      <option value="">Add a keyword…</option>
+                      {CARD_KEYWORD_NAMES.map((name, id) => {
+                        const selected = Array.isArray(draftAdvancedFilters.keywords)
+                          ? draftAdvancedFilters.keywords.includes(String(id))
+                          : false;
+                        if (selected) return null;
+                        return (
+                          <option key={id} value={String(id)}>
+                            {name}
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    {Array.isArray(draftAdvancedFilters.keywords) &&
+                    draftAdvancedFilters.keywords.length > 0 ? (
+                      <>
+                        <div className="flex flex-wrap gap-2 rounded-lg border border-white/[0.16] bg-black/20 p-2">
+                          {draftAdvancedFilters.keywords.map((raw) => {
+                            const id = Number(raw);
+                            const label = CARD_KEYWORD_NAMES[id] ?? `Keyword ${raw}`;
                             return (
-                              <label
-                                key={id}
-                                className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-[0.8125rem] text-[#f4f0fa]/90 hover:bg-white/[0.06]"
+                              <span
+                                key={raw}
+                                className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.18] bg-white/[0.06] px-2 py-1 text-[0.8125rem] text-[#f4f0fa]/90"
                               >
-                                <input
-                                  type="checkbox"
-                                  className="size-3.5 shrink-0 accent-violet-500"
-                                  checked={selected}
-                                  onChange={() => toggleDraftKeyword(id)}
-                                />
-                                <span>{name}</span>
-                              </label>
+                                <span className="truncate">{label}</span>
+                                <button
+                                  type="button"
+                                  className="ml-0.5 inline-flex size-5 items-center justify-center rounded-full text-[#f4f0fa]/70 hover:bg-white/[0.10] hover:text-[#f4f0fa]"
+                                  aria-label={`Remove keyword ${label}`}
+                                  onClick={() => removeDraftKeyword(raw)}
+                                >
+                                  ×
+                                </button>
+                              </span>
                             );
                           })}
                         </div>
-                      )}
-                    </div>
-                    {Array.isArray(draftAdvancedFilters.keywords) &&
-                    draftAdvancedFilters.keywords.length > 0 ? (
-                      <p className="m-0 text-[0.75rem] text-[#f4f0fa]/55">
-                        {draftAdvancedFilters.keywords.length} selected — cards must have all selected keywords.
-                      </p>
+                        <p className="m-0 text-[0.75rem] text-[#f4f0fa]/55">
+                          {draftAdvancedFilters.keywords.length} selected — cards must have all selected keywords.
+                        </p>
+                      </>
                     ) : null}
                   </fieldset>
                   </div>
