@@ -51,6 +51,30 @@ WHERE uid = $1`
 	return &u, nil
 }
 
+// UserByID returns the user with the given primary key, or ErrUserNotFound.
+func (r *Repository) UserByID(ctx context.Context, id int) (*User, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	if id <= 0 {
+		return nil, fmt.Errorf("repository: invalid user id")
+	}
+	const q = `
+SELECT id, email, username, COALESCE(uid, ''), role, created_at
+FROM users
+WHERE id = $1`
+	row := r.pool.QueryRow(ctx, q, id)
+	var u User
+	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("repository: user by id: %w", err)
+	}
+	return &u, nil
+}
+
 // UserByEmail returns the user with the given email, or ErrUserNotFound.
 func (r *Repository) UserByEmail(ctx context.Context, email string) (*User, error) {
 	if r.pool == nil {

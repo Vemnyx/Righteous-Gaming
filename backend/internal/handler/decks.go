@@ -44,9 +44,11 @@ type deckJSON struct {
 	HeroName      string  `json:"hero_name"`
 	SetID         *int    `json:"set_id,omitempty"`
 	FabraryFormat  *string `json:"fabrary_format,omitempty"`
-	DeckSourceID   int     `json:"deck_source_id"`
-	Source         string  `json:"source"`
-	FabraryLink    *string `json:"fabrary_link,omitempty"`
+	DeckSourceID    int     `json:"deck_source_id"`
+	Source          string  `json:"source"`
+	FabraryLink     *string `json:"fabrary_link,omitempty"`
+	OwnerUsername   *string `json:"owner_username,omitempty"`
+	OwnerEmail      string  `json:"owner_email,omitempty"`
 }
 
 type deckCardLineJSON struct {
@@ -317,9 +319,23 @@ func (h *decksHTTP) getMyDeck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeCatalogJSON(w, http.StatusOK, deckDetailJSON{
-		Deck:  deckToJSON(deck),
+		Deck:  h.deckJSONWithOwner(r.Context(), deck),
 		Cards: lines,
 	})
+}
+
+func (h *decksHTTP) deckJSONWithOwner(ctx context.Context, deck *repository.Deck) deckJSON {
+	j := deckToJSON(deck)
+	if deck == nil {
+		return j
+	}
+	owner, err := h.app.Repo.UserByID(ctx, deck.UserID)
+	if err != nil {
+		return j
+	}
+	j.OwnerUsername = owner.Username
+	j.OwnerEmail = owner.Email
+	return j
 }
 
 func (h *decksHTTP) deleteMyDeck(w http.ResponseWriter, r *http.Request) {

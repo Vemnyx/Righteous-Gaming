@@ -149,7 +149,7 @@ func runBackfillPrintings(ctx context.Context, repo *repository.Repository, bloc
 	if err != nil {
 		return nil, err
 	}
-	printingKeys, err := repo.ListPrintingImageKeysByCardID(ctx)
+	printingSetCodes, err := repo.ListPrintingSetCodesByCardID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -180,14 +180,17 @@ func runBackfillPrintings(ctx context.Context, repo *repository.Repository, bloc
 			continue
 		}
 		cardsMatched++
-		keys := printingKeys[cardID]
+		keys := printingSetCodes[cardID]
 		if keys == nil {
 			keys = make(map[string]struct{})
-			printingKeys[cardID] = keys
+			printingSetCodes[cardID] = keys
 		}
 		missing := 0
 		for _, p := range printings {
-			k := imageKey(p.ImageURL)
+			k := printingSetCodeKey(p.SetCode)
+			if k == "" {
+				continue
+			}
 			if _, exists := keys[k]; exists {
 				printingsSkipped++
 				continue
@@ -201,7 +204,10 @@ func runBackfillPrintings(ctx context.Context, repo *repository.Repository, bloc
 			cardsUpdated++
 			printingsAdded += missing
 			for _, p := range printings {
-				k := imageKey(p.ImageURL)
+				k := printingSetCodeKey(p.SetCode)
+				if k == "" {
+					continue
+				}
 				if _, exists := keys[k]; !exists {
 					keys[k] = struct{}{}
 				}
@@ -239,9 +245,6 @@ func printSummary(summary map[string]any) {
 	fmt.Println(string(out))
 }
 
-func imageKey(url *string) string {
-	if url == nil {
-		return ""
-	}
-	return strings.TrimSpace(*url)
+func printingSetCodeKey(setCode string) string {
+	return strings.ToLower(strings.TrimSpace(setCode))
 }

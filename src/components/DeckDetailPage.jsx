@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
-import { cardFormatName } from "../constants/cardFormat";
 import { deckHeroLabel } from "../utils/deckHeroLabel";
 import { deckDisplayName } from "../utils/deckDisplayName";
+import { deckFormatColumnLabel } from "../utils/deckTableFilters";
 import { partitionDeckCards, sectionCardCount } from "../utils/deckSections";
 import { DeckViewerCard } from "./DeckViewerCard";
 
@@ -85,10 +86,13 @@ function DeckViewerSection({ title, icon, lines, isLight, stacked = true, onOpen
         </span>
       </h3>
       <div
-        className={`grid grid-cols-4 items-end gap-x-3 gap-y-5 overflow-visible sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-7 md:gap-x-3.5 md:gap-y-6 ${stacked ? "pt-14" : ""}`}
+        className={`grid grid-cols-4 items-end gap-x-2 gap-y-6 overflow-visible sm:grid-cols-5 sm:gap-y-7 md:grid-cols-6 md:gap-x-2.5 lg:grid-cols-7 ${stacked ? "pt-16" : ""}`}
       >
         {lines.map((line) => (
-          <div key={`${line.card_id}-${line.mainboard}`} className="min-w-0 overflow-visible">
+          <div
+            key={`${line.card_id}-${line.mainboard}`}
+            className={`min-w-0 overflow-visible ${stacked ? "pt-[52px]" : ""}`}
+          >
             <DeckViewerCard
               card={line.card}
               count={line.count}
@@ -108,20 +112,24 @@ function DeckViewerSection({ title, icon, lines, isLight, stacked = true, onOpen
  *   isLight: boolean,
  *   deckId: string,
  *   active: boolean,
- *   onBack?: () => void,
  *   onOpenCard?: (identifier: string) => void,
+ *   onDeckDeleted?: () => void,
  * }} props
  */
-export function DeckDetailPage({ isLight, deckId, active, onBack, onOpenCard }) {
-  const { user } = useAuth();
+export function DeckDetailPage({ isLight, deckId, active, onOpenCard, onDeckDeleted }) {
+  const { user, sessionProfile } = useAuth();
+  const myUserId = typeof sessionProfile?.id === "number" ? sessionProfile.id : null;
   const [cardLines, setCardLines] = useState(/** @type {import("../utils/deckSections").DeckCardLine[] | null} */ (null));
   const [meta, setMeta] = useState(
-    /** @type {{ id: number, name: string, format: number, hero_id: number, hero_name?: string | null, set_id?: number | null, fabrary_format?: string | null, fabrary_link?: string | null } | null} */ (null),
+    /** @type {{ id: number, user_id: number, name: string, format: number, hero_id: number, hero_name?: string | null, set_id?: number | null, fabrary_format?: string | null, fabrary_link?: string | null, source?: string, owner_username?: string | null, owner_email?: string | null } | null} */ (null),
   );
   const [sets, setSets] = useState(/** @type {{ id: number, name: string }[]} */ ([]));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [notFound, setNotFound] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState(/** @type {string | null} */ (null));
 
   const load = useCallback(async () => {
     if (!active || !user) return;
@@ -157,6 +165,7 @@ export function DeckDetailPage({ isLight, deckId, active, onBack, onOpenCard }) 
       }
       setMeta({
         id: d.id,
+        user_id: typeof d.user_id === "number" ? d.user_id : 0,
         name: String(d.name).trim() || `Deck #${d.id}`,
         format: typeof d.format === "number" ? d.format : 0,
         hero_id: typeof d.hero_id === "number" ? d.hero_id : 0,
@@ -169,6 +178,13 @@ export function DeckDetailPage({ isLight, deckId, active, onBack, onOpenCard }) 
             : null,
         fabrary_link:
           d.fabrary_link != null && String(d.fabrary_link).trim() !== "" ? String(d.fabrary_link).trim() : null,
+        source: typeof d.source === "string" ? String(d.source).trim() : "",
+        owner_username:
+          d.owner_username != null && String(d.owner_username).trim() !== ""
+            ? String(d.owner_username).trim()
+            : null,
+        owner_email:
+          d.owner_email != null && String(d.owner_email).trim() !== "" ? String(d.owner_email).trim() : null,
       });
       const list = Array.isArray(data.cards) ? data.cards : [];
       /** @type {import("../utils/deckSections").DeckCardLine[]} */
@@ -228,38 +244,106 @@ export function DeckDetailPage({ isLight, deckId, active, onBack, onOpenCard }) 
     return deckDisplayName(meta, setNameById);
   }, [meta, setNameById]);
 
+  const formatLabel = useMemo(() => {
+    if (!meta) return "";
+    return deckFormatColumnLabel(meta, setNameById);
+  }, [meta, setNameById]);
+
+  const sourceLabel = useMemo(() => {
+    if (!meta) return "";
+    const src = meta.source ?? "";
+    if (src.toLowerCase() === "member") {
+      const who = meta.owner_username ?? meta.owner_email ?? "";
+      return who ? `Member · ${who}` : "Member";
+    }
+    return src || "—";
+  }, [meta]);
+
+  const canDelete = meta != null && myUserId != null && meta.user_id === myUserId;
+
+  const closeDeleteModal = useCallback(() => {
+    setDeleteOpen(false);
+    setDeleteError(null);
+  }, []);
+
+  const confirmDeleteDeck = useCallback(async () => {
+    if (!user || !meta || !canDelete) return;
+    setDeleteSubmitting(true);
+    setDeleteError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/me/decks/${meta.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(parseApiError(await res.text()));
+      closeDeleteModal();
+      if (typeof onDeckDeleted === "function") {
+        onDeckDeleted();
+      }
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  }, [user, meta, canDelete, closeDeleteModal, onDeckDeleted]);
+
+  useEffect(() => {
+    if (!deleteOpen) return undefined;
+    /** @param {KeyboardEvent} e */
+    function onKeyDown(e) {
+      if (e.key === "Escape" && !deleteSubmitting) closeDeleteModal();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [deleteOpen, deleteSubmitting, closeDeleteModal]);
+
   const btnBase =
     "rounded-lg border px-3 py-1.5 text-[0.8125rem] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40";
   const btnTheme = isLight
     ? "border-white/25 bg-black/25 text-[#f4f0fa] hover:border-white/40 hover:bg-black/35"
     : "border-white/[0.28] bg-black/20 text-[#f4f0fa] hover:border-white/40 hover:bg-black/30";
 
+  const btnDanger =
+    "rounded-lg border border-red-400/45 bg-red-950/50 px-3 py-1.5 text-[0.875rem] font-medium text-red-100 transition-colors hover:border-red-300/55 hover:bg-red-900/45 disabled:cursor-not-allowed disabled:opacity-45";
+
+  const modalPanel = isLight
+    ? "border border-white/[0.14] bg-gradient-to-b from-[#434054] to-[#2d2a38] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+    : "border border-white/[0.2] bg-[rgba(12,6,22,0.96)] shadow-[0_24px_80px_rgba(0,0,0,0.5)]";
+
   const muted = "text-[#f4f0fa]/70";
+  const metaLink =
+    "text-purple-300/95 underline decoration-purple-300/45 underline-offset-[3px] hover:text-purple-200";
 
   return (
     <div className="flex w-full flex-1 flex-col gap-5 px-1 py-2 sm:px-2">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          {typeof onBack === "function" ? (
-            <button type="button" className={`mb-3 ${btnBase} ${btnTheme}`} onClick={onBack}>
-              ← Back to decks
-            </button>
-          ) : null}
           {meta ? (
             <>
-              <h2 className="m-0 truncate text-left text-lg font-semibold tracking-tight text-[#f4f0fa]">{title}</h2>
-              <p className={`m-0 mt-1.5 text-[0.85rem] leading-snug ${muted}`}>
-                {cardFormatName(meta.format) ?? `Format ${meta.format}`}
-                {" · "}
-                {deckHeroLabel(meta)}
+              <h2 className="m-0 text-left text-2xl font-semibold tracking-tight text-[#f4f0fa] sm:text-3xl">
+                {title}
+              </h2>
+              <p className="m-0 mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[1rem] leading-relaxed text-[#f4f0fa]/88 sm:text-[1.0625rem]">
+                <span>{formatLabel}</span>
+                <span className="text-[#f4f0fa]/40" aria-hidden>
+                  ·
+                </span>
+                <span>{deckHeroLabel(meta)}</span>
+                <span className="text-[#f4f0fa]/40" aria-hidden>
+                  ·
+                </span>
+                <span>{sourceLabel}</span>
                 {meta.fabrary_link ? (
                   <>
-                    {" · "}
+                    <span className="text-[#f4f0fa]/40" aria-hidden>
+                      ·
+                    </span>
                     <a
                       href={meta.fabrary_link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-purple-300/90 underline decoration-purple-300/40 underline-offset-2 hover:text-purple-200"
+                      className={metaLink}
                     >
                       Fabrary
                     </a>
@@ -268,10 +352,23 @@ export function DeckDetailPage({ isLight, deckId, active, onBack, onOpenCard }) 
               </p>
             </>
           ) : (
-            <h2 className="m-0 text-left text-lg font-semibold tracking-tight text-[#f4f0fa]">Deck</h2>
+            <h2 className="m-0 text-left text-2xl font-semibold tracking-tight text-[#f4f0fa] sm:text-3xl">Deck</h2>
           )}
         </div>
-      </div>
+        {canDelete ? (
+          <button
+            type="button"
+            className={`shrink-0 self-start ${btnDanger}`}
+            disabled={!user || loading || deleteSubmitting}
+            onClick={() => {
+              setDeleteError(null);
+              setDeleteOpen(true);
+            }}
+          >
+            Delete deck
+          </button>
+        ) : null}
+      </header>
 
       {loading ? <p className={`m-0 text-[0.875rem] ${muted}`}>Loading deck…</p> : null}
 
@@ -334,6 +431,57 @@ export function DeckDetailPage({ isLight, deckId, active, onBack, onOpenCard }) 
           ) : null}
         </div>
       ) : null}
+
+      {deleteOpen && meta && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[210] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
+              role="presentation"
+              onClick={(e) => {
+                if (e.target === e.currentTarget && !deleteSubmitting) closeDeleteModal();
+              }}
+            >
+              <div
+                className={`relative w-full max-w-md rounded-xl p-5 sm:p-6 ${modalPanel}`}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="deck-delete-title"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 id="deck-delete-title" className="m-0 text-lg font-semibold text-[#f4f0fa]">
+                  Delete “{title}”?
+                </h3>
+                <p className="mt-2 text-[0.85rem] leading-snug text-[#f4f0fa]/75">
+                  This will permanently remove the deck and all of its cards from your library.
+                </p>
+                {deleteError ? (
+                  <p className="mt-3 text-[0.85rem] text-red-200/95" role="alert">
+                    {deleteError}
+                  </p>
+                ) : null}
+                <div className="mt-5 flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    className={`${btnBase} ${btnTheme}`}
+                    disabled={deleteSubmitting}
+                    onClick={closeDeleteModal}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className={btnDanger}
+                    disabled={deleteSubmitting || !user}
+                    onClick={() => void confirmDeleteDeck()}
+                  >
+                    {deleteSubmitting ? "Deleting…" : "Delete deck"}
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

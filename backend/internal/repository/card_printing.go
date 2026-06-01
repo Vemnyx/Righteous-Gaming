@@ -117,67 +117,70 @@ WHERE card_identifier IS NOT NULL AND trim(card_identifier) <> ''`
 	return out, nil
 }
 
-// ListPrintingImageKeysByCardID returns existing image_url values per card_id (trimmed).
-func (r *Repository) ListPrintingImageKeysByCardID(ctx context.Context) (map[int]map[string]struct{}, error) {
+// ListPrintingSetCodesByCardID returns existing set_code values per card_id (lowercase trim).
+func (r *Repository) ListPrintingSetCodesByCardID(ctx context.Context) (map[int]map[string]struct{}, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
-	const q = `SELECT card_id, image_url FROM card_printings`
+	const q = `SELECT card_id, set_code FROM card_printings`
 	rows, err := r.pool.Query(ctx, q)
 	if err != nil {
-		return nil, fmt.Errorf("repository: list printing image keys: %w", err)
+		return nil, fmt.Errorf("repository: list printing set codes: %w", err)
 	}
 	defer rows.Close()
 	out := make(map[int]map[string]struct{})
 	for rows.Next() {
 		var cardID int
-		var imageURL *string
-		if err := rows.Scan(&cardID, &imageURL); err != nil {
-			return nil, fmt.Errorf("repository: list printing image keys scan: %w", err)
+		var setCode string
+		if err := rows.Scan(&cardID, &setCode); err != nil {
+			return nil, fmt.Errorf("repository: list printing set codes scan: %w", err)
 		}
-		key := printingImageKey(imageURL)
+		key := printingSetCodeKey(setCode)
+		if key == "" {
+			continue
+		}
 		if out[cardID] == nil {
 			out[cardID] = make(map[string]struct{})
 		}
 		out[cardID][key] = struct{}{}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("repository: list printing image keys rows: %w", err)
+		return nil, fmt.Errorf("repository: list printing set codes rows: %w", err)
 	}
 	return out, nil
 }
 
-func printingImageKey(imageURL *string) string {
-	if imageURL == nil {
-		return ""
-	}
-	return strings.TrimSpace(*imageURL)
+func printingSetCodeKey(setCode string) string {
+	return strings.ToLower(strings.TrimSpace(setCode))
 }
 
-// InsertCardPrintings inserts printings for an existing card. Skips duplicates by image_url.
-func (r *Repository) InsertCardPrintings(ctx context.Context, cardID int, printings []CreateCardPrintingInput, existingKeys map[string]struct{}) (int, error) {
+// InsertCardPrintings inserts printings for an existing card. Skips when set_code already exists for the card.
+func (r *Repository) InsertCardPrintings(ctx context.Context, cardID int, printings []CreateCardPrintingInput, existingSetCodes map[string]struct{}) (int, error) {
 	if r.pool == nil {
 		return 0, fmt.Errorf("repository: pool is closed")
 	}
 	if len(printings) == 0 {
 		return 0, nil
 	}
-	if existingKeys == nil {
-		existingKeys = make(map[string]struct{})
+	if existingSetCodes == nil {
+		existingSetCodes = make(map[string]struct{})
 	}
 	const q = `
 INSERT INTO card_printings (card_id, set_code, set_num, rarity, image_url)
 VALUES ($1, $2, $3, $4, $5)`
 	inserted := 0
 	for _, p := range printings {
-		key := printingImageKey(p.ImageURL)
-		if _, ok := existingKeys[key]; ok {
+		key := printingSetCodeKey(p.SetCode)
+		if key == "" {
+			continue
+		}
+		if _, ok := existingSetCodes[key]; ok {
 			continue
 		}
 		if _, err := r.pool.Exec(ctx, q, cardID, p.SetCode, p.SetNum, p.Rarity, p.ImageURL); err != nil {
 			return inserted, fmt.Errorf("repository: insert card printing: %w", err)
 		}
-		existingKeys[key] = struct{}{}
+		existingSetCodes[key] = struct{}{}
 		inserted++
 	}
 	return inserted, nil

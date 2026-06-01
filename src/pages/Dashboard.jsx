@@ -1595,8 +1595,8 @@ export default function Dashboard({ onNavigate }) {
                     resourcesChild === "decks" &&
                     Boolean(resourcesDeckId)
                   }
-                  onBack={closeDeckDetail}
                   onOpenCard={openCardDetail}
+                  onDeckDeleted={closeDeckDetail}
                 />
               ) : resourcesChild === "decks" ? (
                 <DecksList

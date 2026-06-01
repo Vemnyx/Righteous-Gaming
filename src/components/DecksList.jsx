@@ -48,8 +48,7 @@ function parseApiError(errText) {
  * @param {{ isLight: boolean, active: boolean, onOpenDeck?: (deckId: number) => void }} props
  */
 export function DecksList({ isLight, active, onOpenDeck }) {
-  const { user, sessionProfile } = useAuth();
-  const myUserId = typeof sessionProfile?.id === "number" ? sessionProfile.id : null;
+  const { user } = useAuth();
   const isAdmin = sessionProfile?.role === 0;
   const [rows, setRows] = useState(/** @type {DeckRow[]} */ ([]));
   const [sets, setSets] = useState(/** @type {{ id: number, name: string }[]} */ ([]));
@@ -69,10 +68,6 @@ export function DecksList({ isLight, active, onOpenDeck }) {
   const [newSourceName, setNewSourceName] = useState("");
   const [createSourceSubmitting, setCreateSourceSubmitting] = useState(false);
   const [createSourceError, setCreateSourceError] = useState(/** @type {string | null} */ (null));
-
-  const [deleteTarget, setDeleteTarget] = useState(/** @type {DeckRow | null} */ (null));
-  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
-  const [deleteError, setDeleteError] = useState(/** @type {string | null} */ (null));
 
   const [filterFormat, setFilterFormat] = useState(DECK_FILTER_ALL);
   const [filterHero, setFilterHero] = useState(DECK_FILTER_ALL);
@@ -319,22 +314,13 @@ export function DecksList({ isLight, active, onOpenDeck }) {
     setCreateSourceError(null);
   }, []);
 
-  const closeDeleteModal = useCallback(() => {
-    setDeleteTarget(null);
-    setDeleteError(null);
-  }, []);
-
   useEffect(() => {
-    if (!importModalOpen && !deleteTarget && !createSourceOpen) return undefined;
+    if (!importModalOpen && !createSourceOpen) return undefined;
     /** @param {KeyboardEvent} e */
     function onKeyDown(e) {
       if (e.key !== "Escape") return;
       if (createSourceOpen && !createSourceSubmitting) {
         closeCreateSourceModal();
-        return;
-      }
-      if (deleteTarget && !deleteSubmitting) {
-        closeDeleteModal();
         return;
       }
       if (importModalOpen && !importSubmitting) closeImportModal();
@@ -343,13 +329,10 @@ export function DecksList({ isLight, active, onOpenDeck }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
     importModalOpen,
-    deleteTarget,
     createSourceOpen,
     importSubmitting,
-    deleteSubmitting,
     createSourceSubmitting,
     closeImportModal,
-    closeDeleteModal,
     closeCreateSourceModal,
   ]);
 
@@ -427,26 +410,6 @@ export function DecksList({ isLight, active, onOpenDeck }) {
     }
   }, [user, importUrl, importSourceId, closeImportModal]);
 
-  const confirmDeleteDeck = useCallback(async () => {
-    if (!user || !deleteTarget) return;
-    setDeleteSubmitting(true);
-    setDeleteError(null);
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch(`/api/me/decks/${deleteTarget.id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(parseApiError(await res.text()));
-      closeDeleteModal();
-      setReloadSeq((n) => n + 1);
-    } catch (e) {
-      setDeleteError(e instanceof Error ? e.message : "Delete failed");
-    } finally {
-      setDeleteSubmitting(false);
-    }
-  }, [user, deleteTarget, closeDeleteModal]);
-
   const btnBase =
     "rounded-lg border px-3 py-1.5 text-[0.8125rem] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40";
   const btnTheme = isLight
@@ -455,9 +418,6 @@ export function DecksList({ isLight, active, onOpenDeck }) {
 
   const btnPrimary =
     "rounded-lg border border-white/[0.22] bg-gradient-to-br from-[#7b4cb8] to-[#5a2f8f] px-4 py-2 text-[0.8125rem] font-semibold text-white shadow-[0_3px_14px_rgba(90,47,143,0.38)] hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-45";
-
-  const btnDanger =
-    "rounded-lg border border-red-400/45 bg-red-950/50 px-3 py-1.5 text-[0.8125rem] font-medium text-red-100 transition-colors hover:border-red-300/55 hover:bg-red-900/45 disabled:cursor-not-allowed disabled:opacity-45";
 
   const tableChromeBorder = isLight
     ? "border-white/[0.12]"
@@ -579,33 +539,31 @@ export function DecksList({ isLight, active, onOpenDeck }) {
       </div>
 
       <div className={`overflow-x-auto rounded-xl border bg-black/20 ${tableChromeBorder}`}>
-        <table className="w-full min-w-[52rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
+        <table className="w-full min-w-[36rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
           <thead>
             <tr className={`border-b text-[0.68rem] uppercase tracking-wider text-[#f4f0fa]/55 ${tableHeadBorder}`}>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Name</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Source</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Format</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Hero</th>
-              <th className="px-3 py-2.5 font-semibold sm:px-4">Fabrary</th>
-              <th className="px-3 py-2.5 text-right font-semibold sm:px-4">Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
+                <td colSpan={4} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
+                <td colSpan={4} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
                   No decks yet. Import one from Fabrary to get started.
                 </td>
               </tr>
             ) : filteredRows.length === 0 ? (
               <tr>
-                <td colSpan={6} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
+                <td colSpan={4} className={`px-4 py-8 text-center text-[#f4f0fa]/65 ${tableRowBorder}`}>
                   No decks match the selected filters.
                 </td>
               </tr>
@@ -614,7 +572,6 @@ export function DecksList({ isLight, active, onOpenDeck }) {
                 const fmtLabel = deckFormatColumnLabel(row, setNameById);
                 const heroLabel = deckHeroLabel(row);
                 const displayName = deckDisplayName(row, setNameById);
-                const canDelete = myUserId != null && row.user_id === myUserId;
                 return (
                   <tr key={row.id} className={`border-b ${tableRowBorder} last:border-b-0`}>
                     <td className="max-w-[18rem] truncate px-3 py-2.5 text-[#f4f0fa]/85 sm:px-4" title={displayName}>
@@ -633,37 +590,6 @@ export function DecksList({ isLight, active, onOpenDeck }) {
                     <td className="px-3 py-2.5 sm:px-4">{row.source || "—"}</td>
                     <td className="px-3 py-2.5 sm:px-4">{fmtLabel}</td>
                     <td className="px-3 py-2.5 sm:px-4">{heroLabel}</td>
-                    <td className="px-3 py-2.5 sm:px-4">
-                      {row.fabrary_link ? (
-                        <a
-                          href={row.fabrary_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-purple-300/90 underline decoration-purple-300/40 underline-offset-2 hover:text-purple-200"
-                        >
-                          View
-                        </a>
-                      ) : (
-                        <span className="text-[#f4f0fa]/40">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 text-right sm:px-4">
-                      {canDelete ? (
-                        <button
-                          type="button"
-                          className={btnDanger}
-                          disabled={!user || deleteSubmitting}
-                          onClick={() => {
-                            setDeleteError(null);
-                            setDeleteTarget(row);
-                          }}
-                        >
-                          Delete
-                        </button>
-                      ) : (
-                        <span className="text-[#f4f0fa]/40">—</span>
-                      )}
-                    </td>
                   </tr>
                 );
               })
@@ -825,57 +751,6 @@ export function DecksList({ isLight, active, onOpenDeck }) {
                     onClick={() => void submitCreateSource()}
                   >
                     {createSourceSubmitting ? "Creating…" : "Create"}
-                  </button>
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
-
-      {deleteTarget && typeof document !== "undefined"
-        ? createPortal(
-            <div
-              className="fixed inset-0 z-[210] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
-              role="presentation"
-              onClick={(e) => {
-                if (e.target === e.currentTarget && !deleteSubmitting) closeDeleteModal();
-              }}
-            >
-              <div
-                className={`relative w-full max-w-md rounded-xl p-5 sm:p-6 ${modalPanel}`}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="decks-delete-title"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <h3 id="decks-delete-title" className="m-0 text-lg font-semibold text-[#f4f0fa]">
-                  Delete “{deleteTarget.name}”?
-                </h3>
-                <p className="mt-2 text-[0.85rem] leading-snug text-[#f4f0fa]/75">
-                  This will permanently remove the deck and all of its cards from your library.
-                </p>
-                {deleteError ? (
-                  <p className="mt-3 text-[0.85rem] text-red-200/95" role="alert">
-                    {deleteError}
-                  </p>
-                ) : null}
-                <div className="mt-5 flex flex-wrap justify-end gap-2">
-                  <button
-                    type="button"
-                    className={`${btnBase} ${btnTheme}`}
-                    disabled={deleteSubmitting}
-                    onClick={closeDeleteModal}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className={btnDanger}
-                    disabled={deleteSubmitting || !user}
-                    onClick={() => void confirmDeleteDeck()}
-                  >
-                    {deleteSubmitting ? "Deleting…" : "Delete deck"}
                   </button>
                 </div>
               </div>
