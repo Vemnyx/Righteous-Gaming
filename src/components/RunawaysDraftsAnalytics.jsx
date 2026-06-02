@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
-import { cardClassName } from "../constants/cardClass";
-import { cardTalentName } from "../constants/cardTalent";
+import { cardRarityName } from "../constants/cardRarity";
 import { cardTypeName } from "../constants/cardType";
 
 const RUNAWAYS_SOURCE_ID = 3;
+const MAINBOARD_SIZE = 30;
+const PICK_LIMIT = 12;
+const PREVIEW_WIDTH = 320;
+const PREVIEW_GAP_X = 36;
+const PREVIEW_GAP_Y = 10;
+
+/** @typedef {'distribution' | 'top-picks' | 'bottom-picks'} CategoryTab */
 
 /** @param {unknown} v */
 function numOrNull(v) {
@@ -39,6 +46,66 @@ function parseApiError(errText) {
   return raw;
 }
 
+/** @param {Record<string, unknown>} card */
+function cardPickRate(card) {
+  const pick = typeof card.pick_rate === "number" ? card.pick_rate : Number(card.pick_rate);
+  return Number.isFinite(pick) ? pick : 0;
+}
+
+/** @param {Record<string, unknown>} card */
+function cardTotalCopies(card) {
+  return typeof card.total_copies === "number" ? card.total_copies : 0;
+}
+
+/** @param {Record<string, unknown>} card */
+function cardRarityFilterKey(card) {
+  if (card.rarity == null || card.rarity === "") return "none";
+  return String(card.rarity);
+}
+
+/**
+ * @param {unknown[]} cards
+ * @param {boolean} desc
+ */
+function sortCardsByPick(cards, desc) {
+  return [...cards].sort((a, b) => {
+    const ca = /** @type {Record<string, unknown>} */ (a);
+    const cb = /** @type {Record<string, unknown>} */ (b);
+    const pickA = cardPickRate(ca);
+    const pickB = cardPickRate(cb);
+    if (pickA !== pickB) return desc ? pickB - pickA : pickA - pickB;
+    const copiesA = cardTotalCopies(ca);
+    const copiesB = cardTotalCopies(cb);
+    if (copiesA !== copiesB) return desc ? copiesB - copiesA : copiesA - copiesB;
+    return String(ca.name ?? "").localeCompare(String(cb.name ?? ""));
+  });
+}
+
+/**
+ * @param {{ clientX: number, clientY: number }} pos
+ */
+function clampPreviewPosition(pos) {
+  const w = PREVIEW_WIDTH;
+  const maxH = 440;
+  const pad = 8;
+
+  let x = pos.clientX + PREVIEW_GAP_X;
+  if (x + w > window.innerWidth - pad) {
+    x = pos.clientX - w - PREVIEW_GAP_X;
+  }
+  if (x < pad) x = pad;
+
+  let y = pos.clientY + PREVIEW_GAP_Y;
+  if (y + maxH > window.innerHeight - pad) {
+    y = pos.clientY - maxH - PREVIEW_GAP_Y;
+  }
+  if (y < pad) y = pad;
+  if (y + maxH > window.innerHeight - pad) {
+    y = window.innerHeight - maxH - pad;
+  }
+  return { x, y };
+}
+
 /**
  * @param {{ label: string, count: number, total: number, colorClass?: string }} props
  */
@@ -60,6 +127,29 @@ function BreakdownBar({ label, count, total, colorClass = "bg-violet-500/70" }) 
 }
 
 /**
+ * @param {{ label: string, avgCount: number, total: number, colorClass?: string }} props
+ */
+function AvgBreakdownBar({ label, avgCount, total, colorClass = "bg-violet-500/70" }) {
+  const pct = total > 0 ? (avgCount / total) * 100 : 0;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-baseline justify-between gap-2 text-[0.78rem]">
+        <span className="truncate text-[#f4f0fa]/82">{label}</span>
+        <span className="shrink-0 tabular-nums text-[#f4f0fa]/55">
+          {avgCount.toFixed(1)} / {total} ({pct.toFixed(1)}%)
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-black/35">
+        <div
+          className={`h-full rounded-full ${colorClass}`}
+          style={{ width: `${Math.max(pct, avgCount > 0 ? 2 : 0)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
  * @param {{ title: string, value: string, hint?: string }} props
  */
 function StatTile({ title, value, hint }) {
@@ -73,61 +163,154 @@ function StatTile({ title, value, hint }) {
 }
 
 /**
- * @param {{ cards: unknown[], deckCount: number, title: string, isLight: boolean }} props
+ * @param {{
+ *   name: string,
+ *   imageUrl: string,
+ *   onPreview: (preview: { url: string, x: number, y: number } | null) => void,
+ * }} props
  */
-function CardPickList({ cards, deckCount, title, isLight }) {
+function CardNameWithPreview({ name, imageUrl, onPreview }) {
+  const hasImage = imageUrl.trim() !== "";
+
+  return (
+    <span
+      className={`truncate ${hasImage ? "cursor-default underline decoration-dotted decoration-[#f4f0fa]/35 underline-offset-2" : ""}`}
+      onMouseEnter={(e) => {
+        if (!hasImage) return;
+        onPreview({ url: imageUrl, ...clampPreviewPosition(e) });
+      }}
+      onMouseMove={(e) => {
+        if (!hasImage) return;
+        onPreview({ url: imageUrl, ...clampPreviewPosition(e) });
+      }}
+      onMouseLeave={() => onPreview(null)}
+    >
+      {name}
+    </span>
+  );
+}
+
+/**
+ * @param {{
+ *   cards: unknown[],
+ *   deckCount: number,
+ *   title: string,
+ *   isLight: boolean,
+ *   onPreview: (preview: { url: string, x: number, y: number } | null) => void,
+ *   filterRarity: string,
+ *   onFilterRarityChange: (value: string) => void,
+ *   rarityOptions: { value: string, label: string }[],
+ *   selectCls: string,
+ * }} props
+ */
+function CardPickTable({
+  cards,
+  deckCount,
+  title,
+  isLight,
+  onPreview,
+  filterRarity,
+  onFilterRarityChange,
+  rarityOptions,
+  selectCls,
+}) {
+  const tableHeadBorder = isLight ? "border-white/12" : "border-white/[0.20]";
+  const tableRowBorder = isLight ? "border-white/[0.08]" : "border-white/[0.12]";
+
   if (!cards.length) {
     return (
       <section>
-        <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">{title}</h3>
-        <p className="mt-2 text-[0.82rem] text-[#f4f0fa]/55">No data.</p>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">{title}</h3>
+          <label className="flex flex-col gap-1">
+            <span className="text-[0.68rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/50">Rarity</span>
+            <select className={selectCls} value={filterRarity} onChange={(e) => onFilterRarityChange(e.target.value)}>
+              <option value="">All rarities</option>
+              {rarityOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <p className="mt-2 text-[0.82rem] text-[#f4f0fa]/55">No cards match the selected rarity.</p>
       </section>
     );
   }
 
-  const border = isLight ? "border-white/[0.12]" : "border-white/[0.18]";
-
   return (
     <section>
-      <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">{title}</h3>
-      <ul className="mt-2 flex flex-col gap-2">
-        {cards.map((raw) => {
-          const c = /** @type {Record<string, unknown>} */ (raw);
-          const name = String(c.name ?? "Card");
-          const img = c.image_url != null ? String(c.image_url) : "";
-          const pick = typeof c.pick_rate === "number" ? c.pick_rate : Number(c.pick_rate);
-          const decksWith = typeof c.decks_with_card === "number" ? c.decks_with_card : 0;
-          const copies = typeof c.total_copies === "number" ? c.total_copies : 0;
-          const pitch = numOrNull(c.pitch);
-          const cost = numOrNull(c.cost);
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">{title}</h3>
+        <label className="flex flex-col gap-1">
+          <span className="text-[0.68rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/50">Rarity</span>
+          <select className={selectCls} value={filterRarity} onChange={(e) => onFilterRarityChange(e.target.value)}>
+            <option value="">All rarities</option>
+            {rarityOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="mt-2 overflow-x-auto rounded-xl border border-white/[0.12] bg-black/20">
+        <table className="w-full min-w-[28rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
+          <thead>
+            <tr className={`border-b text-[0.68rem] uppercase tracking-wider text-[#f4f0fa]/55 ${tableHeadBorder}`}>
+              <th className="w-8 px-3 py-2.5 font-semibold sm:px-4">#</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Card</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Pick rate</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Decks</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Copies</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cards.map((raw, index) => {
+              const c = /** @type {Record<string, unknown>} */ (raw);
+              const name = String(c.name ?? "Card");
+              const img = c.image_url != null ? String(c.image_url) : "";
+              const pick = typeof c.pick_rate === "number" ? c.pick_rate : Number(c.pick_rate);
+              const decksWith = typeof c.decks_with_card === "number" ? c.decks_with_card : 0;
+              const copies = typeof c.total_copies === "number" ? c.total_copies : 0;
+              const pitch = numOrNull(c.pitch);
+              const cost = numOrNull(c.cost);
+              const rarity = numOrNull(c.rarity);
 
-          return (
-            <li
-              key={String(c.card_id)}
-              className={`flex items-center gap-3 rounded-lg border ${border} bg-black/20 px-2.5 py-2`}
-            >
-              <div className="h-12 w-9 shrink-0 overflow-hidden rounded bg-black/40">
-                {img ? (
-                  <img src={img} alt="" className="h-full w-full object-cover object-top" draggable={false} />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-[0.55rem] text-[#f4f0fa]/35">?</div>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="m-0 truncate text-[0.84rem] font-medium text-[#f4f0fa]">{name}</p>
-                <p className="m-0 text-[0.72rem] text-[#f4f0fa]/55">
-                  {fmtPct(pick)} pick rate · {decksWith}/{deckCount} decks · {copies} copies
-                  {pitch != null ? ` · pitch ${pitch}` : ""}
-                  {cost != null ? ` · cost ${cost}` : ""}
-                </p>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+              return (
+                <tr key={String(c.card_id)} className={`border-b ${tableRowBorder} last:border-b-0`}>
+                  <td className="px-3 py-2 tabular-nums text-[#f4f0fa]/45 sm:px-4">{index + 1}</td>
+                  <td className="max-w-[16rem] px-3 py-2 sm:px-4">
+                    <div className="min-w-0">
+                      <CardNameWithPreview name={name} imageUrl={img} onPreview={onPreview} />
+                      <p className="m-0 mt-0.5 text-[0.72rem] text-[#f4f0fa]/50">
+                        {rarity != null ? (cardRarityName(rarity) ?? `Rarity ${rarity}`) : "Unknown rarity"}
+                        {pitch != null ? ` · Pitch ${pitch}` : ""}
+                        {cost != null ? ` · Cost ${cost}` : ""}
+                      </p>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 tabular-nums sm:px-4">{fmtPct(pick)}</td>
+                  <td className="px-3 py-2 tabular-nums sm:px-4">
+                    {decksWith}/{deckCount}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums sm:px-4">{copies}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
+
+const CATEGORY_TABS = /** @type {{ id: CategoryTab, label: string }[]} */ ([
+  { id: "distribution", label: "Distribution" },
+  { id: "top-picks", label: "Top picks" },
+  { id: "bottom-picks", label: "Bottom picks" },
+]);
 
 /**
  * @param {{ isLight: boolean, active: boolean }} props
@@ -142,10 +325,9 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
   const [loadingMeta, setLoadingMeta] = useState(false);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
-
-  const [filterType, setFilterType] = useState("");
-  const [filterPitch, setFilterPitch] = useState("");
-  const [filterCost, setFilterCost] = useState("");
+  const [categoryTab, setCategoryTab] = useState(/** @type {CategoryTab} */ ("distribution"));
+  const [pickRarityFilter, setPickRarityFilter] = useState("");
+  const [imagePreview, setImagePreview] = useState(/** @type {{ url: string, x: number, y: number } | null} */ (null));
 
   const panelBorder = isLight ? "border-white/[0.14]" : "border-white/[0.2]";
   const selectCls = isLight
@@ -274,57 +456,70 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
   }, [active, user, loadAnalytics]);
 
   useEffect(() => {
-    setFilterType("");
-    setFilterPitch("");
-    setFilterCost("");
+    setImagePreview(null);
+  }, [categoryTab, selectedSetId, selectedHeroId]);
+
+  useEffect(() => {
+    setPickRarityFilter("");
   }, [selectedSetId, selectedHeroId]);
 
   const deckCount = typeof analytics?.deck_count === "number" ? analytics.deck_count : 0;
-  const totalCopies = typeof analytics?.total_copies === "number" ? analytics.total_copies : 0;
-
-  const pitchBreakdown = useMemo(
-    () => (Array.isArray(analytics?.pitch_breakdown) ? analytics.pitch_breakdown : []),
-    [analytics],
-  );
-  const costBreakdown = useMemo(
-    () => (Array.isArray(analytics?.cost_breakdown) ? analytics.cost_breakdown : []),
-    [analytics],
-  );
-  const typeBreakdown = useMemo(
-    () => (Array.isArray(analytics?.type_breakdown) ? analytics.type_breakdown : []),
-    [analytics],
-  );
-  const classBreakdown = useMemo(
-    () => (Array.isArray(analytics?.class_breakdown) ? analytics.class_breakdown : []),
-    [analytics],
-  );
-  const talentBreakdown = useMemo(
-    () => (Array.isArray(analytics?.talent_breakdown) ? analytics.talent_breakdown : []),
-    [analytics],
-  );
 
   const allCards = useMemo(
     () => (Array.isArray(analytics?.cards) ? analytics.cards : []),
     [analytics],
   );
 
-  const filteredCards = useMemo(() => {
+  const pickRarityOptions = useMemo(() => {
+    /** @type {Map<string, string>} */
+    const seen = new Map();
+    for (const raw of allCards) {
+      const c = /** @type {Record<string, unknown>} */ (raw);
+      const key = cardRarityFilterKey(c);
+      if (seen.has(key)) continue;
+      if (key === "none") {
+        seen.set(key, "Unknown rarity");
+      } else {
+        const id = Number(key);
+        seen.set(key, cardRarityName(id) ?? `Rarity ${key}`);
+      }
+    }
+    return [...seen.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [allCards]);
+
+  const cardsForPicks = useMemo(() => {
+    if (pickRarityFilter === "") return allCards;
     return allCards.filter((raw) => {
       const c = /** @type {Record<string, unknown>} */ (raw);
-      if (filterType !== "" && String(c.type) !== filterType) return false;
-      if (filterPitch === "none") {
-        if (c.pitch != null && c.pitch !== "") return false;
-      } else if (filterPitch !== "" && String(c.pitch) !== filterPitch) {
-        return false;
-      }
-      if (filterCost === "none") {
-        if (c.cost != null && c.cost !== "") return false;
-      } else if (filterCost !== "" && String(c.cost) !== filterCost) {
-        return false;
-      }
-      return true;
+      return cardRarityFilterKey(c) === pickRarityFilter;
     });
-  }, [allCards, filterType, filterPitch, filterCost]);
+  }, [allCards, pickRarityFilter]);
+
+  const mostPickedCards = useMemo(
+    () => sortCardsByPick(cardsForPicks, true).slice(0, PICK_LIMIT),
+    [cardsForPicks],
+  );
+
+  const leastPickedCards = useMemo(
+    () => sortCardsByPick(cardsForPicks, false).slice(0, PICK_LIMIT),
+    [cardsForPicks],
+  );
+
+  const avgDeckPitchBreakdown = useMemo(
+    () => (Array.isArray(analytics?.avg_deck_pitch_breakdown) ? analytics.avg_deck_pitch_breakdown : []),
+    [analytics],
+  );
+  const avgDeckCostBreakdown = useMemo(
+    () => (Array.isArray(analytics?.avg_deck_cost_breakdown) ? analytics.avg_deck_cost_breakdown : []),
+    [analytics],
+  );
+  const typeBreakdown = useMemo(
+    () => (Array.isArray(analytics?.type_breakdown) ? analytics.type_breakdown : []),
+    [analytics],
+  );
+  const totalCopies = typeof analytics?.total_copies === "number" ? analytics.total_copies : 0;
 
   const pitchColors = {
     1: "bg-red-500/75",
@@ -405,210 +600,172 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
       ) : null}
 
       {!loadingAnalytics && analytics && deckCount > 0 ? (
-        <div className="flex flex-col gap-5">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-            <StatTile title="Decks" value={String(deckCount)} />
-            <StatTile title="Total copies" value={String(totalCopies)} hint="Mainboard" />
-            <StatTile title="Avg cards / deck" value={fmtNum(analytics.avg_copies_per_deck)} />
-            <StatTile title="Avg cost" value={fmtNum(analytics.avg_cost)} />
-            <StatTile title="Avg pitch" value={fmtNum(analytics.avg_pitch)} hint="Weighted by copies" />
-            <StatTile title="Avg power / def" value={`${fmtNum(analytics.avg_power)} / ${fmtNum(analytics.avg_defense)}`} />
+        <div className="flex flex-col gap-4">
+          <div
+            className="flex flex-wrap gap-1.5 border-b border-white/[0.08] pb-2"
+            role="tablist"
+            aria-label="Analytics category"
+          >
+            {CATEGORY_TABS.map((tab) => {
+              const activeCategory = categoryTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeCategory}
+                  className={`rounded-lg border px-3 py-1.5 text-[0.8125rem] font-semibold transition-colors ${
+                    activeCategory
+                      ? "border-violet-400/55 bg-violet-900/30 text-violet-100"
+                      : "border-white/[0.14] bg-black/20 text-[#f4f0fa]/75 hover:border-white/25 hover:text-[#f4f0fa]"
+                  }`}
+                  onClick={() => setCategoryTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
-              <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Pitch / color</h3>
-              <div className="mt-3 flex flex-col gap-2.5">
-                {pitchBreakdown.map((raw) => {
-                  const b = /** @type {Record<string, unknown>} */ (raw);
-                  const key = String(b.key ?? "");
-                  const label = String(b.label ?? key);
-                  const count = typeof b.count === "number" ? b.count : 0;
-                  const color = /** @type {Record<string, string>} */ (pitchColors)[key] ?? "bg-violet-500/70";
-                  return (
-                    <BreakdownBar key={key} label={label} count={count} total={totalCopies} colorClass={color} />
-                  );
-                })}
+          {categoryTab === "distribution" ? (
+            <div className="flex flex-col gap-5">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                <StatTile title="Decks" value={String(deckCount)} />
+                <StatTile title="Total copies" value={String(totalCopies)} hint="Mainboard" />
+                <StatTile title="Avg cards / deck" value={fmtNum(analytics.avg_copies_per_deck)} hint={`Target ${MAINBOARD_SIZE}`} />
+                <StatTile title="Avg cost" value={fmtNum(analytics.avg_cost)} hint="Weighted by copies" />
+                <StatTile title="Avg pitch" value={fmtNum(analytics.avg_pitch)} hint="Weighted by copies" />
+                <StatTile
+                  title="Avg power / def"
+                  value={`${fmtNum(analytics.avg_power)} / ${fmtNum(analytics.avg_defense)}`}
+                />
               </div>
-            </div>
 
-            <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
-              <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Cost</h3>
-              <div className="mt-3 flex flex-col gap-2.5">
-                {costBreakdown.map((raw) => {
-                  const b = /** @type {Record<string, unknown>} */ (raw);
-                  const key = String(b.key ?? "");
-                  const label = String(b.label ?? key);
-                  const count = typeof b.count === "number" ? b.count : 0;
-                  return <BreakdownBar key={key} label={label} count={count} total={totalCopies} />;
-                })}
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
+                  <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Pitch / color</h3>
+                  <p className="m-0 mt-1 text-[0.78rem] text-[#f4f0fa]/55">
+                    Average mainboard split across {deckCount} deck{deckCount === 1 ? "" : "s"} ({MAINBOARD_SIZE} cards
+                    each).
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2.5">
+                    {avgDeckPitchBreakdown.length === 0 ? (
+                      <p className="m-0 text-[0.82rem] text-[#f4f0fa]/55">No pitch data.</p>
+                    ) : (
+                      avgDeckPitchBreakdown.map((raw) => {
+                        const b = /** @type {Record<string, unknown>} */ (raw);
+                        const key = String(b.key ?? "");
+                        const label = String(b.label ?? key);
+                        const avgCount = numOrNull(b.avg_count) ?? 0;
+                        const color = /** @type {Record<string, string>} */ (pitchColors)[key] ?? "bg-violet-500/70";
+                        return (
+                          <AvgBreakdownBar
+                            key={key}
+                            label={label}
+                            avgCount={avgCount}
+                            total={MAINBOARD_SIZE}
+                            colorClass={color}
+                          />
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+
+                <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
+                  <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Cost</h3>
+                  <p className="m-0 mt-1 text-[0.78rem] text-[#f4f0fa]/55">
+                    Average mainboard cost split across {deckCount} deck{deckCount === 1 ? "" : "s"} ({MAINBOARD_SIZE}{" "}
+                    cards each).
+                  </p>
+                  <div className="mt-3 flex flex-col gap-2.5">
+                    {avgDeckCostBreakdown.length === 0 ? (
+                      <p className="m-0 text-[0.82rem] text-[#f4f0fa]/55">No cost data.</p>
+                    ) : (
+                      avgDeckCostBreakdown.map((raw) => {
+                        const b = /** @type {Record<string, unknown>} */ (raw);
+                        const key = String(b.key ?? "");
+                        const label = String(b.label ?? key);
+                        const avgCount = numOrNull(b.avg_count) ?? 0;
+                        return (
+                          <AvgBreakdownBar key={key} label={label} avgCount={avgCount} total={MAINBOARD_SIZE} />
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
-              <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Card type</h3>
-              <div className="mt-3 flex flex-col gap-2.5">
-                {typeBreakdown.map((raw) => {
-                  const b = /** @type {Record<string, unknown>} */ (raw);
-                  const id = typeof b.id === "number" ? b.id : Number(b.id);
-                  const count = typeof b.count === "number" ? b.count : 0;
-                  return (
-                    <BreakdownBar
-                      key={id}
-                      label={cardTypeName(id) ?? `Type ${id}`}
-                      count={count}
-                      total={totalCopies}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
-              <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Class</h3>
-              <div className="mt-3 flex flex-col gap-2.5">
-                {classBreakdown.length === 0 ? (
-                  <p className="m-0 text-[0.82rem] text-[#f4f0fa]/55">No class tags on cards in pool.</p>
-                ) : (
-                  classBreakdown.map((raw) => {
-                    const b = /** @type {Record<string, unknown>} */ (raw);
-                    const id = typeof b.id === "number" ? b.id : Number(b.id);
-                    const count = typeof b.count === "number" ? b.count : 0;
-                    return (
-                      <BreakdownBar
-                        key={id}
-                        label={cardClassName(id) ?? `Class ${id}`}
-                        count={count}
-                        total={totalCopies}
-                      />
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
-              <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Talent</h3>
-              <div className="mt-3 flex flex-col gap-2.5">
-                {talentBreakdown.length === 0 ? (
-                  <p className="m-0 text-[0.82rem] text-[#f4f0fa]/55">No talent tags on cards in pool.</p>
-                ) : (
-                  talentBreakdown.map((raw) => {
-                    const b = /** @type {Record<string, unknown>} */ (raw);
-                    const id = typeof b.id === "number" ? b.id : Number(b.id);
-                    const count = typeof b.count === "number" ? b.count : 0;
-                    return (
-                      <BreakdownBar
-                        key={id}
-                        label={cardTalentName(id) ?? `Talent ${id}`}
-                        count={count}
-                        total={totalCopies}
-                      />
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            <CardPickList
-              title="Most picked"
-              cards={Array.isArray(analytics.most_picked) ? analytics.most_picked : []}
-              deckCount={deckCount}
-              isLight={isLight}
-            />
-            <CardPickList
-              title="Least picked"
-              cards={Array.isArray(analytics.least_picked) ? analytics.least_picked : []}
-              deckCount={deckCount}
-              isLight={isLight}
-            />
-          </div>
-
-          <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">All cards in pool</h3>
-              <div className="flex flex-wrap gap-2">
-                <select className={selectCls} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-                  <option value="">All types</option>
+              <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4 lg:max-w-xl`}>
+                <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Card type</h3>
+                <p className="m-0 mt-1 text-[0.78rem] text-[#f4f0fa]/55">Total copies across all mainboards.</p>
+                <div className="mt-3 flex flex-col gap-2.5">
                   {typeBreakdown.map((raw) => {
                     const b = /** @type {Record<string, unknown>} */ (raw);
                     const id = typeof b.id === "number" ? b.id : Number(b.id);
+                    const count = typeof b.count === "number" ? b.count : 0;
                     return (
-                      <option key={id} value={String(id)}>
-                        {cardTypeName(id) ?? `Type ${id}`}
-                      </option>
+                      <BreakdownBar
+                        key={id}
+                        label={cardTypeName(id) ?? `Type ${id}`}
+                        count={count}
+                        total={totalCopies}
+                      />
                     );
                   })}
-                </select>
-                <select className={selectCls} value={filterPitch} onChange={(e) => setFilterPitch(e.target.value)}>
-                  <option value="">All pitch</option>
-                  <option value="1">Red (1)</option>
-                  <option value="2">Yellow (2)</option>
-                  <option value="3">Blue (3)</option>
-                  <option value="none">No pitch</option>
-                </select>
-                <select className={selectCls} value={filterCost} onChange={(e) => setFilterCost(e.target.value)}>
-                  <option value="">All cost</option>
-                  {[0, 1, 2, 3, 4, 5].map((n) => (
-                    <option key={n} value={String(n)}>
-                      Cost {n}
-                    </option>
-                  ))}
-                  <option value="none">No cost</option>
-                </select>
+                </div>
               </div>
             </div>
+          ) : null}
 
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[36rem] border-collapse text-left text-[0.78rem]">
-                <thead>
-                  <tr className="border-b border-white/[0.1] text-[#f4f0fa]/55">
-                    <th className="py-2 pr-3 font-semibold">Card</th>
-                    <th className="py-2 pr-3 font-semibold">Type</th>
-                    <th className="py-2 pr-3 font-semibold">Pitch</th>
-                    <th className="py-2 pr-3 font-semibold">Cost</th>
-                    <th className="py-2 pr-3 font-semibold">Pick rate</th>
-                    <th className="py-2 pr-3 font-semibold">Decks</th>
-                    <th className="py-2 font-semibold">Copies</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredCards.map((raw) => {
-                    const c = /** @type {Record<string, unknown>} */ (raw);
-                    const id = String(c.card_id);
-                    const pitch = numOrNull(c.pitch);
-                    const cost = numOrNull(c.cost);
-                    const typeId = typeof c.type === "number" ? c.type : Number(c.type);
-                    const pick = typeof c.pick_rate === "number" ? c.pick_rate : Number(c.pick_rate);
-                    const decksWith = typeof c.decks_with_card === "number" ? c.decks_with_card : 0;
-                    const copies = typeof c.total_copies === "number" ? c.total_copies : 0;
-                    return (
-                      <tr key={id} className="border-b border-white/[0.06] text-[#f4f0fa]/88">
-                        <td className="py-2 pr-3">{String(c.name ?? "—")}</td>
-                        <td className="py-2 pr-3">{cardTypeName(typeId) ?? typeId}</td>
-                        <td className="py-2 pr-3">{pitch ?? "—"}</td>
-                        <td className="py-2 pr-3">{cost ?? "—"}</td>
-                        <td className="py-2 pr-3 tabular-nums">{fmtPct(pick)}</td>
-                        <td className="py-2 pr-3 tabular-nums">
-                          {decksWith}/{deckCount}
-                        </td>
-                        <td className="py-2 tabular-nums">{copies}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {filteredCards.length === 0 ? (
-                <p className="mt-3 text-[0.82rem] text-[#f4f0fa]/55">No cards match the selected filters.</p>
-              ) : null}
-            </div>
-          </div>
+          {categoryTab === "top-picks" ? (
+            <CardPickTable
+              title="Most picked"
+              cards={mostPickedCards}
+              deckCount={deckCount}
+              isLight={isLight}
+              onPreview={setImagePreview}
+              filterRarity={pickRarityFilter}
+              onFilterRarityChange={setPickRarityFilter}
+              rarityOptions={pickRarityOptions}
+              selectCls={selectCls}
+            />
+          ) : null}
+
+          {categoryTab === "bottom-picks" ? (
+            <CardPickTable
+              title="Least picked"
+              cards={leastPickedCards}
+              deckCount={deckCount}
+              isLight={isLight}
+              onPreview={setImagePreview}
+              filterRarity={pickRarityFilter}
+              onFilterRarityChange={setPickRarityFilter}
+              rarityOptions={pickRarityOptions}
+              selectCls={selectCls}
+            />
+          ) : null}
         </div>
       ) : null}
+
+      {imagePreview && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className={`pointer-events-none fixed z-[10000] overflow-hidden rounded-lg border bg-[#1a1524] shadow-2xl ${
+                isLight ? "border-white/25" : "border-white/[0.35]"
+              }`}
+              style={{
+                left: imagePreview.x,
+                top: imagePreview.y,
+                width: PREVIEW_WIDTH,
+                maxWidth: "min(320px, calc(100vw - 16px))",
+              }}
+            >
+              <img src={imagePreview.url} alt="" className="h-auto w-full object-contain" draggable={false} />
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

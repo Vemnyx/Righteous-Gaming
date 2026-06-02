@@ -41,6 +41,12 @@ type runawaysDraftTypeBucketJSON struct {
 	Count int `json:"count"`
 }
 
+type runawaysDraftAvgBucketJSON struct {
+	Label    string  `json:"label"`
+	Key      string  `json:"key"`
+	AvgCount float64 `json:"avg_count"`
+}
+
 type runawaysDraftCardStatJSON struct {
 	CardID               int     `json:"card_id"`
 	Name                 string  `json:"name"`
@@ -51,6 +57,7 @@ type runawaysDraftCardStatJSON struct {
 	Cost                 *int16  `json:"cost,omitempty"`
 	Power                *int16  `json:"power,omitempty"`
 	Block                *int16  `json:"block,omitempty"`
+	Rarity               *int16  `json:"rarity,omitempty"`
 	TotalCopies          int     `json:"total_copies"`
 	DecksWithCard        int     `json:"decks_with_card"`
 	PickRate             float64 `json:"pick_rate"`
@@ -214,31 +221,31 @@ func runawaysDraftAnalyticsToJSON(s *repository.RunawaysDraftAnalytics) map[stri
 	for _, b := range s.TypeBreakdown {
 		types = append(types, runawaysDraftTypeBucketJSON(b))
 	}
-	classes := make([]runawaysDraftTypeBucketJSON, 0, len(s.ClassBreakdown))
-	for _, b := range s.ClassBreakdown {
-		classes = append(classes, runawaysDraftTypeBucketJSON(b))
+	avgPitch := make([]runawaysDraftAvgBucketJSON, 0, len(s.AvgDeckPitchBreakdown))
+	for _, b := range s.AvgDeckPitchBreakdown {
+		avgPitch = append(avgPitch, runawaysDraftAvgBucketJSON(b))
 	}
-	talents := make([]runawaysDraftTypeBucketJSON, 0, len(s.TalentBreakdown))
-	for _, b := range s.TalentBreakdown {
-		talents = append(talents, runawaysDraftTypeBucketJSON(b))
+	avgCost := make([]runawaysDraftAvgBucketJSON, 0, len(s.AvgDeckCostBreakdown))
+	for _, b := range s.AvgDeckCostBreakdown {
+		avgCost = append(avgCost, runawaysDraftAvgBucketJSON(b))
 	}
 
 	return map[string]any{
-		"deck_count":           s.DeckCount,
-		"total_copies":         s.TotalCopies,
-		"avg_copies_per_deck":  s.AvgCopiesPerDeck,
-		"avg_cost":             s.AvgCost,
-		"avg_pitch":            s.AvgPitch,
-		"avg_power":            s.AvgPower,
-		"avg_defense":          s.AvgDefense,
-		"pitch_breakdown":      pitch,
-		"cost_breakdown":       cost,
-		"type_breakdown":       types,
-		"class_breakdown":      classes,
-		"talent_breakdown":     talents,
-		"cards":                runawaysDraftCardsToJSON(s.Cards),
-		"most_picked":          runawaysDraftCardsToJSON(s.MostPicked),
-		"least_picked":         runawaysDraftCardsToJSON(s.LeastPicked),
+		"deck_count":                s.DeckCount,
+		"total_copies":              s.TotalCopies,
+		"avg_copies_per_deck":       s.AvgCopiesPerDeck,
+		"avg_cost":                  s.AvgCost,
+		"avg_pitch":                 s.AvgPitch,
+		"avg_power":                 s.AvgPower,
+		"avg_defense":               s.AvgDefense,
+		"pitch_breakdown":           pitch,
+		"cost_breakdown":            cost,
+		"avg_deck_pitch_breakdown":  avgPitch,
+		"avg_deck_cost_breakdown":   avgCost,
+		"type_breakdown":            types,
+		"cards":                     runawaysDraftCardsToJSON(s.Cards),
+		"most_picked":               runawaysDraftCardsToJSON(s.MostPicked),
+		"least_picked":              runawaysDraftCardsToJSON(s.LeastPicked),
 	}
 }
 
@@ -255,6 +262,7 @@ func runawaysDraftCardsToJSON(rows []repository.RunawaysDraftCardStat) []runaway
 			Cost:                 row.Cost,
 			Power:                row.Power,
 			Block:                row.Block,
+			Rarity:               row.Rarity,
 			TotalCopies:          row.TotalCopies,
 			DecksWithCard:        row.DecksWithCard,
 			PickRate:             row.PickRate,

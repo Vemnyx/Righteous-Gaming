@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"slices"
@@ -232,6 +233,84 @@ func (h *cardRatingsHTTP) listMyRatings(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 	writeCatalogJSON(w, http.StatusOK, map[string]any{"ratings": out})
+}
+
+type ratedSetOptionJSON struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+// GET /api/me/card-ratings/export-sets
+func (h *cardRatingsHTTP) listMyCardRatingsExportSets(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	sets, err := h.app.Repo.ListUserRatedSets(r.Context(), u.ID)
+	if err != nil {
+		log.Error("list user rated sets for export", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	out := make([]ratedSetOptionJSON, 0, len(sets))
+	for i := range sets {
+		out = append(out, ratedSetOptionJSON{ID: sets[i].ID, Name: sets[i].Name})
+	}
+	writeCatalogJSON(w, http.StatusOK, map[string]any{"sets": out})
+}
+
+func parseSetIDQueryOnly(w http.ResponseWriter, r *http.Request) (setID int, ok bool) {
+	setStr := strings.TrimSpace(r.URL.Query().Get("set_id"))
+	if setStr == "" {
+		writeFieldError(w, http.StatusBadRequest, "set_id", "required")
+		return 0, false
+	}
+	sid, err := strconv.Atoi(setStr)
+	if err != nil || sid <= 0 {
+		writeFieldError(w, http.StatusBadRequest, "set_id", "must be a positive integer")
+		return 0, false
+	}
+	return sid, true
+}
+
+// GET /api/me/card-ratings/export?set_id=
+func (h *cardRatingsHTTP) exportMyCardRatings(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	setID, ok := parseSetIDQueryOnly(w, r)
+	if !ok {
+		return
+	}
+	csvBytes, filename, err := h.app.Repo.BuildUserCardRatingsExportCSV(r.Context(), u.ID, setID)
+	if err != nil {
+		if errors.Is(err, repository.ErrSetNotFound) {
+			writeFieldError(w, http.StatusNotFound, "set_id", "set not found")
+			return
+		}
+		if errors.Is(err, repository.ErrUserCardRatingsExportEmpty) {
+			writeMessageError(w, http.StatusNotFound, "no card ratings to export for this set")
+			return
+		}
+		log.Error("export user card ratings csv", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(csvBytes); err != nil {
+		log.Error("export user card ratings write response", "error", err)
+	}
 }
 
 const maxRatingNotesBytes = 2048

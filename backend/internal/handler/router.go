@@ -32,6 +32,8 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("GET /api/me/decks/{id}", dh.getMyDeck)
 	mux.HandleFunc("DELETE /api/me/decks/{id}", dh.deleteMyDeck)
 	mux.HandleFunc("POST /api/me/decks/import-fabrary", dh.importFabraryDeck)
+	mux.HandleFunc("GET /api/me/card-ratings/export-sets", rh.listMyCardRatingsExportSets)
+	mux.HandleFunc("GET /api/me/card-ratings/export", rh.exportMyCardRatings)
 	mux.HandleFunc("GET /api/me/card-ratings", rh.listMyRatings)
 	mux.HandleFunc("POST /api/me/card-ratings", rh.saveMyRating)
 	mux.HandleFunc("GET /api/me/cards-to-rate", rh.listMyCardsToRate)
