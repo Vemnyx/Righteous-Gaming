@@ -87,6 +87,8 @@ func deckToJSON(d *repository.Deck) deckJSON {
 		DeckSourceID:   d.DeckSourceID,
 		Source:         d.DeckSourceName,
 		FabraryLink:    d.FabraryLink,
+		OwnerUsername:  d.OwnerUsername,
+		OwnerEmail:     d.OwnerEmail,
 	}
 }
 

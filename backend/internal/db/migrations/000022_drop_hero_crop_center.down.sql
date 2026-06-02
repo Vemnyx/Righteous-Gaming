@@ -1,0 +1,7 @@
+ALTER TABLE heroes
+    ADD COLUMN crop_center_x double precision,
+    ADD COLUMN crop_center_y double precision;
+
+UPDATE heroes
+SET crop_center_x = 0.50, crop_center_y = 0.44
+WHERE id = 10;

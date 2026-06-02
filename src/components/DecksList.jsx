@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
 import { deckHeroLabel } from "../utils/deckHeroLabel";
 import { deckDisplayName } from "../utils/deckDisplayName";
+import { deckSourceLabel } from "../utils/deckSourceLabel";
 import {
   DECK_FILTER_ALL,
   buildDeckFormatFilterOptions,
@@ -14,7 +15,7 @@ import {
   matchesDeckTableFilters,
 } from "../utils/deckTableFilters";
 
-/** @typedef {{ id: number, user_id: number, name: string, format: number, hero_id: number, hero_name?: string | null, hero_art_image_url?: string | null, set_id?: number | null, fabrary_format?: string | null, deck_source_id: number, source: string, fabrary_link?: string | null }} DeckRow */
+/** @typedef {{ id: number, user_id: number, name: string, format: number, hero_id: number, hero_name?: string | null, hero_art_image_url?: string | null, set_id?: number | null, fabrary_format?: string | null, deck_source_id: number, source: string, owner_username?: string | null, owner_email?: string | null, fabrary_link?: string | null }} DeckRow */
 
 /** @typedef {{ id: number, source: string }} DeckSourceOption */
 
@@ -116,6 +117,11 @@ export function DecksList({ isLight, active, onOpenDeck }) {
               : null,
           deck_source_id: typeof d.deck_source_id === "number" ? d.deck_source_id : 0,
           source: typeof d.source === "string" ? String(d.source).trim() : "",
+          owner_username:
+            d.owner_username != null && String(d.owner_username).trim() !== ""
+              ? String(d.owner_username).trim()
+              : null,
+          owner_email: typeof d.owner_email === "string" ? d.owner_email : "",
           fabrary_link:
             d.fabrary_link != null && String(d.fabrary_link).trim() !== ""
               ? String(d.fabrary_link).trim()
@@ -444,16 +450,10 @@ export function DecksList({ isLight, active, onOpenDeck }) {
 
   return (
     <div className="flex w-full flex-1 flex-col gap-4 px-1 py-2 sm:px-2">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="m-0 text-left text-lg font-semibold tracking-tight text-[#f4f0fa]">Decks</h2>
-          <p className="m-0 mt-2 max-w-2xl text-left text-[0.85rem] leading-snug text-[#f4f0fa]/70">
-            Your saved decks. Import from Fabrary to add a deck to your library.
-          </p>
-        </div>
+      <div className="flex justify-end">
         <button
           type="button"
-          className={`shrink-0 self-start sm:self-auto ${btnPrimary}`}
+          className={`shrink-0 ${btnPrimary}`}
           disabled={!user || loading}
           onClick={openImportModal}
         >
@@ -604,7 +604,7 @@ export function DecksList({ isLight, active, onOpenDeck }) {
                   <p className="m-0 max-w-full truncate text-[0.8125rem] text-[#f4f0fa]/72">{fmtLabel}</p>
                   <p className="m-0 max-w-full truncate text-[0.8125rem] text-[#f4f0fa]/72">{heroLabel || "—"}</p>
                   <p className="m-0 max-w-full truncate text-[0.75rem] text-[#f4f0fa]/55">
-                    {row.source || "—"}
+                    {deckSourceLabel(row)}
                   </p>
                 </div>
               </button>

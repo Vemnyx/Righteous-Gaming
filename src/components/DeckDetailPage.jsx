@@ -78,7 +78,7 @@ function DeckViewerSection({ title, icon, lines, isLight, stacked = true, onOpen
   if (lines.length === 0) return null;
 
   return (
-    <section className="flex flex-col gap-3">
+    <section className={`flex flex-col ${stacked ? "gap-1" : "gap-2"}`}>
       <h3 className="m-0 flex items-center gap-2 text-[0.95rem] font-semibold tracking-tight text-[#f4f0fa]/92">
         <span className="text-[#f4f0fa]/70">{icon}</span>
         <span>
@@ -86,7 +86,7 @@ function DeckViewerSection({ title, icon, lines, isLight, stacked = true, onOpen
         </span>
       </h3>
       <div
-        className={`grid grid-cols-4 items-end gap-x-2 gap-y-6 overflow-visible sm:grid-cols-5 sm:gap-y-7 md:grid-cols-6 md:gap-x-2.5 lg:grid-cols-7 ${stacked ? "pt-16" : ""}`}
+        className={`grid grid-cols-4 items-end gap-x-2 gap-y-6 overflow-visible sm:grid-cols-5 sm:gap-y-7 md:grid-cols-6 md:gap-x-2.5 lg:grid-cols-7 ${stacked ? "pt-3" : ""}`}
       >
         {lines.map((line) => (
           <div
@@ -316,15 +316,15 @@ export function DeckDetailPage({ isLight, deckId, active, onOpenCard, onDeckDele
     "text-purple-300/95 underline decoration-purple-300/45 underline-offset-[3px] hover:text-purple-200";
 
   return (
-    <div className="flex w-full flex-1 flex-col gap-5 px-1 py-2 sm:px-2">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="flex w-full flex-1 flex-col gap-3 px-1 py-2 sm:px-2">
+      <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           {meta ? (
             <>
               <h2 className="m-0 text-left text-2xl font-semibold tracking-tight text-[#f4f0fa] sm:text-3xl">
                 {title}
               </h2>
-              <p className="m-0 mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[1rem] leading-relaxed text-[#f4f0fa]/88 sm:text-[1.0625rem]">
+              <p className="m-0 mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[1rem] leading-relaxed text-[#f4f0fa]/88 sm:text-[1.0625rem]">
                 <span>{formatLabel}</span>
                 <span className="text-[#f4f0fa]/40" aria-hidden>
                   ·
@@ -390,7 +390,7 @@ export function DeckDetailPage({ isLight, deckId, active, onOpenCard, onDeckDele
       ) : null}
 
       {!loading && !error && !notFound && cardLines ? (
-        <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-6">
           <DeckViewerSection
             title="Hero + arena"
             icon={<SectionIconPerson />}
