@@ -11,6 +11,7 @@ import { CardRaterAdmin } from "../components/CardRaterAdmin";
 import { CardRaterRedirect } from "../components/CardRaterRedirect";
 import { CardRaterAnalytics } from "../components/CardRaterAnalytics";
 import { CardRatingsList } from "../components/CardRatingsList";
+import { RunawaysDraftsAnalytics } from "../components/RunawaysDraftsAnalytics";
 import { DecksList } from "../components/DecksList";
 import { DeckDetailPage } from "../components/DeckDetailPage";
 import { SetsAdmin } from "../components/SetsAdmin";
@@ -51,6 +52,7 @@ const RESOURCE_SUB_LINKS = [
 /** @type {ResourceSubLink[]} */
 const DATA_SUB_LINKS = [
   { segment: "card-ratings", label: "Card Ratings", path: "/data/card-ratings" },
+  { segment: "runaways-drafts", label: "Runaways Drafts", path: "/data/runaways-drafts" },
 ];
 
 /** @type {ResourceSubLink[]} */
@@ -85,7 +87,10 @@ function buildDashboardPathname(
 ) {
   if (tabId === SETTINGS_TAB_ID) return "/settings";
   if (tabId === DATA_TAB_ID) {
-    const seg = dataChild === "card-ratings" ? "card-ratings" : DEFAULT_DATA_SEGMENT;
+    const seg =
+      dataChild === "card-ratings" || dataChild === "runaways-drafts"
+        ? dataChild
+        : DEFAULT_DATA_SEGMENT;
     if (seg === "card-ratings") {
       const rawId = dataCardRaterId != null ? String(dataCardRaterId).trim() : "";
       if (rawId !== "") {
@@ -95,6 +100,9 @@ function buildDashboardPathname(
         }
       }
       return "/data/card-ratings";
+    }
+    if (seg === "runaways-drafts") {
+      return "/data/runaways-drafts";
     }
     return `/data/${DEFAULT_DATA_SEGMENT}`;
   }
@@ -490,6 +498,19 @@ function parseDashboardPathname(pathname) {
         adminAnnouncementForm: null,
         dataChild: "card-ratings",
         dataCardRaterId: String(rid),
+      };
+    }
+    if (b === "runaways-drafts" && c === undefined) {
+      return {
+        kind: "ok",
+        tabId: DATA_TAB_ID,
+        resourcesChild: null,
+        resourcesCardIdentifier: null,
+        resourcesCardRaterId: null,
+        adminChild: null,
+        adminAnnouncementForm: null,
+        dataChild: "runaways-drafts",
+        dataCardRaterId: null,
       };
     }
     return { kind: "invalid" };
@@ -1649,6 +1670,11 @@ export default function Dashboard({ onNavigate }) {
                   isLight={isLight}
                   active={activeTab === DATA_TAB_ID && dataChild === "card-ratings"}
                   onViewResults={openDataCardRaterAnalytics}
+                />
+              ) : dataChild === "runaways-drafts" ? (
+                <RunawaysDraftsAnalytics
+                  isLight={isLight}
+                  active={activeTab === DATA_TAB_ID && dataChild === "runaways-drafts"}
                 />
               ) : (
                 <div

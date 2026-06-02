@@ -17,6 +17,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	upload := &uploadHTTP{app: application, svc: userSvc}
 	ah := &announcementHTTP{app: application, svc: userSvc}
 	dh := &decksHTTP{app: application, svc: userSvc}
+	rdh := &runawaysDraftHTTP{app: application, svc: userSvc}
 
 	mux.HandleFunc("POST /api/users", uh.createUser)
 	mux.HandleFunc("POST /api/complete-registration", uh.completeRegistration)
@@ -40,6 +41,8 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("GET /api/card-raters/{id}/cards/{cardId}/session-ratings", rh.getCardRaterCardSessionRatings)
 	mux.HandleFunc("GET /api/card-raters/{id}/cards/{cardId}/rating-notes", rh.getCardRaterCardRatingNotes)
 	mux.HandleFunc("GET /api/card-raters/{id}/analytics", rh.getCardRaterAnalytics)
+	mux.HandleFunc("GET /api/data/runaways-drafts/meta", rdh.getRunawaysDraftMeta)
+	mux.HandleFunc("GET /api/data/runaways-drafts/analytics", rdh.getRunawaysDraftAnalytics)
 	mux.HandleFunc("POST /api/card-raters", rh.createCardRater)
 	mux.HandleFunc("PATCH /api/card-raters/active/complete", rh.completeActiveCardRater)
 	mux.HandleFunc("PATCH /api/card-raters/{id}/reopen", rh.reopenCardRater)
