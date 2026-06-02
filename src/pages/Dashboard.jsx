@@ -14,6 +14,7 @@ import { CardRatingsList } from "../components/CardRatingsList";
 import { DecksList } from "../components/DecksList";
 import { DeckDetailPage } from "../components/DeckDetailPage";
 import { SetsAdmin } from "../components/SetsAdmin";
+import { HeroesAdmin } from "../components/HeroesAdmin";
 import { UserAccountMenu } from "../components/UserAccountMenu";
 import { UserSettings } from "../components/UserSettings";
 import { sessionProfileDisplayName } from "../auth/sessionProfile";
@@ -59,6 +60,7 @@ const ADMIN_SUB_LINKS = [
   { segment: "sets", label: "Sets", path: "/admin/sets" },
   { segment: "announcements", label: "Announcements", path: "/admin/announcements" },
   { segment: "card-rater", label: "Card Rater", path: "/admin/card-rater" },
+  { segment: "hero-images", label: "Hero Images", path: "/admin/hero-images" },
 ];
 
 /**
@@ -103,7 +105,8 @@ function buildDashboardPathname(
       adminChild === "users" ||
       adminChild === "sets" ||
       adminChild === "announcements" ||
-      adminChild === "card-rater"
+      adminChild === "card-rater" ||
+      adminChild === "hero-images"
         ? adminChild
         : DEFAULT_ADMIN_SEGMENT;
     if (seg === "announcements") {
@@ -370,6 +373,18 @@ function parseDashboardPathname(pathname) {
         resourcesCardIdentifier: null,
         resourcesCardRaterId: null,
         adminChild: "card-rater",
+        adminAnnouncementForm: null,
+      };
+    }
+    if (b === "hero-images") {
+      if (c !== undefined || rest.length > 0) return { kind: "invalid" };
+      return {
+        kind: "ok",
+        tabId: ADMIN_TAB_ID,
+        resourcesChild: null,
+        resourcesCardIdentifier: null,
+        resourcesCardRaterId: null,
+        adminChild: "hero-images",
         adminAnnouncementForm: null,
       };
     }
@@ -1557,6 +1572,8 @@ export default function Dashboard({ onNavigate }) {
                   active={activeTab === ADMIN_TAB_ID && adminChild === "card-rater"}
                   onOpenCardRaterAnalytics={openCardRaterAnalytics}
                 />
+              ) : adminChild === "hero-images" ? (
+                <HeroesAdmin isLight={isLight} active={activeTab === ADMIN_TAB_ID && adminChild === "hero-images"} />
               ) : (
                 <div
                   className="flex min-h-[min(40vh,18rem)] flex-1 flex-col items-center justify-center px-4 text-center"

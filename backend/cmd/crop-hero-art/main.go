@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"strings"
 
 	"righteous-gaming/backend/internal/client"
 	"righteous-gaming/backend/internal/db"
@@ -75,7 +74,12 @@ func main() {
 		}
 		processed++
 
-		pngBytes, err := herocrop.CropFromURL(ctx, row.CardImageURL, herocrop.PortraitBanner)
+		var center *herocrop.NormPoint
+		if row.CropCenterX != nil && row.CropCenterY != nil {
+			center = &herocrop.NormPoint{X: *row.CropCenterX, Y: *row.CropCenterY}
+		}
+
+		pngBytes, err := herocrop.CropFromURL(ctx, row.CardImageURL, herocrop.PortraitBanner, center)
 		if err != nil {
 			failed++
 			if len(failSamples) < 5 {
@@ -85,11 +89,11 @@ func main() {
 			continue
 		}
 
-		slug := heroObjectSlug(row)
-		objectPath := path.Join("heroes", "art", fmt.Sprintf("%s-%d.png", slug, row.HeroID))
+		objectPath := herocrop.ObjectPath(row.CardIdentifier, row.HeroID)
 		publicURL := client.AssetsPublicURL(objectPath)
 
 		if *outDir != "" {
+			slug := herocrop.ObjectSlug(row.CardIdentifier, row.HeroID)
 			localPath := path.Join(*outDir, fmt.Sprintf("%s-%d.png", slug, row.HeroID))
 			if err := os.WriteFile(localPath, pngBytes, 0o644); err != nil {
 				log.Error("write local crop", "path", localPath, "error", err)
@@ -112,7 +116,11 @@ func main() {
 		uploaded++
 
 		if !*skipDB {
-			if err := repo.UpdateHeroArtImageURL(ctx, row.HeroID, publicURL); err != nil {
+			cx, cy := 0.5, herocrop.PortraitBanner.FallbackCenterY
+			if center != nil {
+				cx, cy = center.X, center.Y
+			}
+			if err := repo.UpdateHeroArtCrop(ctx, row.HeroID, publicURL, cx, cy); err != nil {
 				failed++
 				log.Error("db update failed", "hero_id", row.HeroID, "error", err)
 				continue
@@ -129,32 +137,4 @@ func main() {
 		"dry_run", *dryRun,
 		"sample_errors", failSamples,
 	)
-}
-
-func heroObjectSlug(row repository.HeroArtCropRow) string {
-	if row.CardIdentifier != nil {
-		if s := slugify(*row.CardIdentifier); s != "" {
-			return s
-		}
-	}
-	return fmt.Sprintf("hero-%d", row.HeroID)
-}
-
-func slugify(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	var b strings.Builder
-	lastDash := false
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
-			b.WriteRune(r)
-			lastDash = false
-		case r == ' ' || r == ',' || r == '.' || r == '/' || r == '\\' || r == '_':
-			if !lastDash && b.Len() > 0 {
-				b.WriteByte('-')
-				lastDash = true
-			}
-		}
-	}
-	return strings.Trim(b.String(), "-")
 }

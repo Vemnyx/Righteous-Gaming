@@ -17,6 +17,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	upload := &uploadHTTP{app: application, svc: userSvc}
 	ah := &announcementHTTP{app: application, svc: userSvc}
 	dh := &decksHTTP{app: application, svc: userSvc}
+	hh := &heroesHTTP{app: application, svc: userSvc}
 
 	mux.HandleFunc("POST /api/users", uh.createUser)
 	mux.HandleFunc("POST /api/complete-registration", uh.completeRegistration)
@@ -47,6 +48,8 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("GET /api/registration", uh.registrationByCode)
 	mux.HandleFunc("POST /api/admin/user/register", uh.adminRegisterUser)
 	mux.HandleFunc("GET /api/admin/users", uh.adminListUsers)
+	mux.HandleFunc("GET /api/admin/heroes", hh.adminListHeroes)
+	mux.HandleFunc("POST /api/admin/heroes/{id}/recrop-art", hh.adminRecropHeroArt)
 	mux.HandleFunc("POST /api/send-email", mh.sendEmail)
 
 	mux.HandleFunc("GET /api/sets", ch.listSets)

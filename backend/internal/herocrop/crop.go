@@ -26,7 +26,7 @@ var faceCascadeData []byte
 
 // PortraitBanner is the default hero portrait strip size on FAB cards (width/height
 // as fractions of the full card). Vertical position is adjusted per card via face
-// detection so the hero's face sits near the vertical center of the crop.
+// detection or an explicit center point.
 var PortraitBanner = BannerSpec{
 	X: 0.13,
 	W: 0.74,
@@ -40,6 +40,11 @@ var PortraitBanner = BannerSpec{
 type BannerSpec struct {
 	X, W, H         float64
 	FallbackCenterY float64
+}
+
+// NormPoint is a normalized center (0–1) within the card image.
+type NormPoint struct {
+	X, Y float64
 }
 
 var (
@@ -89,7 +94,6 @@ func faceCenter(img image.Image) (cx, cy int, ok bool) {
 		return 0, 0, false
 	}
 
-	// Prefer faces in the art band (below title, above rules text).
 	minY := int(float64(rows) * 0.08)
 	maxY := int(float64(rows) * 0.62)
 
@@ -129,8 +133,19 @@ func faceCenter(img image.Image) (cx, cy int, ok bool) {
 	return best.Col, best.Row, true
 }
 
-// BoundsForBanner returns pixel bounds for a face-centered portrait strip.
-func (s BannerSpec) BoundsForBanner(img image.Image) image.Rectangle {
+func clampNorm(v float64) float64 {
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
+}
+
+// Bounds returns pixel bounds for a portrait strip. When center is non-nil its
+// coordinates are normalized fractions of the image size.
+func (s BannerSpec) Bounds(img image.Image, center *NormPoint) image.Rectangle {
 	b := img.Bounds()
 	w := int(float64(b.Dx()) * s.W)
 	h := int(float64(b.Dy()) * s.H)
@@ -141,16 +156,23 @@ func (s BannerSpec) BoundsForBanner(img image.Image) image.Rectangle {
 		h = 1
 	}
 
-	cx, cy, ok := faceCenter(img)
-	if !ok {
-		cx = b.Dx() / 2
-		cy = int(float64(b.Dy()) * s.FallbackCenterY)
+	var cx, cy int
+	switch {
+	case center != nil:
+		cx = int(float64(b.Dx()) * clampNorm(center.X))
+		cy = int(float64(b.Dy()) * clampNorm(center.Y))
+	default:
+		if fx, fy, ok := faceCenter(img); ok {
+			cx, cy = fx, fy
+		} else {
+			cx = b.Dx() / 2
+			cy = int(float64(b.Dy()) * s.FallbackCenterY)
+		}
 	}
 
 	x0 := cx - w/2
 	y0 := cy - h/2
 
-	// Keep horizontal alignment with the card frame when possible.
 	frameX := int(float64(b.Dx()) * s.X)
 	if x0 < frameX {
 		x0 = frameX
@@ -174,9 +196,9 @@ func (s BannerSpec) BoundsForBanner(img image.Image) image.Rectangle {
 	return image.Rect(x0, y0, x0+w, y0+h)
 }
 
-// Crop extracts a face-centered portrait strip from src and encodes PNG bytes.
-func Crop(src image.Image, spec BannerSpec) ([]byte, error) {
-	rect := spec.BoundsForBanner(src)
+// Crop extracts a portrait strip from src and encodes PNG bytes.
+func Crop(src image.Image, spec BannerSpec, center *NormPoint) ([]byte, error) {
+	rect := spec.Bounds(src, center)
 	if rect.Empty() {
 		return nil, fmt.Errorf("herocrop: empty crop bounds")
 	}
@@ -196,8 +218,8 @@ func Crop(src image.Image, spec BannerSpec) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// CropFromURL downloads an image and returns a face-centered portrait crop.
-func CropFromURL(ctx context.Context, rawURL string, spec BannerSpec) ([]byte, error) {
+// CropFromURL downloads an image and returns a portrait crop.
+func CropFromURL(ctx context.Context, rawURL string, spec BannerSpec, center *NormPoint) ([]byte, error) {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
 		return nil, fmt.Errorf("herocrop: empty url")
@@ -226,7 +248,7 @@ func CropFromURL(ctx context.Context, rawURL string, spec BannerSpec) ([]byte, e
 	if err != nil {
 		return nil, fmt.Errorf("herocrop: decode image: %w", err)
 	}
-	return Crop(img, spec)
+	return Crop(img, spec, center)
 }
 
 func decodeImage(data []byte) (image.Image, string, error) {
@@ -234,4 +256,39 @@ func decodeImage(data []byte) (image.Image, string, error) {
 		return img, "webp", nil
 	}
 	return image.Decode(bytes.NewReader(data))
+}
+
+// ObjectSlug builds a GCS object name segment from a card identifier or hero id.
+func ObjectSlug(cardIdentifier *string, heroID int) string {
+	if cardIdentifier != nil {
+		if s := slugify(*cardIdentifier); s != "" {
+			return s
+		}
+	}
+	return fmt.Sprintf("hero-%d", heroID)
+}
+
+// ObjectPath returns the heroes/art object key for a hero portrait PNG.
+func ObjectPath(cardIdentifier *string, heroID int) string {
+	slug := ObjectSlug(cardIdentifier, heroID)
+	return "heroes/art/" + slug + fmt.Sprintf("-%d.png", heroID)
+}
+
+func slugify(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	var b strings.Builder
+	lastDash := false
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastDash = false
+		case r == ' ' || r == ',' || r == '.' || r == '/' || r == '\\' || r == '_':
+			if !lastDash && b.Len() > 0 {
+				b.WriteByte('-')
+				lastDash = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }

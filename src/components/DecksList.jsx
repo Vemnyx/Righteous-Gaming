@@ -427,6 +427,9 @@ export function DecksList({ isLight, active, onOpenDeck }) {
     ? "border-white/[0.12] bg-black/25"
     : "border-white/[0.20] bg-black/20 ring-1 ring-white/[0.05]";
 
+  const heroArtFadeMask =
+    "[mask-image:linear-gradient(to_right,black_0%,black_70%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_70%,transparent_100%)]";
+
   const modalPanel = isLight
     ? "border border-white/[0.14] bg-gradient-to-b from-[#434054] to-[#2d2a38] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
     : "border border-white/[0.2] bg-[rgba(12,6,22,0.96)] shadow-[0_24px_80px_rgba(0,0,0,0.5)]";
@@ -573,31 +576,28 @@ export function DecksList({ isLight, active, onOpenDeck }) {
                 type="button"
                 disabled={!openDeck}
                 onClick={openDeck}
-                className={`group relative flex min-h-[6.25rem] w-full cursor-pointer overflow-hidden rounded-xl border text-right transition-[border-color,box-shadow,filter] hover:border-purple-400/45 hover:shadow-[0_6px_28px_rgba(90,47,143,0.22)] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 disabled:cursor-default ${cardChromeBorder}`}
+                className={`group relative grid min-h-[6.75rem] w-full cursor-pointer grid-cols-1 overflow-hidden rounded-xl border text-right transition-[border-color,box-shadow,filter] hover:border-purple-400/45 hover:shadow-[0_6px_28px_rgba(90,47,143,0.22)] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 disabled:cursor-default ${cardChromeBorder}`}
                 aria-label={displayName ? `Open deck: ${displayName}` : "Open deck"}
               >
                 <div
-                  className="pointer-events-none absolute inset-y-0 left-0 w-[min(62%,13rem)]"
+                  className="pointer-events-none col-start-1 row-start-1 flex min-h-[6.75rem] items-center px-3 py-2.5 pr-[46%] sm:pr-[44%]"
                   aria-hidden
                 >
                   {heroArt ? (
                     <img
                       src={heroArt}
                       alt=""
-                      className="h-full w-full object-cover object-[center_35%] [mask-image:linear-gradient(to_right,black_48%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_48%,transparent_100%)]"
+                      className={`max-h-[5.5rem] w-full max-w-full object-contain object-left ${heroArtFadeMask}`}
                       draggable={false}
                     />
                   ) : (
-                    <div className="h-full w-full bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent" />
+                    <div
+                      className={`h-[5.5rem] w-full max-w-[14rem] bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent ${heroArtFadeMask}`}
+                    />
                   )}
-                  <div
-                    className={`absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-black/35 ${
-                      isLight ? "to-[#2d2a38]/95" : "to-[rgba(12,6,22,0.92)]"
-                    }`}
-                  />
                 </div>
 
-                <div className="relative z-[1] flex min-h-[6.25rem] w-full flex-col items-end justify-center gap-1 px-4 py-3.5 pl-[38%] sm:pl-[42%]">
+                <div className="relative z-[1] col-start-1 row-start-1 flex min-h-[6.75rem] flex-col items-end justify-center gap-1 self-stretch px-4 py-3.5 pl-[50%] sm:pl-[46%]">
                   <p className="m-0 max-w-full truncate text-[0.95rem] font-semibold leading-snug text-[#f4f0fa] group-hover:text-purple-100">
                     {displayName}
                   </p>

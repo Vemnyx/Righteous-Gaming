@@ -19,7 +19,7 @@ func TestFaceCenteredCropNonEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cropped, err := Crop(img, PortraitBanner)
+	cropped, err := Crop(img, PortraitBanner, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
