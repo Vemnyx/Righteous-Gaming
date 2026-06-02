@@ -140,11 +140,13 @@ const runawaysDraftDeckFilter = `
 FROM decks d
 WHERE d.deck_source_id = $1 AND d.set_id = $2 AND d.hero_id = $3`
 
-const runawaysDraftCardFrom = `
+const runawaysDraftCardJoin = `
 FROM deck_cards dc
 INNER JOIN cards c ON c.id = dc.card_id
 ` + cardPrintingLateralJoin + `
-INNER JOIN decks d ON d.id = dc.deck_id
+INNER JOIN decks d ON d.id = dc.deck_id`
+
+const runawaysDraftCardWhere = `
 WHERE d.deck_source_id = $1 AND d.set_id = $2 AND d.hero_id = $3 AND dc.mainboard = true`
 
 // RunawaysDraftAnalytics loads composition stats for decks matching source, set, and hero.
@@ -234,7 +236,7 @@ SELECT
   SUM(c.pitch * dc.count)::float / NULLIF(SUM(CASE WHEN c.pitch IS NOT NULL THEN dc.count ELSE 0 END), 0) AS avg_pitch,
   SUM(c.power * dc.count)::float / NULLIF(SUM(CASE WHEN c.power IS NOT NULL THEN dc.count ELSE 0 END), 0) AS avg_power,
   SUM(c.block * dc.count)::float / NULLIF(SUM(CASE WHEN c.block IS NOT NULL THEN dc.count ELSE 0 END), 0) AS avg_defense
-` + runawaysDraftCardFrom
+` + runawaysDraftCardJoin + runawaysDraftCardWhere
 
 	return r.pool.QueryRow(ctx, q, deckSourceID, setID, heroID, deckCount).Scan(
 		&out.TotalCopies,
@@ -249,7 +251,7 @@ SELECT
 func (r *Repository) scanRunawaysDraftPitchBreakdown(ctx context.Context, deckSourceID, setID, heroID int, out *RunawaysDraftAnalytics) error {
 	const q = `
 SELECT COALESCE(c.pitch::text, 'none') AS pitch_key, SUM(dc.count)::int AS cnt
-` + runawaysDraftCardFrom + `
+` + runawaysDraftCardJoin + runawaysDraftCardWhere + `
 GROUP BY c.pitch
 ORDER BY c.pitch NULLS LAST`
 
@@ -274,7 +276,7 @@ ORDER BY c.pitch NULLS LAST`
 func (r *Repository) scanRunawaysDraftCostBreakdown(ctx context.Context, deckSourceID, setID, heroID int, out *RunawaysDraftAnalytics) error {
 	const q = `
 SELECT COALESCE(c.cost::text, 'none') AS cost_key, SUM(dc.count)::int AS cnt
-` + runawaysDraftCardFrom + `
+` + runawaysDraftCardJoin + runawaysDraftCardWhere + `
 GROUP BY c.cost
 ORDER BY c.cost NULLS LAST`
 
@@ -299,7 +301,7 @@ ORDER BY c.cost NULLS LAST`
 func (r *Repository) scanRunawaysDraftTypeBreakdown(ctx context.Context, deckSourceID, setID, heroID int, out *RunawaysDraftAnalytics) error {
 	const q = `
 SELECT c.type::int, SUM(dc.count)::int AS cnt
-` + runawaysDraftCardFrom + `
+` + runawaysDraftCardJoin + runawaysDraftCardWhere + `
 GROUP BY c.type
 ORDER BY cnt DESC, c.type ASC`
 
@@ -323,8 +325,9 @@ ORDER BY cnt DESC, c.type ASC`
 func (r *Repository) scanRunawaysDraftClassBreakdown(ctx context.Context, deckSourceID, setID, heroID int, out *RunawaysDraftAnalytics) error {
 	const q = `
 SELECT cls::int, SUM(dc.count)::int AS cnt
-` + runawaysDraftCardFrom + `
+` + runawaysDraftCardJoin + `
 CROSS JOIN LATERAL unnest(c.classes) AS cls
+` + runawaysDraftCardWhere + `
 GROUP BY cls
 ORDER BY cnt DESC, cls ASC`
 
@@ -348,8 +351,9 @@ ORDER BY cnt DESC, cls ASC`
 func (r *Repository) scanRunawaysDraftTalentBreakdown(ctx context.Context, deckSourceID, setID, heroID int, out *RunawaysDraftAnalytics) error {
 	const q = `
 SELECT t::int, SUM(dc.count)::int AS cnt
-` + runawaysDraftCardFrom + `
+` + runawaysDraftCardJoin + `
 CROSS JOIN LATERAL unnest(c.talents) AS t
+` + runawaysDraftCardWhere + `
 GROUP BY t
 ORDER BY cnt DESC, t ASC`
 
@@ -385,7 +389,7 @@ SELECT
   SUM(dc.count)::int AS total_copies,
   COUNT(DISTINCT dc.deck_id)::int AS decks_with_card,
   SUM(dc.count)::float / NULLIF(COUNT(DISTINCT dc.deck_id), 0) AS avg_copies_when_present
-` + runawaysDraftCardFrom + `
+` + runawaysDraftCardJoin + runawaysDraftCardWhere + `
 GROUP BY c.id, c.name, c.card_identifier, cp.image_url, c.type, c.pitch, c.cost, c.power, c.block
 ORDER BY decks_with_card DESC, total_copies DESC, c.name ASC`
 
