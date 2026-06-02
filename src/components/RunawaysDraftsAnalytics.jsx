@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
 import { cardRarityName } from "../constants/cardRarity";
-import { cardTypeName } from "../constants/cardType";
-import { partitionDeckCards, sectionCardCount } from "../utils/deckSections";
+import { CardType, cardTypeName } from "../constants/cardType";
+import { partitionDeckCards } from "../utils/deckSections";
+import { DeckViewerSection } from "./DeckViewerSection";
 
 const RUNAWAYS_SOURCE_ID = 3;
 const MAINBOARD_SIZE = 30;
@@ -493,29 +494,6 @@ const CATEGORY_TABS = /** @type {{ id: CategoryTab, label: string }[]} */ ([
 ]);
 
 /**
- * @param {{ title: string, lines: import("../utils/deckSections").DeckCardLine[] }} props
- */
-function DeckModalSection({ title, lines }) {
-  if (lines.length === 0) return null;
-  const count = sectionCardCount(lines);
-  return (
-    <section>
-      <h4 className="m-0 text-[0.85rem] font-semibold text-[#f4f0fa]/90">
-        {title} <span className="font-normal text-[#f4f0fa]/50">({count})</span>
-      </h4>
-      <ul className="m-0 mt-2 flex list-none flex-col gap-1 p-0">
-        {lines.map((line) => (
-          <li key={`${line.card_id}-${line.mainboard}`} className="text-[0.8125rem] text-[#f4f0fa]/85">
-            <span>{line.card?.name ?? "Card"}</span>
-            {line.count > 1 ? <span className="text-[#f4f0fa]/50"> ×{line.count}</span> : null}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-/**
  * @param {{
  *   deckName: string,
  *   ownerLabel: string,
@@ -543,7 +521,7 @@ function DeckDetailModal({ deckName, ownerLabel, fabraryLink, sections, loading,
       }}
     >
       <div
-        className={`relative flex max-h-[min(85vh,720px)] w-full max-w-lg flex-col rounded-xl p-5 sm:p-6 ${modalPanel}`}
+        className={`relative flex max-h-[min(90vh,820px)] w-full max-w-4xl flex-col rounded-xl p-5 sm:p-6 ${modalPanel}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="runaways-deck-modal-title"
@@ -591,11 +569,11 @@ function DeckDetailModal({ deckName, ownerLabel, fabraryLink, sections, loading,
               {error}
             </p>
           ) : (
-            <div className="flex flex-col gap-4">
-              <DeckModalSection title="Hero + arena" lines={sections.heroArena} />
-              <DeckModalSection title="Deck" lines={sections.deck} />
-              <DeckModalSection title="Inventory" lines={sections.inventory} />
-              <DeckModalSection title="Tokens" lines={sections.tokens} />
+            <div className="flex flex-col gap-6">
+              <DeckViewerSection title="Hero + arena" lines={sections.heroArena} isLight={isLight} stacked={false} />
+              <DeckViewerSection title="Deck" lines={sections.deck} isLight={isLight} stacked />
+              <DeckViewerSection title="Inventory" lines={sections.inventory} isLight={isLight} stacked />
+              <DeckViewerSection title="Tokens" lines={sections.tokens} isLight={isLight} stacked={false} />
               {sections.heroArena.length === 0 &&
               sections.deck.length === 0 &&
               sections.inventory.length === 0 &&
@@ -641,12 +619,11 @@ function DecklistsTable({ decks, loading, pageIndex, onPageChange, onOpenDeck, i
   return (
     <section>
       <div className="overflow-x-auto rounded-xl border border-white/[0.12] bg-black/20">
-        <table className="w-full min-w-[32rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
+        <table className="w-full min-w-[24rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
           <thead>
             <tr className={`border-b text-[0.68rem] uppercase tracking-wider text-[#f4f0fa]/55 ${tableHeadBorder}`}>
               <th className="w-8 px-3 py-2.5 font-semibold sm:px-4">#</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Deck</th>
-              <th className="px-3 py-2.5 font-semibold sm:px-4">Owner</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Mainboard</th>
             </tr>
           </thead>
@@ -663,7 +640,6 @@ function DecklistsTable({ decks, loading, pageIndex, onPageChange, onOpenDeck, i
                   <td className="max-w-[18rem] px-3 py-2 font-medium text-[#c4a9ef] sm:px-4">
                     <span className="truncate">{name}</span>
                   </td>
-                  <td className="px-3 py-2 text-[#f4f0fa]/80 sm:px-4">{deckOwnerLabel(row)}</td>
                   <td className="px-3 py-2 tabular-nums sm:px-4">{row.mainboard_count ?? 0}</td>
                 </tr>
               );
@@ -1043,7 +1019,10 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
     });
   }, [allCards, pickRarityFilter, pickTypeFilter]);
 
-  const mostPickedCards = useMemo(() => sortCardsByPick(cardsForPicks, true), [cardsForPicks]);
+  const mostPickedCards = useMemo(() => {
+    const pool = cardsForPicks.filter((raw) => numOrNull(/** @type {Record<string, unknown>} */ (raw).type) !== CardType.Weapon);
+    return sortCardsByPick(pool, true);
+  }, [cardsForPicks]);
 
   const leastPickedCards = useMemo(() => sortCardsByPick(cardsForPicks, false), [cardsForPicks]);
 
@@ -1068,19 +1047,6 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
     () => (Array.isArray(analytics?.avg_deck_block_breakdown) ? analytics.avg_deck_block_breakdown : []),
     [analytics],
   );
-  const avgDeckAttackPowerBreakdown = useMemo(
-    () =>
-      Array.isArray(analytics?.avg_deck_attack_power_breakdown) ? analytics.avg_deck_attack_power_breakdown : [],
-    [analytics],
-  );
-  const attackPowerBarTotal = useMemo(() => {
-    let sum = 0;
-    for (const raw of avgDeckAttackPowerBreakdown) {
-      const b = /** @type {Record<string, unknown>} */ (raw);
-      sum += numOrNull(b.avg_count) ?? 0;
-    }
-    return sum;
-  }, [avgDeckAttackPowerBreakdown]);
 
   const pitchColors = {
     1: "bg-red-500/75",
@@ -1189,17 +1155,13 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
             <div className="flex flex-col gap-5">
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <StatTile title="Decks" value={String(deckCount)} />
-                <StatTile title="Avg card cost / deck" value={fmtNum(analytics.avg_cost_per_deck)} hint="Deck cards only" />
-                <StatTile title="Avg pitch / deck" value={fmtNum(analytics.avg_pitch_per_deck)} hint="Deck cards only" />
+                <StatTile title="Avg card cost / deck" value={fmtNum(analytics.avg_cost_per_deck)} />
+                <StatTile title="Avg pitch / deck" value={fmtNum(analytics.avg_pitch_per_deck)} />
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
-                  <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Pitch / color</h3>
-                  <p className="m-0 mt-1 text-[0.78rem] text-[#f4f0fa]/55">
-                    Average deck-card pitch split across {deckCount} deck{deckCount === 1 ? "" : "s"} ({MAINBOARD_SIZE}{" "}
-                    cards each). Excludes equipment and weapons.
-                  </p>
+                  <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Average Pitch Per Deck</h3>
                   <div className="mt-3 flex flex-col gap-2.5">
                     {avgDeckPitchBreakdown.length === 0 ? (
                       <p className="m-0 text-[0.82rem] text-[#f4f0fa]/55">No pitch data.</p>
@@ -1225,11 +1187,7 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
                 </div>
 
                 <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
-                  <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Cost</h3>
-                  <p className="m-0 mt-1 text-[0.78rem] text-[#f4f0fa]/55">
-                    Average deck-card cost split across {deckCount} deck{deckCount === 1 ? "" : "s"} ({MAINBOARD_SIZE}{" "}
-                    cards each). Excludes equipment and weapons.
-                  </p>
+                  <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Average Cost Per Deck</h3>
                   <div className="mt-3 flex flex-col gap-2.5">
                     {avgDeckCostBreakdown.length === 0 ? (
                       <p className="m-0 text-[0.82rem] text-[#f4f0fa]/55">No cost data.</p>
@@ -1249,11 +1207,7 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
               </div>
 
               <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4 lg:max-w-xl`}>
-                <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Card type</h3>
-                <p className="m-0 mt-1 text-[0.78rem] text-[#f4f0fa]/55">
-                  Average mainboard type split across {deckCount} deck{deckCount === 1 ? "" : "s"} ({MAINBOARD_SIZE} cards
-                  each). Includes equipment and weapons.
-                </p>
+                <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Average Card Type Per Deck</h3>
                 <div className="mt-3 flex flex-col gap-2.5">
                   {avgDeckTypeBreakdown.length === 0 ? (
                     <p className="m-0 text-[0.82rem] text-[#f4f0fa]/55">No type data.</p>
@@ -1271,63 +1225,29 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
                 </div>
               </div>
 
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
-                  <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Block</h3>
-                  <p className="m-0 mt-1 text-[0.78rem] text-[#f4f0fa]/55">
-                    Average deck-card block split across {deckCount} deck{deckCount === 1 ? "" : "s"} ({MAINBOARD_SIZE}{" "}
-                    cards each). Excludes equipment and weapons.
-                  </p>
-                  <div className="mt-3 flex flex-col gap-2.5">
-                    {avgDeckBlockBreakdown.length === 0 ? (
-                      <p className="m-0 text-[0.82rem] text-[#f4f0fa]/55">No block data.</p>
-                    ) : (
-                      avgDeckBlockBreakdown.map((raw) => {
-                        const b = /** @type {Record<string, unknown>} */ (raw);
-                        const key = String(b.key ?? "");
-                        const label = String(b.label ?? key);
-                        const avgCount = numOrNull(b.avg_count) ?? 0;
-                        const color = /** @type {Record<string, string>} */ (blockColors)[key] ?? "bg-violet-500/70";
-                        return (
-                          <AvgBreakdownBar
-                            key={key}
-                            label={label}
-                            avgCount={avgCount}
-                            total={MAINBOARD_SIZE}
-                            colorClass={color}
-                          />
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-
-                <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
-                  <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Attack power</h3>
-                  <p className="m-0 mt-1 text-[0.78rem] text-[#f4f0fa]/55">
-                    Average attack count by power across {deckCount} deck{deckCount === 1 ? "" : "s"}. Attack actions
-                    and attack reactions only. Excludes equipment and weapons.
-                  </p>
-                  <div className="mt-3 flex flex-col gap-2.5">
-                    {avgDeckAttackPowerBreakdown.length === 0 ? (
-                      <p className="m-0 text-[0.82rem] text-[#f4f0fa]/55">No attack power data.</p>
-                    ) : (
-                      avgDeckAttackPowerBreakdown.map((raw) => {
-                        const b = /** @type {Record<string, unknown>} */ (raw);
-                        const key = String(b.key ?? "");
-                        const label = String(b.label ?? key);
-                        const avgCount = numOrNull(b.avg_count) ?? 0;
-                        return (
-                          <AvgBreakdownBar
-                            key={key}
-                            label={label}
-                            avgCount={avgCount}
-                            total={attackPowerBarTotal > 0 ? attackPowerBarTotal : 1}
-                          />
-                        );
-                      })
-                    )}
-                  </div>
+              <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4 lg:max-w-xl`}>
+                <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Average Block Per Deck</h3>
+                <div className="mt-3 flex flex-col gap-2.5">
+                  {avgDeckBlockBreakdown.length === 0 ? (
+                    <p className="m-0 text-[0.82rem] text-[#f4f0fa]/55">No block data.</p>
+                  ) : (
+                    avgDeckBlockBreakdown.map((raw) => {
+                      const b = /** @type {Record<string, unknown>} */ (raw);
+                      const key = String(b.key ?? "");
+                      const label = String(b.label ?? key);
+                      const avgCount = numOrNull(b.avg_count) ?? 0;
+                      const color = /** @type {Record<string, string>} */ (blockColors)[key] ?? "bg-violet-500/70";
+                      return (
+                        <AvgBreakdownBar
+                          key={key}
+                          label={label}
+                          avgCount={avgCount}
+                          total={MAINBOARD_SIZE}
+                          colorClass={color}
+                        />
+                      );
+                    })
+                  )}
                 </div>
               </div>
             </div>

@@ -1,5 +1,8 @@
 node_modules
 dist
+deploy-staging
+deploy-staging-server
+backend/server
 vendor/
 .vscode
 .DS_Store

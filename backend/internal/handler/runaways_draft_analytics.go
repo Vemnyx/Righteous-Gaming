@@ -353,10 +353,6 @@ func runawaysDraftAnalyticsToJSON(s *repository.RunawaysDraftAnalytics) map[stri
 	for _, b := range s.AvgDeckBlockBreakdown {
 		avgBlock = append(avgBlock, runawaysDraftAvgBucketJSON(b))
 	}
-	avgAttackPower := make([]runawaysDraftAvgBucketJSON, 0, len(s.AvgDeckAttackPowerBreakdown))
-	for _, b := range s.AvgDeckAttackPowerBreakdown {
-		avgAttackPower = append(avgAttackPower, runawaysDraftAvgBucketJSON(b))
-	}
 
 	return map[string]any{
 		"deck_count":               s.DeckCount,
@@ -366,7 +362,6 @@ func runawaysDraftAnalyticsToJSON(s *repository.RunawaysDraftAnalytics) map[stri
 		"avg_deck_cost_breakdown":  avgCost,
 		"avg_deck_type_breakdown":  avgType,
 		"avg_deck_block_breakdown": avgBlock,
-		"avg_deck_attack_power_breakdown": avgAttackPower,
 		"cards":                    runawaysDraftCardsToJSON(s.Cards),
 		"most_picked":              runawaysDraftCardsToJSON(s.MostPicked),
 		"least_picked":             runawaysDraftCardsToJSON(s.LeastPicked),

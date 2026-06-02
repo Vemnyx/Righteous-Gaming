@@ -1,0 +1,12 @@
+# Discord draft submissions batch 2 — Jun 2, deck_source_id=3
+# Import: go run ./cmd/import-fabrary-decks -user-id=10 -deck-source-id=3 -file=data/discord-fabrary-decks-batch2.txt
+https://fabrary.net/decks/01KT2ZFZ8K3YT99BYMCSNES8BK
+https://fabrary.net/decks/01KT3NCJEE1Z96GJ091N7NRS78
+https://fabrary.net/decks/01KT3TD2BREHTHMSRH57TTW6F9
+https://fabrary.net/decks/01KT49FS61NE8C4RW0KQH0V92D
+https://fabrary.net/decks/01KT4H0D98HCKCFSXYDBAM3WV9
+https://fabrary.net/decks/01KT4TKR83XETRZENAXEDP7BBM
+https://fabrary.net/decks/01KT4TGSM3ANKHQSHFE2CSKB62
+https://fabrary.net/decks/01KT50EKTN184WWDFFAAPBW6TH
+https://fabrary.net/decks/01KT4SC88PCG1CQ0YF3NYWZ98H
+https://fabrary.net/decks/01KT4Y3QEDVRBYXJNHSW0RHP26

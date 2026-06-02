@@ -1,2 +1,1 @@
-# Used by scripts/pack_deploy.py (CI size summary). IAP tunnel NumPy is installed via scripts/setup_gcloud_iap_numpy.sh.
-numpy>=2.0.0,<3
+# NumPy for faster gcloud IAP uploads is installed via scripts/setup_gcloud_iap_numpy.sh in CI.

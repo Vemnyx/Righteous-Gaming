@@ -3,23 +3,21 @@
 Build the deploy tarball for GCE upload.
 
 Uses gzip level 1 (fast; Vite dist is mostly already-compressed assets).
-numpy aggregates file sizes for a quick pre-pack summary in CI logs.
 """
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import tarfile
 from pathlib import Path
 
-import numpy as np
-
-COMPRESSLEVEL = int(__import__("os").environ.get("DEPLOY_PACK_GZIP_LEVEL", "1"))
+COMPRESSLEVEL = int(os.environ.get("DEPLOY_PACK_GZIP_LEVEL", "1"))
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create deploy.tar.gz from a directory")
-    parser.add_argument("source", type=Path, help="Directory to pack (e.g. dist)")
+    parser.add_argument("source", type=Path, help="Directory to pack (staging root)")
     parser.add_argument("output", type=Path, help="Output .tar.gz path")
     args = parser.parse_args()
 
@@ -30,8 +28,8 @@ def main() -> int:
 
     files = [p for p in src.rglob("*") if p.is_file()]
     if files:
-        sizes = np.fromiter((p.stat().st_size for p in files), dtype=np.uint64, count=len(files))
-        total_mb = float(sizes.sum()) / (1024 * 1024)
+        total_bytes = sum(p.stat().st_size for p in files)
+        total_mb = total_bytes / (1024 * 1024)
         print(f"pack_deploy: {len(files)} files, {total_mb:.2f} MiB (uncompressed)", file=sys.stderr)
 
     out = args.output.resolve()

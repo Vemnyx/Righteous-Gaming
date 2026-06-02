@@ -70,8 +70,7 @@ type RunawaysDraftAnalytics struct {
 	AvgDeckPitchBreakdown      []RunawaysDraftAvgBucket
 	AvgDeckCostBreakdown       []RunawaysDraftAvgBucket
 	AvgDeckTypeBreakdown       []RunawaysDraftAvgBucket
-	AvgDeckBlockBreakdown      []RunawaysDraftAvgBucket
-	AvgDeckAttackPowerBreakdown []RunawaysDraftAvgBucket
+	AvgDeckBlockBreakdown []RunawaysDraftAvgBucket
 	Cards                  []RunawaysDraftCardStat
 	MostPicked             []RunawaysDraftCardStat
 	LeastPicked            []RunawaysDraftCardStat
@@ -195,9 +194,6 @@ func (r *Repository) RunawaysDraftAnalytics(ctx context.Context, deckSourceID, s
 		return nil, err
 	}
 	if err := r.scanRunawaysDraftAvgDeckBlockBreakdown(ctx, deckSourceID, setID, heroID, out); err != nil {
-		return nil, err
-	}
-	if err := r.scanRunawaysDraftAvgDeckAttackPowerBreakdown(ctx, deckSourceID, setID, heroID, out); err != nil {
 		return nil, err
 	}
 	if err := r.scanRunawaysDraftCards(ctx, deckSourceID, setID, heroID, deckCount, out); err != nil {
@@ -405,52 +401,6 @@ ORDER BY CASE block_key WHEN '3' THEN 0 WHEN '2' THEN 1 WHEN 'none' THEN 2 ELSE 
 	return rows.Err()
 }
 
-func (r *Repository) scanRunawaysDraftAvgDeckAttackPowerBreakdown(ctx context.Context, deckSourceID, setID, heroID int, out *RunawaysDraftAnalytics) error {
-	const q = `
-WITH all_decks AS (
-  SELECT d.id AS deck_id
-` + runawaysDraftDeckFilter + `
-),
-deck_attack_power AS (
-  SELECT d.id AS deck_id,
-         COALESCE(c.power::text, 'none') AS power_key,
-         SUM(dc.count)::float AS cnt
-` + runawaysDraftCardJoin + runawaysDraftCardWhere + runawaysDraftDistributionCardFilter + `
-  AND c.type IN (1, 2)
-  GROUP BY d.id, c.power
-),
-power_keys AS (
-  SELECT DISTINCT power_key FROM deck_attack_power
-)
-SELECT pk.power_key,
-       COALESCE(AVG(COALESCE(dap.cnt, 0)), 0)::float8 AS avg_cnt
-FROM all_decks ad
-CROSS JOIN power_keys pk
-LEFT JOIN deck_attack_power dap ON dap.deck_id = ad.deck_id AND dap.power_key = pk.power_key
-GROUP BY pk.power_key
-ORDER BY CASE WHEN pk.power_key = 'none' THEN 1 ELSE 0 END, pk.power_key`
-
-	rows, err := r.pool.Query(ctx, q, deckSourceID, setID, heroID)
-	if err != nil {
-		return fmt.Errorf("repository: runaways avg deck attack power breakdown: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var key string
-		var avgCount float64
-		if err := rows.Scan(&key, &avgCount); err != nil {
-			return err
-		}
-		out.AvgDeckAttackPowerBreakdown = append(out.AvgDeckAttackPowerBreakdown, RunawaysDraftAvgBucket{
-			Label:    powerLabel(key),
-			Key:      key,
-			AvgCount: avgCount,
-		})
-	}
-	return rows.Err()
-}
-
 func (r *Repository) scanRunawaysDraftCards(ctx context.Context, deckSourceID, setID, heroID, deckCount int, out *RunawaysDraftAnalytics) error {
 	cards, err := r.queryRunawaysDraftCardStats(ctx, deckSourceID, setID, heroID, deckCount, runawaysDraftCardWhere)
 	if err != nil {
@@ -556,13 +506,6 @@ func blockLabel(key string) string {
 	default:
 		return "Block " + key
 	}
-}
-
-func powerLabel(key string) string {
-	if key == "none" {
-		return "No power"
-	}
-	return "Power " + key
 }
 
 func typeLabel(key string) string {
