@@ -1114,17 +1114,17 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
       </div>
 
       {loadingAnalytics || loadingMeta ? (
-        <p className="m-0 text-[0.875rem] text-[#f4f0fa]/65">Loading analytics…</p>
+        <p className="m-0 mt-6 text-[0.875rem] text-[#f4f0fa]/65">Loading analytics…</p>
       ) : null}
 
       {!loadingAnalytics && analytics && deckCount === 0 ? (
-        <p className="m-0 text-[0.875rem] text-[#f4f0fa]/65">
+        <p className="m-0 mt-6 text-[0.875rem] text-[#f4f0fa]/65">
           No decks for {selectedSet?.set_name ?? "this set"} / {selectedHero?.hero_name ?? "this hero"}.
         </p>
       ) : null}
 
       {!loadingAnalytics && analytics ? (
-        <div className="flex flex-col gap-4">
+        <div className="mt-6 flex flex-col gap-4">
           <div
             className="flex flex-wrap gap-2 border-b border-white/[0.08] pb-3"
             role="tablist"
@@ -1206,48 +1206,50 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
                 </div>
               </div>
 
-              <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4 lg:max-w-xl`}>
-                <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Average Card Type Per Deck</h3>
-                <div className="mt-3 flex flex-col gap-2.5">
-                  {avgDeckTypeBreakdown.length === 0 ? (
-                    <p className="m-0 text-[0.82rem] text-[#f4f0fa]/55">No type data.</p>
-                  ) : (
-                    avgDeckTypeBreakdown.map((raw) => {
-                      const b = /** @type {Record<string, unknown>} */ (raw);
-                      const key = String(b.key ?? "");
-                      const label = String(b.label ?? key);
-                      const avgCount = numOrNull(b.avg_count) ?? 0;
-                      return (
-                        <AvgBreakdownBar key={key} label={label} avgCount={avgCount} total={MAINBOARD_SIZE} />
-                      );
-                    })
-                  )}
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
+                  <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Average Card Type Per Deck</h3>
+                  <div className="mt-3 flex flex-col gap-2.5">
+                    {avgDeckTypeBreakdown.length === 0 ? (
+                      <p className="m-0 text-[0.82rem] text-[#f4f0fa]/55">No type data.</p>
+                    ) : (
+                      avgDeckTypeBreakdown.map((raw) => {
+                        const b = /** @type {Record<string, unknown>} */ (raw);
+                        const key = String(b.key ?? "");
+                        const label = String(b.label ?? key);
+                        const avgCount = numOrNull(b.avg_count) ?? 0;
+                        return (
+                          <AvgBreakdownBar key={key} label={label} avgCount={avgCount} total={MAINBOARD_SIZE} />
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4 lg:max-w-xl`}>
-                <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Average Block Per Deck</h3>
-                <div className="mt-3 flex flex-col gap-2.5">
-                  {avgDeckBlockBreakdown.length === 0 ? (
-                    <p className="m-0 text-[0.82rem] text-[#f4f0fa]/55">No block data.</p>
-                  ) : (
-                    avgDeckBlockBreakdown.map((raw) => {
-                      const b = /** @type {Record<string, unknown>} */ (raw);
-                      const key = String(b.key ?? "");
-                      const label = String(b.label ?? key);
-                      const avgCount = numOrNull(b.avg_count) ?? 0;
-                      const color = /** @type {Record<string, string>} */ (blockColors)[key] ?? "bg-violet-500/70";
-                      return (
-                        <AvgBreakdownBar
-                          key={key}
-                          label={label}
-                          avgCount={avgCount}
-                          total={MAINBOARD_SIZE}
-                          colorClass={color}
-                        />
-                      );
-                    })
-                  )}
+                <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
+                  <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Average Block Per Deck</h3>
+                  <div className="mt-3 flex flex-col gap-2.5">
+                    {avgDeckBlockBreakdown.length === 0 ? (
+                      <p className="m-0 text-[0.82rem] text-[#f4f0fa]/55">No block data.</p>
+                    ) : (
+                      avgDeckBlockBreakdown.map((raw) => {
+                        const b = /** @type {Record<string, unknown>} */ (raw);
+                        const key = String(b.key ?? "");
+                        const label = String(b.label ?? key);
+                        const avgCount = numOrNull(b.avg_count) ?? 0;
+                        const color = /** @type {Record<string, string>} */ (blockColors)[key] ?? "bg-violet-500/70";
+                        return (
+                          <AvgBreakdownBar
+                            key={key}
+                            label={label}
+                            avgCount={avgCount}
+                            total={MAINBOARD_SIZE}
+                            colorClass={color}
+                          />
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
