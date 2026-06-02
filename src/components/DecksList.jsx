@@ -580,24 +580,24 @@ export function DecksList({ isLight, active, onOpenDeck }) {
                 aria-label={displayName ? `Open deck: ${displayName}` : "Open deck"}
               >
                 <div
-                  className="pointer-events-none col-start-1 row-start-1 flex min-h-[6.75rem] items-center px-3 py-2.5 pr-[46%] sm:pr-[44%]"
+                  className="pointer-events-none absolute inset-y-0 left-0 w-[58%] sm:w-[54%]"
                   aria-hidden
                 >
                   {heroArt ? (
                     <img
                       src={heroArt}
                       alt=""
-                      className={`max-h-[5.5rem] w-full max-w-full object-contain object-left ${heroArtFadeMask}`}
+                      className={`h-full w-full object-cover object-left ${heroArtFadeMask}`}
                       draggable={false}
                     />
                   ) : (
                     <div
-                      className={`h-[5.5rem] w-full max-w-[14rem] bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent ${heroArtFadeMask}`}
+                      className={`h-full w-full bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent ${heroArtFadeMask}`}
                     />
                   )}
                 </div>
 
-                <div className="relative z-[1] col-start-1 row-start-1 flex min-h-[6.75rem] flex-col items-end justify-center gap-1 self-stretch px-4 py-3.5 pl-[50%] sm:pl-[46%]">
+                <div className="relative z-[1] col-start-1 row-start-1 flex min-h-[6.75rem] flex-col items-end justify-center gap-1 self-stretch py-3.5 pl-[52%] pr-4 sm:pl-[48%]">
                   <p className="m-0 max-w-full truncate text-[0.95rem] font-semibold leading-snug text-[#f4f0fa] group-hover:text-purple-100">
                     {displayName}
                   </p>
