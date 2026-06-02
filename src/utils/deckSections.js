@@ -60,9 +60,13 @@ function heroArenaSortKey(line) {
  * Inventory: sideboard non-tokens.
  * Tokens: all token-type cards.
  *
+ * When heroCard + heroCardId are provided, that card is shown first in hero + arena
+ * (inserted if missing, or moved to the front if already present elsewhere).
+ *
  * @param {DeckCardLine[]} lines
+ * @param {{ heroCard?: DeckCardLine['card'], heroCardId?: number } | undefined} [options]
  */
-export function partitionDeckCards(lines) {
+export function partitionDeckCards(lines, options) {
   /** @type {DeckCardLine[]} */
   const heroArena = [];
   /** @type {DeckCardLine[]} */
@@ -99,5 +103,40 @@ export function partitionDeckCards(lines) {
   inventory.sort(sortByPitchThenName);
   tokens.sort(sortByPitchThenName);
 
-  return { heroArena, deck, inventory, tokens };
+  return injectDeckHeroFirst({ heroArena, deck, inventory, tokens }, options);
+}
+
+/**
+ * @param {{ heroArena: DeckCardLine[], deck: DeckCardLine[], inventory: DeckCardLine[], tokens: DeckCardLine[] }} sections
+ * @param {{ heroCard?: DeckCardLine['card'], heroCardId?: number } | undefined} options
+ */
+function injectDeckHeroFirst(sections, options) {
+  const heroCardId = options?.heroCardId;
+  const heroCard = options?.heroCard;
+  if (heroCardId == null || heroCardId <= 0 || !heroCard) {
+    return sections;
+  }
+
+  /** @type {DeckCardLine | null} */
+  let existing = null;
+  for (const key of /** @type {const} */ (["heroArena", "deck", "inventory", "tokens"])) {
+    const arr = sections[key];
+    const idx = arr.findIndex((line) => line.card_id === heroCardId);
+    if (idx >= 0) {
+      existing = arr[idx];
+      arr.splice(idx, 1);
+    }
+  }
+
+  const heroLine =
+    existing ??
+    ({
+      card_id: heroCardId,
+      mainboard: true,
+      count: 1,
+      card: heroCard,
+    });
+
+  sections.heroArena.unshift(heroLine);
+  return sections;
 }

@@ -156,7 +156,7 @@ WHERE ucr.user_id = $1 AND cr.set_id = $2`
 	for i, sess := range sessions {
 		header = append(header, cardRaterSessionExportHeader(sess))
 		if i < len(sessions)-1 {
-			header = append(header, "")
+			header = append(header, "Changes")
 		}
 	}
 

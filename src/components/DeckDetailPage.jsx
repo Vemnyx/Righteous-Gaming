@@ -120,6 +120,7 @@ export function DeckDetailPage({ isLight, deckId, active, onOpenCard, onDeckDele
   const { user, sessionProfile } = useAuth();
   const myUserId = typeof sessionProfile?.id === "number" ? sessionProfile.id : null;
   const [cardLines, setCardLines] = useState(/** @type {import("../utils/deckSections").DeckCardLine[] | null} */ (null));
+  const [heroCard, setHeroCard] = useState(/** @type {import("../utils/deckSections").DeckCardLine['card'] | null} */ (null));
   const [meta, setMeta] = useState(
     /** @type {{ id: number, user_id: number, name: string, format: number, hero_id: number, hero_name?: string | null, set_id?: number | null, fabrary_format?: string | null, fabrary_link?: string | null, source?: string, owner_username?: string | null, owner_email?: string | null } | null} */ (null),
   );
@@ -138,6 +139,7 @@ export function DeckDetailPage({ isLight, deckId, active, onOpenCard, onDeckDele
       setNotFound(true);
       setMeta(null);
       setCardLines(null);
+      setHeroCard(null);
       return;
     }
     setLoading(true);
@@ -155,6 +157,7 @@ export function DeckDetailPage({ isLight, deckId, active, onOpenCard, onDeckDele
         setNotFound(true);
         setMeta(null);
         setCardLines(null);
+        setHeroCard(null);
         return;
       }
       if (!resDeck.ok) throw new Error(parseApiError(await resDeck.text()));
@@ -200,6 +203,13 @@ export function DeckDetailPage({ isLight, deckId, active, onOpenCard, onDeckDele
       }
       setCardLines(lines);
 
+      const hc = data?.hero_card;
+      if (hc && typeof hc.id === "number" && typeof hc.name === "string") {
+        setHeroCard(hc);
+      } else {
+        setHeroCard(null);
+      }
+
       if (resSets.ok) {
         const rawSets = await resSets.json();
         const arr = Array.isArray(rawSets) ? rawSets : [];
@@ -218,6 +228,7 @@ export function DeckDetailPage({ isLight, deckId, active, onOpenCard, onDeckDele
       setError(e instanceof Error ? e.message : "Failed to load deck");
       setMeta(null);
       setCardLines(null);
+      setHeroCard(null);
       setSets([]);
     } finally {
       setLoading(false);
@@ -228,7 +239,14 @@ export function DeckDetailPage({ isLight, deckId, active, onOpenCard, onDeckDele
     void load();
   }, [load]);
 
-  const sections = useMemo(() => partitionDeckCards(cardLines ?? []), [cardLines]);
+  const sections = useMemo(
+    () =>
+      partitionDeckCards(cardLines ?? [], {
+        heroCard: heroCard ?? undefined,
+        heroCardId: heroCard?.id,
+      }),
+    [cardLines, heroCard],
+  );
 
   const setNameById = useMemo(() => {
     /** @type {Record<number, string>} */

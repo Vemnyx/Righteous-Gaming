@@ -59,8 +59,9 @@ type deckCardLineJSON struct {
 }
 
 type deckDetailJSON struct {
-	Deck  deckJSON           `json:"deck"`
-	Cards []deckCardLineJSON `json:"cards"`
+	Deck     deckJSON           `json:"deck"`
+	Cards    []deckCardLineJSON `json:"cards"`
+	HeroCard *cardJSON          `json:"hero_card,omitempty"`
 }
 
 type importFabraryDeckResponse struct {
@@ -322,9 +323,26 @@ func (h *decksHTTP) getMyDeck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeCatalogJSON(w, http.StatusOK, deckDetailJSON{
-		Deck:  h.deckJSONWithOwner(r.Context(), deck),
-		Cards: lines,
+		Deck:     h.deckJSONWithOwner(r.Context(), deck),
+		Cards:    lines,
+		HeroCard: h.heroCardJSON(r.Context(), deck.HeroID),
 	})
+}
+
+func (h *decksHTTP) heroCardJSON(ctx context.Context, heroID int) *cardJSON {
+	hero, err := h.app.Repo.HeroByID(ctx, heroID)
+	if err != nil || hero.CardID == nil || *hero.CardID <= 0 {
+		return nil
+	}
+	card, err := h.app.Repo.CardByID(ctx, *hero.CardID)
+	if err != nil {
+		return nil
+	}
+	if err := h.app.Repo.AttachPrintings(ctx, []*repository.Card{card}); err != nil {
+		return nil
+	}
+	j := cardToJSON(card)
+	return &j
 }
 
 func (h *decksHTTP) deckJSONWithOwner(ctx context.Context, deck *repository.Deck) deckJSON {

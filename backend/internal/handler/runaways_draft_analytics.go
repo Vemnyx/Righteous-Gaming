@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -177,20 +178,8 @@ func (h *runawaysDraftHTTP) getRunawaysDraftAnalytics(w http.ResponseWriter, r *
 		return
 	}
 
-	sourceID, err := parseRunawaysDeckSourceID(r)
-	if err != nil || sourceID <= 0 {
-		writeFieldError(w, http.StatusBadRequest, "deck_source_id", "invalid")
-		return
-	}
-
-	setID, err := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("set_id")))
-	if err != nil || setID <= 0 {
-		writeFieldError(w, http.StatusBadRequest, "set_id", "required")
-		return
-	}
-	heroID, err := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("hero_id")))
-	if err != nil || heroID <= 0 {
-		writeFieldError(w, http.StatusBadRequest, "hero_id", "required")
+	sourceID, setID, heroID, ok := parseRunawaysDraftSetHeroQuery(w, r)
+	if !ok {
 		return
 	}
 
@@ -204,23 +193,150 @@ func (h *runawaysDraftHTTP) getRunawaysDraftAnalytics(w http.ResponseWriter, r *
 	writeCatalogJSON(w, http.StatusOK, runawaysDraftAnalyticsToJSON(stats))
 }
 
+type runawaysDraftDeckRowJSON struct {
+	ID             int     `json:"id"`
+	Name           string  `json:"name"`
+	OwnerUsername  *string `json:"owner_username,omitempty"`
+	OwnerEmail     string  `json:"owner_email,omitempty"`
+	MainboardCount int     `json:"mainboard_count"`
+	FabraryLink    *string `json:"fabrary_link,omitempty"`
+}
+
+func parseRunawaysDraftSetHeroQuery(w http.ResponseWriter, r *http.Request) (sourceID, setID, heroID int, ok bool) {
+	sourceID, err := parseRunawaysDeckSourceID(r)
+	if err != nil || sourceID <= 0 {
+		writeFieldError(w, http.StatusBadRequest, "deck_source_id", "invalid")
+		return 0, 0, 0, false
+	}
+	setID, err = strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("set_id")))
+	if err != nil || setID <= 0 {
+		writeFieldError(w, http.StatusBadRequest, "set_id", "required")
+		return 0, 0, 0, false
+	}
+	heroID, err = strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("hero_id")))
+	if err != nil || heroID <= 0 {
+		writeFieldError(w, http.StatusBadRequest, "hero_id", "required")
+		return 0, 0, 0, false
+	}
+	return sourceID, setID, heroID, true
+}
+
+func (h *runawaysDraftHTTP) listRunawaysDraftDecks(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := h.sessionUser(w, r); !ok {
+		return
+	}
+
+	sourceID, setID, heroID, ok := parseRunawaysDraftSetHeroQuery(w, r)
+	if !ok {
+		return
+	}
+
+	rows, err := h.app.Repo.ListRunawaysDraftDecks(r.Context(), sourceID, setID, heroID)
+	if err != nil {
+		log.Error("list runaways draft decks", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	out := make([]runawaysDraftDeckRowJSON, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, runawaysDraftDeckRowJSON{
+			ID:             row.ID,
+			Name:           row.Name,
+			OwnerUsername:  row.OwnerUsername,
+			OwnerEmail:     row.OwnerEmail,
+			MainboardCount: row.MainboardCount,
+			FabraryLink:    row.FabraryLink,
+		})
+	}
+	writeCatalogJSON(w, http.StatusOK, map[string]any{"decks": out})
+}
+
+func (h *runawaysDraftHTTP) getRunawaysDraftDeck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := h.sessionUser(w, r); !ok {
+		return
+	}
+
+	sourceID, setID, heroID, ok := parseRunawaysDraftSetHeroQuery(w, r)
+	if !ok {
+		return
+	}
+
+	idStr := strings.TrimSpace(r.PathValue("id"))
+	deckID, err := strconv.Atoi(idStr)
+	if err != nil || deckID <= 0 {
+		writeMessageError(w, http.StatusBadRequest, "invalid deck id")
+		return
+	}
+
+	deck, entries, err := h.app.Repo.GetRunawaysDraftDeck(r.Context(), sourceID, setID, heroID, deckID)
+	if err != nil {
+		if errors.Is(err, repository.ErrDeckNotFound) {
+			writeMessageError(w, http.StatusNotFound, "deck not found")
+			return
+		}
+		log.Error("get runaways draft deck", "error", err, "deck_id", deckID)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	cardPtrs := make([]*repository.Card, len(entries))
+	for i := range entries {
+		cardPtrs[i] = &entries[i].Card
+	}
+	if err := h.app.Repo.AttachPrintings(r.Context(), cardPtrs); err != nil {
+		log.Error("get runaways draft deck attach printings", "error", err, "deck_id", deckID)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	lines := make([]deckCardLineJSON, len(entries))
+	for i := range entries {
+		lines[i] = deckCardLineJSON{
+			CardID:    entries[i].CardID,
+			Mainboard: entries[i].Mainboard,
+			Count:     entries[i].Count,
+			Card:      cardToJSON(&entries[i].Card),
+		}
+	}
+
+	resp := deckDetailJSON{
+		Deck:     deckToJSON(deck),
+		Cards:    lines,
+		HeroCard: h.runawaysDraftHeroCardJSON(r.Context(), deck.HeroID),
+	}
+	writeCatalogJSON(w, http.StatusOK, resp)
+}
+
+func (h *runawaysDraftHTTP) runawaysDraftHeroCardJSON(ctx context.Context, heroID int) *cardJSON {
+	hero, err := h.app.Repo.HeroByID(ctx, heroID)
+	if err != nil || hero.CardID == nil || *hero.CardID <= 0 {
+		return nil
+	}
+	card, err := h.app.Repo.CardByID(ctx, *hero.CardID)
+	if err != nil {
+		return nil
+	}
+	if err := h.app.Repo.AttachPrintings(ctx, []*repository.Card{card}); err != nil {
+		return nil
+	}
+	j := cardToJSON(card)
+	return &j
+}
+
 func runawaysDraftAnalyticsToJSON(s *repository.RunawaysDraftAnalytics) map[string]any {
 	if s == nil {
 		return map[string]any{}
 	}
 
-	pitch := make([]runawaysDraftCountBucketJSON, 0, len(s.PitchBreakdown))
-	for _, b := range s.PitchBreakdown {
-		pitch = append(pitch, runawaysDraftCountBucketJSON(b))
-	}
-	cost := make([]runawaysDraftCountBucketJSON, 0, len(s.CostBreakdown))
-	for _, b := range s.CostBreakdown {
-		cost = append(cost, runawaysDraftCountBucketJSON(b))
-	}
-	types := make([]runawaysDraftTypeBucketJSON, 0, len(s.TypeBreakdown))
-	for _, b := range s.TypeBreakdown {
-		types = append(types, runawaysDraftTypeBucketJSON(b))
-	}
 	avgPitch := make([]runawaysDraftAvgBucketJSON, 0, len(s.AvgDeckPitchBreakdown))
 	for _, b := range s.AvgDeckPitchBreakdown {
 		avgPitch = append(avgPitch, runawaysDraftAvgBucketJSON(b))
@@ -229,23 +345,32 @@ func runawaysDraftAnalyticsToJSON(s *repository.RunawaysDraftAnalytics) map[stri
 	for _, b := range s.AvgDeckCostBreakdown {
 		avgCost = append(avgCost, runawaysDraftAvgBucketJSON(b))
 	}
+	avgType := make([]runawaysDraftAvgBucketJSON, 0, len(s.AvgDeckTypeBreakdown))
+	for _, b := range s.AvgDeckTypeBreakdown {
+		avgType = append(avgType, runawaysDraftAvgBucketJSON(b))
+	}
+	avgBlock := make([]runawaysDraftAvgBucketJSON, 0, len(s.AvgDeckBlockBreakdown))
+	for _, b := range s.AvgDeckBlockBreakdown {
+		avgBlock = append(avgBlock, runawaysDraftAvgBucketJSON(b))
+	}
+	avgAttackPower := make([]runawaysDraftAvgBucketJSON, 0, len(s.AvgDeckAttackPowerBreakdown))
+	for _, b := range s.AvgDeckAttackPowerBreakdown {
+		avgAttackPower = append(avgAttackPower, runawaysDraftAvgBucketJSON(b))
+	}
 
 	return map[string]any{
-		"deck_count":                s.DeckCount,
-		"total_copies":              s.TotalCopies,
-		"avg_copies_per_deck":       s.AvgCopiesPerDeck,
-		"avg_cost":                  s.AvgCost,
-		"avg_pitch":                 s.AvgPitch,
-		"avg_power":                 s.AvgPower,
-		"avg_defense":               s.AvgDefense,
-		"pitch_breakdown":           pitch,
-		"cost_breakdown":            cost,
-		"avg_deck_pitch_breakdown":  avgPitch,
-		"avg_deck_cost_breakdown":   avgCost,
-		"type_breakdown":            types,
-		"cards":                     runawaysDraftCardsToJSON(s.Cards),
-		"most_picked":               runawaysDraftCardsToJSON(s.MostPicked),
-		"least_picked":              runawaysDraftCardsToJSON(s.LeastPicked),
+		"deck_count":               s.DeckCount,
+		"avg_cost_per_deck":        s.AvgCostPerDeck,
+		"avg_pitch_per_deck":       s.AvgPitchPerDeck,
+		"avg_deck_pitch_breakdown": avgPitch,
+		"avg_deck_cost_breakdown":  avgCost,
+		"avg_deck_type_breakdown":  avgType,
+		"avg_deck_block_breakdown": avgBlock,
+		"avg_deck_attack_power_breakdown": avgAttackPower,
+		"cards":                    runawaysDraftCardsToJSON(s.Cards),
+		"most_picked":              runawaysDraftCardsToJSON(s.MostPicked),
+		"least_picked":             runawaysDraftCardsToJSON(s.LeastPicked),
+		"top_sideboard":            runawaysDraftCardsToJSON(s.TopSideboard),
 	}
 }
 

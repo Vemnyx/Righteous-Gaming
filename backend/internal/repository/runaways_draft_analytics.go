@@ -3,6 +3,9 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strconv"
+
+	"righteous-gaming/backend/internal/domain"
 )
 
 const RunawaysDraftSourceID = 3
@@ -62,20 +65,17 @@ type RunawaysDraftAvgBucket struct {
 // RunawaysDraftAnalytics is aggregated deck composition for a set + hero slice.
 type RunawaysDraftAnalytics struct {
 	DeckCount              int
-	TotalCopies            int
-	AvgCopiesPerDeck       float64
-	AvgCost                *float64
-	AvgPitch               *float64
-	AvgPower               *float64
-	AvgDefense             *float64
-	PitchBreakdown         []RunawaysDraftCountBucket
-	CostBreakdown          []RunawaysDraftCountBucket
-	AvgDeckPitchBreakdown  []RunawaysDraftAvgBucket
-	AvgDeckCostBreakdown   []RunawaysDraftAvgBucket
-	TypeBreakdown          []RunawaysDraftTypeBucket
+	AvgCostPerDeck         *float64
+	AvgPitchPerDeck        *float64
+	AvgDeckPitchBreakdown      []RunawaysDraftAvgBucket
+	AvgDeckCostBreakdown       []RunawaysDraftAvgBucket
+	AvgDeckTypeBreakdown       []RunawaysDraftAvgBucket
+	AvgDeckBlockBreakdown      []RunawaysDraftAvgBucket
+	AvgDeckAttackPowerBreakdown []RunawaysDraftAvgBucket
 	Cards                  []RunawaysDraftCardStat
 	MostPicked             []RunawaysDraftCardStat
 	LeastPicked            []RunawaysDraftCardStat
+	TopSideboard           []RunawaysDraftCardStat
 }
 
 // ListRunawaysDraftSets returns sets represented by decks with the given source id.
@@ -157,6 +157,12 @@ INNER JOIN decks d ON d.id = dc.deck_id`
 const runawaysDraftCardWhere = `
 WHERE d.deck_source_id = $1 AND d.set_id = $2 AND d.hero_id = $3 AND dc.mainboard = true`
 
+const runawaysDraftInventoryCardWhere = `
+WHERE d.deck_source_id = $1 AND d.set_id = $2 AND d.hero_id = $3 AND dc.mainboard = false`
+
+// Distribution stats exclude arena equipment and weapons; card type breakdown includes all types.
+const runawaysDraftDistributionCardFilter = ` AND c.type NOT IN (7, 14)` // domain.CardTypeEquipment, domain.CardTypeWeapon
+
 // RunawaysDraftAnalytics loads composition stats for decks matching source, set, and hero.
 func (r *Repository) RunawaysDraftAnalytics(ctx context.Context, deckSourceID, setID, heroID int) (*RunawaysDraftAnalytics, error) {
 	if r.pool == nil {
@@ -176,16 +182,7 @@ func (r *Repository) RunawaysDraftAnalytics(ctx context.Context, deckSourceID, s
 		return out, nil
 	}
 
-	if err := r.scanRunawaysDraftSummary(ctx, deckSourceID, setID, heroID, deckCount, out); err != nil {
-		return nil, err
-	}
-	if err := r.scanRunawaysDraftPitchBreakdown(ctx, deckSourceID, setID, heroID, out); err != nil {
-		return nil, err
-	}
-	if err := r.scanRunawaysDraftCostBreakdown(ctx, deckSourceID, setID, heroID, out); err != nil {
-		return nil, err
-	}
-	if err := r.scanRunawaysDraftTypeBreakdown(ctx, deckSourceID, setID, heroID, out); err != nil {
+	if err := r.scanRunawaysDraftPerDeckAverages(ctx, deckSourceID, setID, heroID, out); err != nil {
 		return nil, err
 	}
 	if err := r.scanRunawaysDraftAvgDeckPitchBreakdown(ctx, deckSourceID, setID, heroID, out); err != nil {
@@ -194,7 +191,19 @@ func (r *Repository) RunawaysDraftAnalytics(ctx context.Context, deckSourceID, s
 	if err := r.scanRunawaysDraftAvgDeckCostBreakdown(ctx, deckSourceID, setID, heroID, out); err != nil {
 		return nil, err
 	}
+	if err := r.scanRunawaysDraftAvgDeckTypeBreakdown(ctx, deckSourceID, setID, heroID, out); err != nil {
+		return nil, err
+	}
+	if err := r.scanRunawaysDraftAvgDeckBlockBreakdown(ctx, deckSourceID, setID, heroID, out); err != nil {
+		return nil, err
+	}
+	if err := r.scanRunawaysDraftAvgDeckAttackPowerBreakdown(ctx, deckSourceID, setID, heroID, out); err != nil {
+		return nil, err
+	}
 	if err := r.scanRunawaysDraftCards(ctx, deckSourceID, setID, heroID, deckCount, out); err != nil {
+		return nil, err
+	}
+	if err := r.scanRunawaysDraftTopSideboard(ctx, deckSourceID, setID, heroID, deckCount, out); err != nil {
 		return nil, err
 	}
 
@@ -235,99 +244,20 @@ func sortRunawaysCardsByPick(cards []RunawaysDraftCardStat, desc bool) {
 	}
 }
 
-func (r *Repository) scanRunawaysDraftSummary(ctx context.Context, deckSourceID, setID, heroID, deckCount int, out *RunawaysDraftAnalytics) error {
+func (r *Repository) scanRunawaysDraftPerDeckAverages(ctx context.Context, deckSourceID, setID, heroID int, out *RunawaysDraftAnalytics) error {
 	const q = `
-SELECT
-  COALESCE(SUM(dc.count), 0)::int AS total_copies,
-  COALESCE(SUM(dc.count)::float / $4, 0) AS avg_copies_per_deck,
-  SUM(c.cost * dc.count)::float / NULLIF(SUM(CASE WHEN c.cost IS NOT NULL THEN dc.count ELSE 0 END), 0) AS avg_cost,
-  SUM(c.pitch * dc.count)::float / NULLIF(SUM(CASE WHEN c.pitch IS NOT NULL THEN dc.count ELSE 0 END), 0) AS avg_pitch,
-  SUM(c.power * dc.count)::float / NULLIF(SUM(CASE WHEN c.power IS NOT NULL THEN dc.count ELSE 0 END), 0) AS avg_power,
-  SUM(c.block * dc.count)::float / NULLIF(SUM(CASE WHEN c.block IS NOT NULL THEN dc.count ELSE 0 END), 0) AS avg_defense
-` + runawaysDraftCardJoin + runawaysDraftCardWhere
+WITH deck_stats AS (
+  SELECT
+    d.id AS deck_id,
+    SUM(c.cost * dc.count)::float / NULLIF(SUM(CASE WHEN c.cost IS NOT NULL THEN dc.count ELSE 0 END), 0) AS avg_cost,
+    SUM(c.pitch * dc.count)::float / NULLIF(SUM(CASE WHEN c.pitch IS NOT NULL THEN dc.count ELSE 0 END), 0) AS avg_pitch
+` + runawaysDraftCardJoin + runawaysDraftCardWhere + runawaysDraftDistributionCardFilter + `
+  GROUP BY d.id
+)
+SELECT AVG(avg_cost), AVG(avg_pitch)
+FROM deck_stats`
 
-	return r.pool.QueryRow(ctx, q, deckSourceID, setID, heroID, deckCount).Scan(
-		&out.TotalCopies,
-		&out.AvgCopiesPerDeck,
-		&out.AvgCost,
-		&out.AvgPitch,
-		&out.AvgPower,
-		&out.AvgDefense,
-	)
-}
-
-func (r *Repository) scanRunawaysDraftPitchBreakdown(ctx context.Context, deckSourceID, setID, heroID int, out *RunawaysDraftAnalytics) error {
-	const q = `
-SELECT COALESCE(c.pitch::text, 'none') AS pitch_key, SUM(dc.count)::int AS cnt
-` + runawaysDraftCardJoin + runawaysDraftCardWhere + `
-GROUP BY c.pitch
-ORDER BY c.pitch NULLS LAST`
-
-	rows, err := r.pool.Query(ctx, q, deckSourceID, setID, heroID)
-	if err != nil {
-		return fmt.Errorf("repository: runaways pitch breakdown: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var key string
-		var count int
-		if err := rows.Scan(&key, &count); err != nil {
-			return err
-		}
-		label := pitchLabel(key)
-		out.PitchBreakdown = append(out.PitchBreakdown, RunawaysDraftCountBucket{Label: label, Key: key, Count: count})
-	}
-	return rows.Err()
-}
-
-func (r *Repository) scanRunawaysDraftCostBreakdown(ctx context.Context, deckSourceID, setID, heroID int, out *RunawaysDraftAnalytics) error {
-	const q = `
-SELECT COALESCE(c.cost::text, 'none') AS cost_key, SUM(dc.count)::int AS cnt
-` + runawaysDraftCardJoin + runawaysDraftCardWhere + `
-GROUP BY c.cost
-ORDER BY c.cost NULLS LAST`
-
-	rows, err := r.pool.Query(ctx, q, deckSourceID, setID, heroID)
-	if err != nil {
-		return fmt.Errorf("repository: runaways cost breakdown: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var key string
-		var count int
-		if err := rows.Scan(&key, &count); err != nil {
-			return err
-		}
-		label := costLabel(key)
-		out.CostBreakdown = append(out.CostBreakdown, RunawaysDraftCountBucket{Label: label, Key: key, Count: count})
-	}
-	return rows.Err()
-}
-
-func (r *Repository) scanRunawaysDraftTypeBreakdown(ctx context.Context, deckSourceID, setID, heroID int, out *RunawaysDraftAnalytics) error {
-	const q = `
-SELECT c.type::int, SUM(dc.count)::int AS cnt
-` + runawaysDraftCardJoin + runawaysDraftCardWhere + `
-GROUP BY c.type
-ORDER BY cnt DESC, c.type ASC`
-
-	rows, err := r.pool.Query(ctx, q, deckSourceID, setID, heroID)
-	if err != nil {
-		return fmt.Errorf("repository: runaways type breakdown: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var id int
-		var count int
-		if err := rows.Scan(&id, &count); err != nil {
-			return err
-		}
-		out.TypeBreakdown = append(out.TypeBreakdown, RunawaysDraftTypeBucket{ID: id, Count: count})
-	}
-	return rows.Err()
+	return r.pool.QueryRow(ctx, q, deckSourceID, setID, heroID).Scan(&out.AvgCostPerDeck, &out.AvgPitchPerDeck)
 }
 
 func (r *Repository) scanRunawaysDraftAvgDeckPitchBreakdown(ctx context.Context, deckSourceID, setID, heroID int, out *RunawaysDraftAnalytics) error {
@@ -336,7 +266,7 @@ WITH deck_pitch AS (
   SELECT d.id AS deck_id,
          COALESCE(c.pitch::text, 'none') AS pitch_key,
          SUM(dc.count)::float AS cnt
-` + runawaysDraftCardJoin + runawaysDraftCardWhere + `
+` + runawaysDraftCardJoin + runawaysDraftCardWhere + runawaysDraftDistributionCardFilter + `
   GROUP BY d.id, c.pitch
 )
 SELECT pitch_key, COALESCE(AVG(cnt), 0)::float8 AS avg_cnt
@@ -371,7 +301,7 @@ WITH deck_cost AS (
   SELECT d.id AS deck_id,
          COALESCE(c.cost::text, 'none') AS cost_key,
          SUM(dc.count)::float AS cnt
-` + runawaysDraftCardJoin + runawaysDraftCardWhere + `
+` + runawaysDraftCardJoin + runawaysDraftCardWhere + runawaysDraftDistributionCardFilter + `
   GROUP BY d.id, c.cost
 )
 SELECT cost_key, COALESCE(AVG(cnt), 0)::float8 AS avg_cnt
@@ -400,8 +330,151 @@ ORDER BY cost_key`
 	return rows.Err()
 }
 
-func (r *Repository) scanRunawaysDraftCards(ctx context.Context, deckSourceID, setID, heroID, deckCount int, out *RunawaysDraftAnalytics) error {
+func (r *Repository) scanRunawaysDraftAvgDeckTypeBreakdown(ctx context.Context, deckSourceID, setID, heroID int, out *RunawaysDraftAnalytics) error {
 	const q = `
+WITH deck_type AS (
+  SELECT d.id AS deck_id,
+         c.type::int AS type_id,
+         SUM(dc.count)::float AS cnt
+` + runawaysDraftCardJoin + runawaysDraftCardWhere + `
+  GROUP BY d.id, c.type
+)
+SELECT type_id::text, COALESCE(AVG(cnt), 0)::float8 AS avg_cnt
+FROM deck_type
+GROUP BY type_id
+ORDER BY avg_cnt DESC, type_id ASC`
+
+	rows, err := r.pool.Query(ctx, q, deckSourceID, setID, heroID)
+	if err != nil {
+		return fmt.Errorf("repository: runaways avg deck type breakdown: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var key string
+		var avgCount float64
+		if err := rows.Scan(&key, &avgCount); err != nil {
+			return err
+		}
+		out.AvgDeckTypeBreakdown = append(out.AvgDeckTypeBreakdown, RunawaysDraftAvgBucket{
+			Label:    typeLabel(key),
+			Key:      key,
+			AvgCount: avgCount,
+		})
+	}
+	return rows.Err()
+}
+
+func (r *Repository) scanRunawaysDraftAvgDeckBlockBreakdown(ctx context.Context, deckSourceID, setID, heroID int, out *RunawaysDraftAnalytics) error {
+	const q = `
+WITH per_deck AS (
+  SELECT d.id AS deck_id,
+         SUM(CASE WHEN c.block = 3 THEN dc.count ELSE 0 END)::float AS cnt_3,
+         SUM(CASE WHEN c.block = 2 THEN dc.count ELSE 0 END)::float AS cnt_2,
+         SUM(CASE WHEN c.block IS NULL THEN dc.count ELSE 0 END)::float AS cnt_none
+` + runawaysDraftCardJoin + runawaysDraftCardWhere + runawaysDraftDistributionCardFilter + `
+  GROUP BY d.id
+)
+SELECT block_key, COALESCE(AVG(cnt), 0)::float8 AS avg_cnt
+FROM (
+  SELECT '3' AS block_key, cnt_3 AS cnt FROM per_deck
+  UNION ALL SELECT '2', cnt_2 FROM per_deck
+  UNION ALL SELECT 'none', cnt_none FROM per_deck
+) buckets
+GROUP BY block_key
+ORDER BY CASE block_key WHEN '3' THEN 0 WHEN '2' THEN 1 WHEN 'none' THEN 2 ELSE 3 END, block_key`
+
+	rows, err := r.pool.Query(ctx, q, deckSourceID, setID, heroID)
+	if err != nil {
+		return fmt.Errorf("repository: runaways avg deck block breakdown: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var key string
+		var avgCount float64
+		if err := rows.Scan(&key, &avgCount); err != nil {
+			return err
+		}
+		out.AvgDeckBlockBreakdown = append(out.AvgDeckBlockBreakdown, RunawaysDraftAvgBucket{
+			Label:    blockLabel(key),
+			Key:      key,
+			AvgCount: avgCount,
+		})
+	}
+	return rows.Err()
+}
+
+func (r *Repository) scanRunawaysDraftAvgDeckAttackPowerBreakdown(ctx context.Context, deckSourceID, setID, heroID int, out *RunawaysDraftAnalytics) error {
+	const q = `
+WITH all_decks AS (
+  SELECT d.id AS deck_id
+` + runawaysDraftDeckFilter + `
+),
+deck_attack_power AS (
+  SELECT d.id AS deck_id,
+         COALESCE(c.power::text, 'none') AS power_key,
+         SUM(dc.count)::float AS cnt
+` + runawaysDraftCardJoin + runawaysDraftCardWhere + runawaysDraftDistributionCardFilter + `
+  AND c.type IN (1, 2)
+  GROUP BY d.id, c.power
+),
+power_keys AS (
+  SELECT DISTINCT power_key FROM deck_attack_power
+)
+SELECT pk.power_key,
+       COALESCE(AVG(COALESCE(dap.cnt, 0)), 0)::float8 AS avg_cnt
+FROM all_decks ad
+CROSS JOIN power_keys pk
+LEFT JOIN deck_attack_power dap ON dap.deck_id = ad.deck_id AND dap.power_key = pk.power_key
+GROUP BY pk.power_key
+ORDER BY CASE WHEN pk.power_key = 'none' THEN 1 ELSE 0 END, pk.power_key`
+
+	rows, err := r.pool.Query(ctx, q, deckSourceID, setID, heroID)
+	if err != nil {
+		return fmt.Errorf("repository: runaways avg deck attack power breakdown: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var key string
+		var avgCount float64
+		if err := rows.Scan(&key, &avgCount); err != nil {
+			return err
+		}
+		out.AvgDeckAttackPowerBreakdown = append(out.AvgDeckAttackPowerBreakdown, RunawaysDraftAvgBucket{
+			Label:    powerLabel(key),
+			Key:      key,
+			AvgCount: avgCount,
+		})
+	}
+	return rows.Err()
+}
+
+func (r *Repository) scanRunawaysDraftCards(ctx context.Context, deckSourceID, setID, heroID, deckCount int, out *RunawaysDraftAnalytics) error {
+	cards, err := r.queryRunawaysDraftCardStats(ctx, deckSourceID, setID, heroID, deckCount, runawaysDraftCardWhere)
+	if err != nil {
+		return err
+	}
+	out.Cards = cards
+	return nil
+}
+
+func (r *Repository) scanRunawaysDraftTopSideboard(ctx context.Context, deckSourceID, setID, heroID, deckCount int, out *RunawaysDraftAnalytics) error {
+	cards, err := r.queryRunawaysDraftCardStats(ctx, deckSourceID, setID, heroID, deckCount, runawaysDraftInventoryCardWhere)
+	if err != nil {
+		return err
+	}
+	const sideboardLimit = 10
+	if len(cards) > sideboardLimit {
+		cards = cards[:sideboardLimit]
+	}
+	out.TopSideboard = cards
+	return nil
+}
+
+func (r *Repository) queryRunawaysDraftCardStats(ctx context.Context, deckSourceID, setID, heroID, deckCount int, whereClause string) ([]RunawaysDraftCardStat, error) {
+	q := `
 SELECT
   c.id,
   c.name,
@@ -416,17 +489,18 @@ SELECT
   SUM(dc.count)::int AS total_copies,
   COUNT(DISTINCT dc.deck_id)::int AS decks_with_card,
   SUM(dc.count)::float / NULLIF(COUNT(DISTINCT dc.deck_id), 0) AS avg_copies_when_present
-` + runawaysDraftCardJoin + runawaysDraftCardWhere + `
+` + runawaysDraftCardJoin + whereClause + `
 GROUP BY c.id, c.name, c.card_identifier, cp.image_url, c.type, c.pitch, c.cost, c.power, c.block, cp.rarity
 ORDER BY decks_with_card DESC, total_copies DESC, c.name ASC`
 
 	rows, err := r.pool.Query(ctx, q, deckSourceID, setID, heroID)
 	if err != nil {
-		return fmt.Errorf("repository: runaways card stats: %w", err)
+		return nil, fmt.Errorf("repository: runaways card stats: %w", err)
 	}
 	defer rows.Close()
 
 	deckF := float64(deckCount)
+	out := make([]RunawaysDraftCardStat, 0, 64)
 	for rows.Next() {
 		var row RunawaysDraftCardStat
 		if err := rows.Scan(
@@ -434,14 +508,17 @@ ORDER BY decks_with_card DESC, total_copies DESC, c.name ASC`
 			&row.Type, &row.Pitch, &row.Cost, &row.Power, &row.Block, &row.Rarity,
 			&row.TotalCopies, &row.DecksWithCard, &row.AvgCopiesWhenPresent,
 		); err != nil {
-			return err
+			return nil, err
 		}
 		if deckF > 0 {
 			row.PickRate = float64(row.DecksWithCard) / deckF
 		}
-		out.Cards = append(out.Cards, row)
+		out = append(out, row)
 	}
-	return rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func pitchLabel(key string) string {
@@ -464,4 +541,98 @@ func costLabel(key string) string {
 		return "No cost"
 	}
 	return "Cost " + key
+}
+
+func blockLabel(key string) string {
+	switch key {
+	case "3":
+		return "3 block"
+	case "2":
+		return "2 block"
+	case "1":
+		return "1 block"
+	case "none":
+		return "No block"
+	default:
+		return "Block " + key
+	}
+}
+
+func powerLabel(key string) string {
+	if key == "none" {
+		return "No power"
+	}
+	return "Power " + key
+}
+
+func typeLabel(key string) string {
+	id, err := strconv.Atoi(key)
+	if err != nil {
+		return key
+	}
+	return domain.CardType(int16(id)).String()
+}
+
+// RunawaysDraftDeckRow is a deck summary for the runaways draft decklists tab.
+type RunawaysDraftDeckRow struct {
+	ID             int
+	Name           string
+	OwnerUsername  *string
+	OwnerEmail     string
+	MainboardCount int
+	FabraryLink    *string
+}
+
+// ListRunawaysDraftDecks returns decks for source + set + hero, ordered by name.
+func (r *Repository) ListRunawaysDraftDecks(ctx context.Context, deckSourceID, setID, heroID int) ([]RunawaysDraftDeckRow, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	if deckSourceID <= 0 || setID <= 0 || heroID <= 0 {
+		return nil, fmt.Errorf("repository: invalid runaways draft filter")
+	}
+	const q = `
+SELECT d.id, d.name, u.username, u.email,
+  COALESCE(SUM(CASE WHEN dc.mainboard THEN dc.count ELSE 0 END), 0)::int AS mainboard_count,
+  d.fabrary_link
+FROM decks d
+LEFT JOIN users u ON u.id = d.user_id
+LEFT JOIN deck_cards dc ON dc.deck_id = d.id
+WHERE d.deck_source_id = $1 AND d.set_id = $2 AND d.hero_id = $3
+GROUP BY d.id, d.name, u.username, u.email, d.fabrary_link
+ORDER BY LOWER(d.name) ASC, d.id ASC`
+
+	rows, err := r.pool.Query(ctx, q, deckSourceID, setID, heroID)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list runaways draft decks: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]RunawaysDraftDeckRow, 0, 64)
+	for rows.Next() {
+		var row RunawaysDraftDeckRow
+		if err := rows.Scan(&row.ID, &row.Name, &row.OwnerUsername, &row.OwnerEmail, &row.MainboardCount, &row.FabraryLink); err != nil {
+			return nil, fmt.Errorf("repository: scan runaways draft deck: %w", err)
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: list runaways draft decks rows: %w", err)
+	}
+	return out, nil
+}
+
+// GetRunawaysDraftDeck loads a deck and its cards when it belongs to the runaways draft slice.
+func (r *Repository) GetRunawaysDraftDeck(ctx context.Context, deckSourceID, setID, heroID, deckID int) (*Deck, []DeckCardEntry, error) {
+	deck, entries, err := r.GetDeckByID(ctx, deckID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if deck.DeckSourceID != deckSourceID {
+		return nil, nil, ErrDeckNotFound
+	}
+	if deck.SetID == nil || *deck.SetID != setID || deck.HeroID != heroID {
+		return nil, nil, ErrDeckNotFound
+	}
+	return deck, entries, nil
 }
