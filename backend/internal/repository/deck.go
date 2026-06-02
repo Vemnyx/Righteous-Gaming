@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -349,4 +350,48 @@ LIMIT 1`
 		return nil, nil
 	}
 	return &setID, nil
+}
+
+// DeckExistsByFabraryLink reports whether userID already has a deck with the given Fabrary link.
+func (r *Repository) DeckExistsByFabraryLink(ctx context.Context, userID int, fabraryLink string) (bool, error) {
+	if r.pool == nil {
+		return false, fmt.Errorf("repository: pool is closed")
+	}
+	link := strings.TrimSpace(fabraryLink)
+	if userID <= 0 || link == "" {
+		return false, nil
+	}
+	const q = `SELECT 1 FROM decks WHERE user_id = $1 AND fabrary_link = $2 LIMIT 1`
+	var one int
+	err := r.pool.QueryRow(ctx, q, userID, link).Scan(&one)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("repository: deck by fabrary link: %w", err)
+	}
+	return true, nil
+}
+
+// UpdateDeckName sets the display name for a deck row.
+func (r *Repository) UpdateDeckName(ctx context.Context, deckID int, name string) error {
+	if r.pool == nil {
+		return fmt.Errorf("repository: pool is closed")
+	}
+	name = strings.TrimSpace(name)
+	if deckID <= 0 {
+		return fmt.Errorf("repository: deck_id required")
+	}
+	if name == "" {
+		return fmt.Errorf("repository: name required")
+	}
+	const q = `UPDATE decks SET name = $2 WHERE id = $1`
+	tag, err := r.pool.Exec(ctx, q, deckID, name)
+	if err != nil {
+		return fmt.Errorf("repository: update deck name: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrDeckNotFound
+	}
+	return nil
 }

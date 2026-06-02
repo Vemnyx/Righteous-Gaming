@@ -23,6 +23,50 @@ import {
 
 const CREATE_SOURCE_VALUE = "__create__";
 
+/** 5 rows × 2 columns on sm+ */
+const DECKS_PAGE_SIZE = 10;
+
+/**
+ * @param {{ pageIndex: number, pageSize: number, total: number, onPageChange: (nextIndex: number) => void, disabled?: boolean }} props
+ */
+function DeckListPagination({ pageIndex, pageSize, total, onPageChange, disabled }) {
+  const totalPages = Math.max(1, Math.ceil(Math.max(0, total) / pageSize));
+  const safeIndex = Math.min(Math.max(0, pageIndex), totalPages - 1);
+  const start = total === 0 ? 0 : safeIndex * pageSize + 1;
+  const end = Math.min(total, (safeIndex + 1) * pageSize);
+
+  if (total <= pageSize) return null;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.08] pt-3">
+      <p className="m-0 text-[0.8rem] text-[#f4f0fa]/60">
+        Showing {start}–{end} of {total}
+      </p>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={disabled || safeIndex <= 0}
+          className="rounded-lg border border-white/[0.18] bg-black/30 px-3 py-1.5 text-[0.78rem] font-semibold text-[#f4f0fa]/90 disabled:cursor-not-allowed disabled:opacity-45 hover:bg-white/[0.06]"
+          onClick={() => onPageChange(safeIndex - 1)}
+        >
+          Previous
+        </button>
+        <span className="text-[0.78rem] tabular-nums text-[#f4f0fa]/70">
+          Page {safeIndex + 1} of {totalPages}
+        </span>
+        <button
+          type="button"
+          disabled={disabled || safeIndex >= totalPages - 1}
+          className="rounded-lg border border-white/[0.18] bg-black/30 px-3 py-1.5 text-[0.78rem] font-semibold text-[#f4f0fa]/90 disabled:cursor-not-allowed disabled:opacity-45 hover:bg-white/[0.06]"
+          onClick={() => onPageChange(safeIndex + 1)}
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * @param {string | undefined | null} errText
  * @returns {string}
@@ -76,6 +120,7 @@ export function DecksList({ isLight, active, onOpenDeck }) {
   const [filterMemberUser, setFilterMemberUser] = useState(DECK_FILTER_ALL);
   const [filterUsers, setFilterUsers] = useState(/** @type {DeckFilterUser[]} */ ([]));
   const [filterUsersLoading, setFilterUsersLoading] = useState(false);
+  const [pageIndex, setPageIndex] = useState(0);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -198,6 +243,18 @@ export function DecksList({ isLight, active, onOpenDeck }) {
       ),
     [rows, filterFormat, filterHero, filterSource, filterMemberUser, showMemberUserFilter],
   );
+
+  useEffect(() => {
+    setPageIndex(0);
+  }, [filterFormat, filterHero, filterSource, filterMemberUser]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / DECKS_PAGE_SIZE));
+  const safePageIndex = Math.min(Math.max(0, pageIndex), totalPages - 1);
+
+  const paginatedRows = useMemo(() => {
+    const start = safePageIndex * DECKS_PAGE_SIZE;
+    return filteredRows.slice(start, start + DECKS_PAGE_SIZE);
+  }, [filteredRows, safePageIndex]);
 
   const loadDeckSources = useCallback(async () => {
     if (!user) return /** @type {DeckSourceOption[]} */ ([]);
@@ -449,18 +506,7 @@ export function DecksList({ isLight, active, onOpenDeck }) {
     : "w-full rounded-lg border border-white/[0.22] bg-black/40 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55";
 
   return (
-    <div className="flex w-full flex-1 flex-col gap-4 px-1 py-2 sm:px-2">
-      <div className="flex justify-end">
-        <button
-          type="button"
-          className={`shrink-0 ${btnPrimary}`}
-          disabled={!user || loading}
-          onClick={openImportModal}
-        >
-          Import From Fabrary
-        </button>
-      </div>
-
+    <div className="flex w-full flex-1 flex-col gap-2 px-1 py-1 sm:px-2">
       {error ? (
         <div
           className="rounded-xl border border-red-400/35 bg-red-950/40 px-4 py-3 text-left text-[0.875rem] text-red-100/95"
@@ -474,38 +520,38 @@ export function DecksList({ isLight, active, onOpenDeck }) {
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
-        <label className="flex min-w-[10rem] flex-1 flex-col gap-1 sm:max-w-[14rem]">
-          <span className="text-[0.72rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">Format</span>
-          <select
-            className={selectCls}
-            value={filterFormat}
-            disabled={loading || rows.length === 0}
-            onChange={(e) => setFilterFormat(e.target.value)}
-          >
-            {formatFilterOptions.map((opt) => (
-              <option key={opt.value || "all"} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex min-w-[10rem] flex-1 flex-col gap-1 sm:max-w-[14rem]">
-          <span className="text-[0.72rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">Hero</span>
-          <select
-            className={selectCls}
-            value={filterHero}
-            disabled={loading || rows.length === 0}
-            onChange={(e) => setFilterHero(e.target.value)}
-          >
-            {heroFilterOptions.map((opt) => (
-              <option key={opt.value || "all"} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+      <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-end gap-2">
+          <label className="flex min-w-[10rem] flex-1 flex-col gap-1 sm:max-w-[14rem]">
+            <span className="text-[0.72rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">Format</span>
+            <select
+              className={selectCls}
+              value={filterFormat}
+              disabled={loading || rows.length === 0}
+              onChange={(e) => setFilterFormat(e.target.value)}
+            >
+              {formatFilterOptions.map((opt) => (
+                <option key={opt.value || "all"} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex min-w-[10rem] flex-1 flex-col gap-1 sm:max-w-[14rem]">
+            <span className="text-[0.72rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">Hero</span>
+            <select
+              className={selectCls}
+              value={filterHero}
+              disabled={loading || rows.length === 0}
+              onChange={(e) => setFilterHero(e.target.value)}
+            >
+              {heroFilterOptions.map((opt) => (
+                <option key={opt.value || "all"} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="flex min-w-[10rem] flex-1 flex-col gap-1 sm:max-w-[14rem]">
             <span className="text-[0.72rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">Source</span>
             <select
@@ -541,6 +587,14 @@ export function DecksList({ isLight, active, onOpenDeck }) {
             </label>
           ) : null}
         </div>
+        <button
+          type="button"
+          className={`shrink-0 self-end ${btnPrimary}`}
+          disabled={!user || loading}
+          onClick={openImportModal}
+        >
+          Import From Fabrary
+        </button>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -563,7 +617,7 @@ export function DecksList({ isLight, active, onOpenDeck }) {
             No decks match the selected filters.
           </div>
         ) : (
-          filteredRows.map((row) => {
+          paginatedRows.map((row) => {
             const fmtLabel = deckFormatColumnLabel(row, setNameById);
             const heroLabel = deckHeroLabel(row);
             const displayName = deckDisplayName(row, setNameById);
@@ -612,6 +666,16 @@ export function DecksList({ isLight, active, onOpenDeck }) {
           })
         )}
       </div>
+
+      {!loading && filteredRows.length > 0 ? (
+        <DeckListPagination
+          pageIndex={safePageIndex}
+          pageSize={DECKS_PAGE_SIZE}
+          total={filteredRows.length}
+          disabled={loading}
+          onPageChange={setPageIndex}
+        />
+      ) : null}
 
       {importModalOpen && typeof document !== "undefined"
         ? createPortal(

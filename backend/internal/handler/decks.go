@@ -3,14 +3,13 @@ package handler
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"righteous-gaming/backend/internal/app"
+	"righteous-gaming/backend/internal/deckimport"
 	"righteous-gaming/backend/internal/domain"
-	"righteous-gaming/backend/internal/fabrary"
 	"righteous-gaming/backend/internal/repository"
 	"righteous-gaming/backend/internal/service"
 	"righteous-gaming/backend/log"
@@ -404,198 +403,41 @@ func (h *decksHTTP) importFabraryDeck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deckID, normalizedLink, err := fabrary.ParseDeckURL(link)
+	result, err := deckimport.ImportFabrary(r.Context(), h.app.Repo, u.ID, body.DeckSourceID, link, nil)
 	if err != nil {
-		writeFieldError(w, http.StatusBadRequest, "fabrary_link", err.Error())
-		return
-	}
-
-	ctx := r.Context()
-	fetched, err := fabrary.FetchDeck(ctx, deckID)
-	if err != nil {
-		log.Error("import fabrary deck fetch", "error", err, "deck_id", deckID)
-		writeMessageError(w, http.StatusBadGateway, "could not load deck from Fabrary")
-		return
-	}
-
-	format, err := fabrary.FormatFromFabrary(fetched.Format)
-	if err != nil {
-		writeFieldError(w, http.StatusBadRequest, "fabrary_link", fmt.Sprintf("unsupported format: %s", fetched.Format))
-		return
-	}
-	if !domain.CardFormat(format).Valid() {
-		writeFieldError(w, http.StatusBadRequest, "fabrary_link", "unsupported format")
-		return
-	}
-
-	heroID, err := resolveFabraryHeroID(ctx, h.app.Repo, fetched.HeroIdentifier)
-	if err != nil {
-		writeFieldError(w, http.StatusBadRequest, "fabrary_link", err.Error())
-		return
-	}
-
-	idMap, err := h.app.Repo.ListCardIDsByIdentifierLower(ctx)
-	if err != nil {
-		log.Error("import fabrary deck card map", "error", err)
-		writeMessageError(w, http.StatusInternalServerError, "internal server error")
-		return
-	}
-
-	cardInputs, unknown := mapFabraryDeckCards(fetched, idMap)
-	if len(unknown) > 0 {
-		writeCatalogJSON(w, http.StatusBadRequest, map[string]any{
-			"message":       "some cards were not found in the catalog",
-			"unknown_cards": unknown,
-		})
-		return
-	}
-	if len(cardInputs) == 0 {
-		writeMessageError(w, http.StatusBadRequest, "deck has no importable cards")
-		return
-	}
-
-	linkCopy := normalizedLink
-	setID, fabraryFormat := limitedDeckSetFields(ctx, h.app.Repo, format, fetched.Format, cardInputs)
-	created, err := h.app.Repo.CreateDeckWithCards(ctx, repository.CreateDeckInput{
-		UserID:        u.ID,
-		Name:          fetched.Name,
-		Format:        format,
-		HeroID:        heroID,
-		SetID:         setID,
-		FabraryFormat: fabraryFormat,
-		DeckSourceID:  body.DeckSourceID,
-		FabraryLink:   &linkCopy,
-	}, cardInputs)
-	if err != nil {
-		log.Error("import fabrary deck insert", "error", err, "user_id", u.ID)
+		var unknown *deckimport.ErrUnknownCards
+		if errors.As(err, &unknown) {
+			writeCatalogJSON(w, http.StatusBadRequest, map[string]any{
+				"message":       "some cards were not found in the catalog",
+				"unknown_cards": unknown.Unknown,
+			})
+			return
+		}
+		if strings.Contains(err.Error(), "invalid deck_source_id") {
+			writeFieldError(w, http.StatusBadRequest, "deck_source_id", "invalid deck source")
+			return
+		}
+		if strings.Contains(err.Error(), "unsupported format") ||
+			strings.Contains(err.Error(), "deck has no hero") ||
+			strings.Contains(err.Error(), "hero not found") ||
+			strings.Contains(err.Error(), "unsupported hero") ||
+			strings.Contains(err.Error(), "fabrary:") ||
+			strings.Contains(err.Error(), "deck has no importable cards") {
+			writeFieldError(w, http.StatusBadRequest, "fabrary_link", err.Error())
+			return
+		}
+		if strings.Contains(err.Error(), "could not load deck from Fabrary") {
+			log.Error("import fabrary deck fetch", "error", err)
+			writeMessageError(w, http.StatusBadGateway, "could not load deck from Fabrary")
+			return
+		}
+		log.Error("import fabrary deck", "error", err, "user_id", u.ID)
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
 	writeCatalogJSON(w, http.StatusCreated, importFabraryDeckResponse{
-		Deck:          deckToJSON(created),
-		CardsImported: sumDeckCardCounts(cardInputs),
+		Deck:          deckToJSON(result.Deck),
+		CardsImported: result.CardsImported,
 	})
-}
-
-func sumDeckCardCounts(cards []repository.DeckCardInput) int {
-	n := 0
-	for _, c := range cards {
-		if c.Count > 0 {
-			n += c.Count
-		} else {
-			n++
-		}
-	}
-	return n
-}
-
-// limitedDeckSetFields returns set_id and fabrary_format only for Draft, Limited, or Sealed.
-func limitedDeckSetFields(
-	ctx context.Context,
-	repo *repository.Repository,
-	format int16,
-	fabraryFormatRaw string,
-	cards []repository.DeckCardInput,
-) (*int, *string) {
-	if format != int16(domain.CardFormatLimited) {
-		return nil, nil
-	}
-	raw := strings.TrimSpace(fabraryFormatRaw)
-	if !fabrary.IsLimitedFamilyFormatLabel(raw) {
-		return nil, nil
-	}
-	label := raw
-	fabFormat := &label
-
-	ids := make([]int, 0, len(cards))
-	seen := make(map[int]struct{}, len(cards))
-	for _, c := range cards {
-		if c.CardID <= 0 {
-			continue
-		}
-		if _, ok := seen[c.CardID]; ok {
-			continue
-		}
-		seen[c.CardID] = struct{}{}
-		ids = append(ids, c.CardID)
-	}
-	setID, err := repo.MajoritySetIDForCardIDs(ctx, ids)
-	if err != nil {
-		return nil, fabFormat
-	}
-	return setID, fabFormat
-}
-
-func resolveFabraryHeroID(ctx context.Context, repo *repository.Repository, heroIdentifier string) (int, error) {
-	ident := strings.ToLower(strings.TrimSpace(heroIdentifier))
-	if ident == "" {
-		return 0, fmt.Errorf("deck has no hero")
-	}
-
-	if heroID, err := repo.HeroIDByCardIdentifier(ctx, ident); err == nil {
-		return heroID, nil
-	} else if !errors.Is(err, repository.ErrHeroNotFound) {
-		return 0, fmt.Errorf("could not resolve hero")
-	}
-
-	heroType, err := fabrary.HeroFromIdentifier(heroIdentifier)
-	if err != nil {
-		return 0, err
-	}
-	if !domain.CardHero(heroType).Valid() {
-		return 0, fmt.Errorf("unsupported hero")
-	}
-
-	heroID, err := repo.HeroIDByType(ctx, heroType)
-	if err != nil {
-		if errors.Is(err, repository.ErrHeroNotFound) {
-			return 0, fmt.Errorf("hero not found in catalog")
-		}
-		return 0, fmt.Errorf("could not resolve hero")
-	}
-	return heroID, nil
-}
-
-func mapFabraryDeckCards(fetched *fabrary.Deck, idMap map[string]int) ([]repository.DeckCardInput, []string) {
-	type rowKey struct {
-		cardID    int
-		mainboard bool
-	}
-	counts := make(map[rowKey]int)
-	unknownSeen := make(map[string]struct{})
-	var unknown []string
-
-	for _, line := range fetched.Cards {
-		ident := strings.ToLower(strings.TrimSpace(line.CardIdentifier))
-		if ident == "" {
-			continue
-		}
-		cardID, ok := idMap[ident]
-		if !ok {
-			if _, seen := unknownSeen[line.CardIdentifier]; !seen {
-				unknownSeen[line.CardIdentifier] = struct{}{}
-				unknown = append(unknown, line.CardIdentifier)
-			}
-			continue
-		}
-		if line.MainboardQuantity > 0 {
-			k := rowKey{cardID: cardID, mainboard: true}
-			counts[k] += line.MainboardQuantity
-		}
-		if line.SideboardQuantity > 0 {
-			k := rowKey{cardID: cardID, mainboard: false}
-			counts[k] += line.SideboardQuantity
-		}
-	}
-
-	out := make([]repository.DeckCardInput, 0, len(counts))
-	for k, count := range counts {
-		out = append(out, repository.DeckCardInput{
-			CardID:    k.cardID,
-			Mainboard: k.mainboard,
-			Count:     count,
-		})
-	}
-	return out, unknown
 }

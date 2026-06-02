@@ -11,13 +11,16 @@ function limitedFormatSuffix(fabraryFormat) {
 }
 
 /**
- * Table/list display name for a deck. Limited-family formats with a set show "{Set Name} Draft|Limited|Sealed".
+ * Table/list display name for a deck. Prefer the stored deck name (e.g. Fabrary import title).
  *
  * @param {{ name: string, format: number, set_id?: number | null, fabrary_format?: string | null }} deck
  * @param {Record<number, string>} setNameById
  * @returns {string}
  */
 export function deckDisplayName(deck, setNameById) {
+  const name = deck.name != null ? String(deck.name).trim() : "";
+  if (name) return name;
+
   const suffix = limitedFormatSuffix(deck.fabrary_format);
   if (
     deck.format === CardFormat.Limited &&
@@ -30,5 +33,5 @@ export function deckDisplayName(deck, setNameById) {
       return `${setName} ${suffix}`;
     }
   }
-  return deck.name;
+  return name;
 }
