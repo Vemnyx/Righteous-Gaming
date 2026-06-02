@@ -104,7 +104,7 @@ ORDER BY cr.started_at ASC, cr.id ASC`
 	}
 
 	const ratingsQ = `
-SELECT ucr.rater_id, ucr.card_id, c.name, ucr.rating
+SELECT ucr.rater_id, ucr.card_id, c.name, c.pitch, ucr.rating
 FROM user_card_ratings ucr
 INNER JOIN card_rater cr ON cr.id = ucr.rater_id
 INNER JOIN cards c ON c.id = ucr.card_id
@@ -124,13 +124,14 @@ WHERE ucr.user_id = $1 AND cr.set_id = $2`
 	for ratingRows.Next() {
 		var raterID, cardID int
 		var cardName string
+		var pitch *int16
 		var rating int16
-		if err := ratingRows.Scan(&raterID, &cardID, &cardName, &rating); err != nil {
+		if err := ratingRows.Scan(&raterID, &cardID, &cardName, &pitch, &rating); err != nil {
 			return nil, "", fmt.Errorf("repository: export card ratings rows scan: %w", err)
 		}
 		ratingsByKey[ratingKey{RaterID: raterID, CardID: cardID}] = rating
 		if _, ok := cardNames[cardID]; !ok {
-			cardNames[cardID] = cardName
+			cardNames[cardID] = cardExportDisplayName(cardName, pitch)
 		}
 	}
 	if err := ratingRows.Err(); err != nil {
@@ -205,6 +206,31 @@ WHERE ucr.user_id = $1 AND cr.set_id = $2`
 
 // ErrUserCardRatingsExportEmpty is returned when the user has no ratings to export for the set.
 var ErrUserCardRatingsExportEmpty = errors.New("repository: no card ratings to export")
+
+func cardExportDisplayName(name string, pitch *int16) string {
+	name = strings.TrimSpace(name)
+	if pitch == nil {
+		return name
+	}
+	color := pitchExportColor(*pitch)
+	if color == "" {
+		return name
+	}
+	return name + " - " + color
+}
+
+func pitchExportColor(pitch int16) string {
+	switch pitch {
+	case 1:
+		return "Red"
+	case 2:
+		return "Yellow"
+	case 3:
+		return "Blue"
+	default:
+		return ""
+	}
+}
 
 func cardRaterSessionExportHeader(sess userCardRatingsExportSession) string {
 	name := ""
