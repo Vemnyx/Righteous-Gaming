@@ -338,15 +338,6 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
 
   return (
     <div className="flex w-full flex-1 flex-col gap-4 px-1 py-2 sm:px-2">
-      <header className="flex flex-col gap-1">
-        <h2 className="m-0 text-left text-xl font-semibold tracking-tight text-[#f4f0fa] sm:text-2xl">
-          Runaways Drafts
-        </h2>
-        <p className="m-0 text-[0.85rem] text-[#f4f0fa]/65">
-          Composition stats across Runaways Draft submissions (mainboard cards).
-        </p>
-      </header>
-
       {error ? (
         <div
           className="rounded-xl border border-red-400/35 bg-red-950/40 px-4 py-3 text-left text-[0.875rem] text-red-100/95"
