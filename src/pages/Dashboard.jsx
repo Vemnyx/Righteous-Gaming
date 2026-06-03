@@ -14,6 +14,8 @@ import { CardRatingsList } from "../components/CardRatingsList";
 import { RunawaysDraftsAnalytics } from "../components/RunawaysDraftsAnalytics";
 import { DecksList } from "../components/DecksList";
 import { DeckDetailPage } from "../components/DeckDetailPage";
+import { RecordingsList } from "../components/RecordingsList";
+import { RecordingDetailPage } from "../components/RecordingDetailPage";
 import { SetsAdmin } from "../components/SetsAdmin";
 import { UserAccountMenu } from "../components/UserAccountMenu";
 import { UserSettings } from "../components/UserSettings";
@@ -46,6 +48,7 @@ const FALLBACK_TAB_ID = "announcements";
 const RESOURCE_SUB_LINKS = [
   { segment: "cards", label: "Cards", path: "/resources/cards" },
   { segment: "decks", label: "Decks", path: "/resources/decks" },
+  { segment: "recordings", label: "Recordings", path: "/resources/recordings" },
   { segment: "card-rater", label: "Card Rater", path: "/resources/card-rater" },
 ];
 
@@ -73,6 +76,7 @@ const ADMIN_SUB_LINKS = [
  * @param {string | null} [dataChild] — segment after `/data/`, e.g. `card-ratings`
  * @param {string | null} [dataCardRaterId] — numeric id for `/data/card-ratings/:id` analytics
  * @param {string | null} [resourcesDeckId] — numeric id for `/resources/decks/:id`
+ * @param {string | null} [resourcesRecordingId] — numeric id for `/resources/recordings/:id`
  */
 function buildDashboardPathname(
   tabId,
@@ -84,6 +88,7 @@ function buildDashboardPathname(
   dataChild = null,
   dataCardRaterId = null,
   resourcesDeckId = null,
+  resourcesRecordingId = null,
 ) {
   if (tabId === SETTINGS_TAB_ID) return "/settings";
   if (tabId === DATA_TAB_ID) {
@@ -126,6 +131,7 @@ function buildDashboardPathname(
     const seg =
       resourcesChild === "cards" ||
       resourcesChild === "decks" ||
+      resourcesChild === "recordings" ||
       resourcesChild === "card-rater" ||
       resourcesChild === "card-rater-play"
         ? resourcesChild
@@ -160,6 +166,16 @@ function buildDashboardPathname(
       }
       return "/resources/decks";
     }
+    if (seg === "recordings") {
+      const rawId = resourcesRecordingId != null ? String(resourcesRecordingId).trim() : "";
+      if (rawId !== "") {
+        const rid = parseInt(rawId, 10);
+        if (Number.isFinite(rid) && rid > 0 && String(rid) === rawId) {
+          return `/resources/recordings/${rid}`;
+        }
+      }
+      return "/resources/recordings";
+    }
     return `/resources/${seg}`;
   }
   return `/${tabId}`;
@@ -175,6 +191,7 @@ function replaceDashboardUrl(
   dataChild = null,
   dataCardRaterId = null,
   resourcesDeckId = null,
+  resourcesRecordingId = null,
 ) {
   try {
     const u = new URL(window.location.href);
@@ -188,6 +205,7 @@ function replaceDashboardUrl(
       dataChild,
       dataCardRaterId,
       resourcesDeckId,
+      resourcesRecordingId,
     );
     u.search = "";
     const next = `${u.pathname}${u.search}${u.hash}`;
@@ -208,6 +226,7 @@ function pushDashboardUrl(
   dataChild = null,
   dataCardRaterId = null,
   resourcesDeckId = null,
+  resourcesRecordingId = null,
 ) {
   try {
     const u = new URL(window.location.href);
@@ -221,6 +240,7 @@ function pushDashboardUrl(
       dataChild,
       dataCardRaterId,
       resourcesDeckId,
+      resourcesRecordingId,
     );
     u.search = "";
     const next = `${u.pathname}${u.search}${u.hash}`;
@@ -324,6 +344,36 @@ function parseDashboardPathname(pathname) {
           resourcesCardIdentifier: null,
           resourcesCardRaterId: null,
           resourcesDeckId: String(did),
+          adminChild: null,
+          adminAnnouncementForm: null,
+        };
+      }
+      return { kind: "invalid" };
+    }
+    if (b === "recordings") {
+      if (c === undefined) {
+        return {
+          kind: "ok",
+          tabId: RESOURCES_TAB_ID,
+          resourcesChild: "recordings",
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
+          resourcesDeckId: null,
+          resourcesRecordingId: null,
+          adminChild: null,
+          adminAnnouncementForm: null,
+        };
+      }
+      const rid = parseInt(String(c), 10);
+      if (Number.isFinite(rid) && rid > 0 && String(rid) === String(c)) {
+        return {
+          kind: "ok",
+          tabId: RESOURCES_TAB_ID,
+          resourcesChild: "recordings",
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
+          resourcesDeckId: null,
+          resourcesRecordingId: String(rid),
           adminChild: null,
           adminAnnouncementForm: null,
         };
@@ -651,6 +701,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
     resourcesCardIdentifier,
     resourcesCardRaterId,
     resourcesDeckId: parsed.resourcesDeckId ?? null,
+    resourcesRecordingId: parsed.resourcesRecordingId ?? null,
     adminChild,
     adminAnnouncementForm,
     dataChild,
@@ -802,6 +853,8 @@ export default function Dashboard({ onNavigate }) {
   const [resourcesCardRaterId, setResourcesCardRaterId] = useState(/** @type {string | null} */ (null));
   /** Numeric `decks.id` when URL is `/resources/decks/:id`. */
   const [resourcesDeckId, setResourcesDeckId] = useState(/** @type {string | null} */ (null));
+  /** Numeric `recordings.id` when URL is `/resources/recordings/:id`. */
+  const [resourcesRecordingId, setResourcesRecordingId] = useState(/** @type {string | null} */ (null));
   /** True while showing CardRanker at `/resources/card-rater` (active session; no id in URL). */
   const [cardRaterPlayAtRoot, setCardRaterPlayAtRoot] = useState(false);
   /** When `activeTab === admin`, which sub-route is shown (`/admin/...`). */
@@ -863,6 +916,7 @@ export default function Dashboard({ onNavigate }) {
       setResourcesCardIdentifier(null);
       setResourcesCardRaterId(null);
       setResourcesDeckId(null);
+      setResourcesRecordingId(null);
       setCardRaterPlayAtRoot(false);
       setAdminChild(null);
       setAdminAnnouncementForm(null);
@@ -875,6 +929,7 @@ export default function Dashboard({ onNavigate }) {
       setResourcesCardIdentifier(null);
       setResourcesCardRaterId(null);
       setResourcesDeckId(null);
+      setResourcesRecordingId(null);
       setCardRaterPlayAtRoot(false);
       setAdminAnnouncementForm(null);
       setDataChild(null);
@@ -887,6 +942,7 @@ export default function Dashboard({ onNavigate }) {
       setResourcesCardIdentifier(null);
       setResourcesCardRaterId(null);
       setResourcesDeckId(null);
+      setResourcesRecordingId(null);
       setCardRaterPlayAtRoot(false);
       setAdminChild(null);
       setAdminAnnouncementForm(null);
@@ -896,6 +952,7 @@ export default function Dashboard({ onNavigate }) {
       setResourcesCardIdentifier(null);
       setResourcesCardRaterId(null);
       setResourcesDeckId(null);
+      setResourcesRecordingId(null);
       setCardRaterPlayAtRoot(false);
       setAdminChild(null);
       setAdminAnnouncementForm(null);
@@ -914,6 +971,7 @@ export default function Dashboard({ onNavigate }) {
     setResourcesCardIdentifier(null);
     setResourcesCardRaterId(null);
     setResourcesDeckId(null);
+    setResourcesRecordingId(null);
     if (segment === "card-rater") setCardRaterPlayAtRoot(false);
     setAdminChild(null);
     setAdminAnnouncementForm(null);
@@ -969,6 +1027,7 @@ export default function Dashboard({ onNavigate }) {
     setResourcesCardIdentifier(id);
     setResourcesCardRaterId(null);
     setResourcesDeckId(null);
+    setResourcesRecordingId(null);
     setCardRaterPlayAtRoot(false);
     setAdminChild(null);
     setAdminAnnouncementForm(null);
@@ -983,6 +1042,7 @@ export default function Dashboard({ onNavigate }) {
     setActiveTab(RESOURCES_TAB_ID);
     setResourcesChild("decks");
     setResourcesDeckId(sid);
+    setResourcesRecordingId(null);
     setResourcesCardIdentifier(null);
     setResourcesCardRaterId(null);
     setCardRaterPlayAtRoot(false);
@@ -996,7 +1056,30 @@ export default function Dashboard({ onNavigate }) {
   const closeDeckDetail = useCallback(() => {
     setResourcesChild("decks");
     setResourcesDeckId(null);
-    pushDashboardUrl(RESOURCES_TAB_ID, "decks", null, null, null, null, null, null, null);
+    pushDashboardUrl(RESOURCES_TAB_ID, "decks", null, null, null, null, null, null, null, null);
+  }, []);
+
+  const openRecordingDetail = useCallback((recordingId) => {
+    const sid = String(recordingId).trim();
+    if (!/^\d+$/.test(sid)) return;
+    setActiveTab(RESOURCES_TAB_ID);
+    setResourcesChild("recordings");
+    setResourcesRecordingId(sid);
+    setResourcesCardIdentifier(null);
+    setResourcesCardRaterId(null);
+    setResourcesDeckId(null);
+    setCardRaterPlayAtRoot(false);
+    setAdminChild(null);
+    setAdminAnnouncementForm(null);
+    setDataChild(null);
+    setDataCardRaterId(null);
+    pushDashboardUrl(RESOURCES_TAB_ID, "recordings", null, null, null, null, null, null, null, sid);
+  }, []);
+
+  const closeRecordingDetail = useCallback(() => {
+    setResourcesChild("recordings");
+    setResourcesRecordingId(null);
+    pushDashboardUrl(RESOURCES_TAB_ID, "recordings", null, null, null, null, null, null, null, null);
   }, []);
 
   const openDataCardRaterAnalytics = useCallback((raterId) => {
@@ -1061,6 +1144,7 @@ export default function Dashboard({ onNavigate }) {
       const nextRaterId =
         nextTab === RESOURCES_TAB_ID ? resolved.resourcesCardRaterId : null;
       const nextDeckId = nextTab === RESOURCES_TAB_ID ? resolved.resourcesDeckId : null;
+      const nextRecordingId = nextTab === RESOURCES_TAB_ID ? resolved.resourcesRecordingId : null;
       const nextAdminChild = nextTab === ADMIN_TAB_ID ? resolved.adminChild : null;
       const nextAnnouncementForm =
         nextTab === ADMIN_TAB_ID && nextAdminChild === "announcements"
@@ -1073,6 +1157,7 @@ export default function Dashboard({ onNavigate }) {
       setResourcesCardIdentifier(nextCardId);
       setResourcesCardRaterId(nextRaterId);
       setResourcesDeckId(nextDeckId);
+      setResourcesRecordingId(nextRecordingId);
       const cardRaterAtRoot =
         nextTab === RESOURCES_TAB_ID &&
         nextChild === "card-rater" &&
@@ -1092,6 +1177,7 @@ export default function Dashboard({ onNavigate }) {
         nextTab === DATA_TAB_ID ? nextDataChild : null,
         nextTab === DATA_TAB_ID ? nextDataRaterId : null,
         nextTab === RESOURCES_TAB_ID ? nextDeckId : null,
+        nextTab === RESOURCES_TAB_ID ? nextRecordingId : null,
       );
       setMobileResourcesOpen(false);
       setMobileAdminOpen(false);
@@ -1624,6 +1710,23 @@ export default function Dashboard({ onNavigate }) {
                   isLight={isLight}
                   active={activeTab === RESOURCES_TAB_ID && resourcesChild === "decks"}
                   onOpenDeck={openDeckDetail}
+                />
+              ) : resourcesChild === "recordings" && resourcesRecordingId ? (
+                <RecordingDetailPage
+                  isLight={isLight}
+                  recordingId={resourcesRecordingId}
+                  active={
+                    activeTab === RESOURCES_TAB_ID &&
+                    resourcesChild === "recordings" &&
+                    Boolean(resourcesRecordingId)
+                  }
+                  onBack={closeRecordingDetail}
+                />
+              ) : resourcesChild === "recordings" ? (
+                <RecordingsList
+                  isLight={isLight}
+                  active={activeTab === RESOURCES_TAB_ID && resourcesChild === "recordings"}
+                  onOpenRecording={openRecordingDetail}
                 />
               ) : showCardRankerResources ? (
                 <CardRanker

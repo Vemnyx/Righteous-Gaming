@@ -18,6 +18,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	ah := &announcementHTTP{app: application, svc: userSvc}
 	dh := &decksHTTP{app: application, svc: userSvc}
 	rdh := &runawaysDraftHTTP{app: application, svc: userSvc}
+	rec := &recordingsHTTP{app: application, svc: userSvc}
 
 	mux.HandleFunc("POST /api/users", uh.createUser)
 	mux.HandleFunc("POST /api/complete-registration", uh.completeRegistration)
@@ -66,6 +67,12 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("POST /api/cards/batch", ch.createCardsBatch)
 	mux.HandleFunc("POST /api/admin/catalog/sync-fabrary-latest-set", ch.postAdminSyncFabraryLatestSet)
 	mux.HandleFunc("POST /api/upload", upload.uploadAsset)
+
+	mux.HandleFunc("GET /api/recordings/meta", rec.getRecordingsMeta)
+	mux.HandleFunc("GET /api/recordings", rec.listRecordings)
+	mux.HandleFunc("POST /api/recordings", rec.createRecording)
+	mux.HandleFunc("GET /api/recordings/{id}", rec.getRecording)
+	mux.HandleFunc("POST /api/recordings/{id}/comments", rec.createRecordingComment)
 
 	mux.HandleFunc("GET /api/announcements", ah.listPublished)
 	mux.HandleFunc("GET /api/admin/announcements", ah.adminList)

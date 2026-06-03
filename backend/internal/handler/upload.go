@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -12,7 +13,9 @@ import (
 	"righteous-gaming/backend/log"
 )
 
-const maxUploadMultipartBytes = 32 << 20
+const maxUploadFileBytes = 512 << 20
+const maxUploadMultipartBytes = maxUploadFileBytes + (1 << 20) // room for multipart boundaries/fields
+const maxUploadFileError = "exceeds maximum size of 512 MB"
 
 type uploadHTTP struct {
 	app *app.App
@@ -86,6 +89,11 @@ func (h *uploadHTTP) uploadAsset(w http.ResponseWriter, r *http.Request) {
 
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadMultipartBytes)
 	if err := r.ParseMultipartForm(maxUploadMultipartBytes); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeFieldError(w, http.StatusBadRequest, "file", maxUploadFileError)
+			return
+		}
 		writeMessageError(w, http.StatusBadRequest, "invalid multipart form")
 		return
 	}
@@ -103,14 +111,24 @@ func (h *uploadHTTP) uploadAsset(w http.ResponseWriter, r *http.Request) {
 	}
 	defer func() { _ = fh.Close() }()
 
+	if hdr.Size > maxUploadFileBytes {
+		writeFieldError(w, http.StatusBadRequest, "file", maxUploadFileError)
+		return
+	}
+
 	contentType := strings.TrimSpace(hdr.Header.Get("Content-Type"))
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
 
-	if err := h.app.UploadToGCS(r.Context(), objectPath, fh, contentType); err != nil {
+	limited := &io.LimitedReader{R: fh, N: maxUploadFileBytes + 1}
+	if err := h.app.UploadToGCS(r.Context(), objectPath, limited, contentType); err != nil {
 		log.Error("upload asset gcs", "error", err, "path", objectPath)
 		writeMessageError(w, http.StatusBadGateway, "upload failed")
+		return
+	}
+	if limited.N <= 0 {
+		writeFieldError(w, http.StatusBadRequest, "file", maxUploadFileError)
 		return
 	}
 
