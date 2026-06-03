@@ -131,7 +131,7 @@ function RecordingRowHeroArt({ side, src, name }) {
         <img
           src={src}
           alt=""
-          className={`h-full w-full object-contain object-top ${objectCls} ${fadeCls}`}
+          className={`h-full w-full object-cover object-top ${objectCls} ${fadeCls}`}
           draggable={false}
         />
       ) : (
@@ -608,7 +608,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
         </button>
       </div>
 
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-2.5">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-2.5">
         {loading ? (
           <div
             className={`rounded-xl border px-4 py-10 text-center text-[0.875rem] text-[#f4f0fa]/65 ${cardChromeBorder}`}
@@ -636,7 +636,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                 type="button"
                 disabled={!openRecording}
                 onClick={openRecording}
-                className={`group grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(9.5rem,16rem)_minmax(0,1fr)] items-stretch overflow-hidden rounded-xl border text-center transition-[border-color,box-shadow,filter] hover:border-purple-400/45 hover:shadow-[0_6px_28px_rgba(90,47,143,0.22)] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 disabled:cursor-default ${RECORDING_ROW_H} ${cardChromeBorder}`}
+                className={`group grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(8.5rem,12rem)_minmax(0,1fr)] items-stretch overflow-hidden rounded-xl border text-center transition-[border-color,box-shadow,filter] hover:border-purple-400/45 hover:shadow-[0_6px_28px_rgba(90,47,143,0.22)] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 disabled:cursor-default ${RECORDING_ROW_H} ${cardChromeBorder}`}
                 aria-label={`Open recording: ${title}`}
               >
                 <RecordingRowHeroArt
@@ -646,7 +646,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                 />
 
                 <div
-                  className={`relative z-[1] flex ${RECORDING_ROW_H} flex-col items-center justify-center gap-0 border-x border-white/[0.08] px-2.5 py-1.5 sm:px-3`}
+                  className={`relative z-[1] flex ${RECORDING_ROW_H} flex-col items-center justify-center gap-0 px-2.5 py-1.5 sm:px-3`}
                 >
                   <p className="m-0 max-w-full truncate text-[0.85rem] font-semibold leading-tight text-[#f4f0fa] group-hover:text-purple-100">
                     {title}
