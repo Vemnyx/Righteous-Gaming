@@ -41,12 +41,13 @@ func main() {
 	userSvc := service.NewUserService(application.Repo, application.Firebase)
 	mux := handler.NewRouter(application, userSvc)
 
+	// Read/write timeouts must cover large recording uploads proxied through nginx.
 	srv := &http.Server{
 		Addr:              addr,
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      15 * time.Second,
+		ReadTimeout:       2 * time.Hour,
+		WriteTimeout:      2 * time.Hour,
 		IdleTimeout:       60 * time.Second,
 	}
 
