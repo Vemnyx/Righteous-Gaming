@@ -115,3 +115,27 @@ LIMIT 1`
 	}
 	return id, nil
 }
+
+// HeroLegalInFormat reports whether the hero's linked catalog card includes the format.
+func (r *Repository) HeroLegalInFormat(ctx context.Context, heroID int, format int16) (bool, error) {
+	if r.pool == nil {
+		return false, fmt.Errorf("repository: pool is closed")
+	}
+	if heroID <= 0 {
+		return false, fmt.Errorf("repository: invalid hero id")
+	}
+
+	const q = `
+SELECT EXISTS (
+  SELECT 1
+  FROM heroes h
+  INNER JOIN cards c ON c.id = h.card_id
+  WHERE h.id = $1 AND $2 = ANY (c.formats)
+)`
+
+	var ok bool
+	if err := r.pool.QueryRow(ctx, q, heroID, format).Scan(&ok); err != nil {
+		return false, fmt.Errorf("repository: hero legal in format: %w", err)
+	}
+	return ok, nil
+}

@@ -13,9 +13,9 @@ import (
 	"righteous-gaming/backend/log"
 )
 
-const maxUploadFileBytes = 512 << 20
+const maxUploadFileBytes = 1 << 30
 const maxUploadMultipartBytes = maxUploadFileBytes + (1 << 20) // room for multipart boundaries/fields
-const maxUploadFileError = "exceeds maximum size of 512 MB"
+const maxUploadFileError = "exceeds maximum size of 1 GB"
 
 type uploadHTTP struct {
 	app *app.App

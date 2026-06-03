@@ -1,12 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
-import { CARD_FORMAT_NAMES } from "../constants/cardFormat";
+import { CARD_FORMAT_NAMES, isValidCardFormatId } from "../constants/cardFormat";
 import { extFromFilename, MAX_UPLOAD_SIZE_LABEL, uploadPublicAsset, uploadSizeError } from "../utils/uploadPublicAsset";
 
 /** @typedef {{ id: number, user_id: number, url: string, label?: string | null, first_hero_id?: number | null, second_hero_id?: number | null, format: number, created_at: string, owner_username?: string | null, owner_email?: string, first_hero_name?: string | null, first_hero_art_image_url?: string | null, second_hero_name?: string | null, second_hero_art_image_url?: string | null }} RecordingRow */
 
-/** @typedef {{ id: number, name: string, art_image_url?: string | null }} HeroOption */
+/** @typedef {{ id: number, name: string, art_image_url?: string | null, formats?: number[] }} HeroOption */
+
+/**
+ * @param {HeroOption} hero
+ * @param {number} formatId
+ */
+function heroIsLegalInFormat(hero, formatId) {
+  const formats = Array.isArray(hero.formats) ? hero.formats : [];
+  return formats.includes(formatId);
+}
 
 /** @typedef {{ id: number, email: string, username?: string | null }} UploaderOption */
 
@@ -165,7 +174,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
   const [addUploadingVideo, setAddUploadingVideo] = useState(false);
   const [addError, setAddError] = useState(/** @type {string | null} */ (null));
 
-  const loadHeroesFromDecks = useCallback(async (token) => {
+  const loadHeroesFromDecks = useCallback(async (token, formatId) => {
     const res = await fetch("/api/me/decks", {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -176,6 +185,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
     const byId = new Map();
     for (const d of list) {
       if (!d || typeof d.hero_id !== "number" || d.hero_id <= 0) continue;
+      if (typeof formatId === "number" && typeof d.format === "number" && d.format !== formatId) continue;
       if (byId.has(d.hero_id)) continue;
       byId.set(d.hero_id, {
         id: d.hero_id,
@@ -187,6 +197,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
           d.hero_art_image_url != null && String(d.hero_art_image_url).trim() !== ""
             ? String(d.hero_art_image_url).trim()
             : null,
+        formats: typeof formatId === "number" ? [formatId] : [],
       });
     }
     return [...byId.values()].sort((a, b) =>
@@ -196,6 +207,8 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
 
   const loadMeta = useCallback(async () => {
     if (!user) return;
+    const formatIdForFallback = parseInt(addFormat, 10);
+    const fallbackFormat = isValidCardFormatId(formatIdForFallback) ? formatIdForFallback : null;
     setMetaLoading(true);
     setMetaError(null);
     try {
@@ -217,9 +230,12 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
             h.art_image_url != null && String(h.art_image_url).trim() !== ""
               ? String(h.art_image_url).trim()
               : null,
+          formats: Array.isArray(h.formats)
+            ? h.formats.filter((f) => typeof f === "number" && Number.isInteger(f))
+            : [],
         }));
       if (nextHeroes.length === 0) {
-        nextHeroes = await loadHeroesFromDecks(token);
+        nextHeroes = await loadHeroesFromDecks(token, fallbackFormat ?? undefined);
       }
       setHeroes(nextHeroes);
       setUploaders(
@@ -238,7 +254,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
     } catch (e) {
       try {
         const token = await user.getIdToken();
-        const fallbackHeroes = await loadHeroesFromDecks(token);
+        const fallbackHeroes = await loadHeroesFromDecks(token, fallbackFormat ?? undefined);
         setHeroes(fallbackHeroes);
         setUploaders([]);
         if (fallbackHeroes.length === 0) {
@@ -252,7 +268,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
     } finally {
       setMetaLoading(false);
     }
-  }, [user, loadHeroesFromDecks]);
+  }, [user, loadHeroesFromDecks, addFormat]);
 
   const load = useCallback(async () => {
     if (!user || !active) return;
@@ -355,6 +371,23 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
     }
     return opts;
   }, [uploaders]);
+
+  const addFormatId = useMemo(() => {
+    const id = parseInt(addFormat, 10);
+    return isValidCardFormatId(id) ? id : null;
+  }, [addFormat]);
+
+  const addModalHeroOptions = useMemo(() => {
+    if (addFormatId == null) return [];
+    return heroes.filter((h) => heroIsLegalInFormat(h, addFormatId));
+  }, [heroes, addFormatId]);
+
+  useEffect(() => {
+    if (!addOpen || addFormatId == null) return;
+    const legal = new Set(addModalHeroOptions.map((h) => h.id));
+    if (addHero1 !== "" && !legal.has(parseInt(addHero1, 10))) setAddHero1("");
+    if (addHero2 !== "" && !legal.has(parseInt(addHero2, 10))) setAddHero2("");
+  }, [addOpen, addFormatId, addModalHeroOptions, addHero1, addHero2]);
 
   const closeAddModal = useCallback(() => {
     if (addSubmitting) return;
@@ -723,13 +756,17 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                     <select
                       className={selectCls}
                       value={addHero1}
-                      disabled={addSubmitting || metaLoading || heroes.length === 0}
+                      disabled={addSubmitting || metaLoading || addModalHeroOptions.length === 0}
                       onChange={(e) => setAddHero1(e.target.value)}
                     >
                       <option value="">
-                        {metaLoading ? "Loading heroes…" : heroes.length === 0 ? "No heroes available" : "Select hero…"}
+                        {metaLoading
+                          ? "Loading heroes…"
+                          : addModalHeroOptions.length === 0
+                            ? "No heroes for this format"
+                            : "Select hero…"}
                       </option>
-                      {heroes.map((h) => (
+                      {addModalHeroOptions.map((h) => (
                         <option key={h.id} value={String(h.id)}>
                           {h.name}
                         </option>
@@ -743,13 +780,17 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                     <select
                       className={selectCls}
                       value={addHero2}
-                      disabled={addSubmitting || metaLoading || heroes.length === 0}
+                      disabled={addSubmitting || metaLoading || addModalHeroOptions.length === 0}
                       onChange={(e) => setAddHero2(e.target.value)}
                     >
                       <option value="">
-                        {metaLoading ? "Loading heroes…" : heroes.length === 0 ? "No heroes available" : "Select hero…"}
+                        {metaLoading
+                          ? "Loading heroes…"
+                          : addModalHeroOptions.length === 0
+                            ? "No heroes for this format"
+                            : "Select hero…"}
                       </option>
-                      {heroes.map((h) => (
+                      {addModalHeroOptions.map((h) => (
                         <option key={h.id} value={String(h.id)}>
                           {h.name}
                         </option>

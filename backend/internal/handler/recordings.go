@@ -23,6 +23,7 @@ type recordingHeroJSON struct {
 	ID          int     `json:"id"`
 	Name        string  `json:"name"`
 	ArtImageURL *string `json:"art_image_url,omitempty"`
+	Formats     []int16 `json:"formats,omitempty"`
 }
 
 type recordingUploaderJSON struct {
@@ -186,7 +187,7 @@ func (h *recordingsHTTP) getRecordingsMeta(w http.ResponseWriter, r *http.Reques
 	outHeroes := make([]recordingHeroJSON, 0, len(heroes))
 	for _, row := range heroes {
 		outHeroes = append(outHeroes, recordingHeroJSON{
-			ID: row.ID, Name: row.Name, ArtImageURL: row.ArtImageURL,
+			ID: row.ID, Name: row.Name, ArtImageURL: row.ArtImageURL, Formats: row.Formats,
 		})
 	}
 	outUploaders := make([]recordingUploaderJSON, 0)
@@ -280,6 +281,26 @@ func (h *recordingsHTTP) createRecording(w http.ResponseWriter, r *http.Request)
 	}
 	if _, err := h.app.Repo.HeroByID(r.Context(), body.SecondHeroID); err != nil {
 		writeFieldError(w, http.StatusBadRequest, "second_hero_id", "invalid")
+		return
+	}
+	legal1, err := h.app.Repo.HeroLegalInFormat(r.Context(), body.FirstHeroID, body.Format)
+	if err != nil {
+		log.Error("create recording hero1 format", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	if !legal1 {
+		writeFieldError(w, http.StatusBadRequest, "first_hero_id", "not legal in selected format")
+		return
+	}
+	legal2, err := h.app.Repo.HeroLegalInFormat(r.Context(), body.SecondHeroID, body.Format)
+	if err != nil {
+		log.Error("create recording hero2 format", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	if !legal2 {
+		writeFieldError(w, http.StatusBadRequest, "second_hero_id", "not legal in selected format")
 		return
 	}
 

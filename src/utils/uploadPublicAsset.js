@@ -1,8 +1,8 @@
 /** Maximum upload size enforced by POST /api/upload. */
-export const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 1024 * 1024 * 1024;
 
 /** Human-readable label for {@link MAX_UPLOAD_BYTES}. */
-export const MAX_UPLOAD_SIZE_LABEL = "512 MB";
+export const MAX_UPLOAD_SIZE_LABEL = "1 GB";
 
 /**
  * @param {number} bytes

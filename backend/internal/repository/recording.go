@@ -47,6 +47,7 @@ type RecordingHeroMeta struct {
 	ID          int
 	Name        string
 	ArtImageURL *string
+	Formats     []int16
 }
 
 // RecordingUploaderMeta is a user who has uploaded at least one recording.
@@ -301,9 +302,10 @@ func (r *Repository) ListRecordingHeroes(ctx context.Context) ([]RecordingHeroMe
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-SELECT id, name, art_image_url
-FROM heroes
-ORDER BY name ASC, id ASC`
+SELECT h.id, h.name, h.art_image_url, COALESCE(c.formats, '{}'::smallint[])
+FROM heroes h
+LEFT JOIN cards c ON c.id = h.card_id
+ORDER BY h.name ASC, h.id ASC`
 
 	rows, err := r.pool.Query(ctx, q)
 	if err != nil {
@@ -314,7 +316,7 @@ ORDER BY name ASC, id ASC`
 	out := make([]RecordingHeroMeta, 0, 64)
 	for rows.Next() {
 		var row RecordingHeroMeta
-		if err := rows.Scan(&row.ID, &row.Name, &row.ArtImageURL); err != nil {
+		if err := rows.Scan(&row.ID, &row.Name, &row.ArtImageURL, &row.Formats); err != nil {
 			return nil, fmt.Errorf("repository: scan recording hero: %w", err)
 		}
 		out = append(out, row)
