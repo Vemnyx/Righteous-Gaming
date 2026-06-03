@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
 import { CARD_FORMAT_NAMES } from "../constants/cardFormat";
 import { resolveRecordingPlayback, youtubeEmbedSrc } from "../utils/recordingMedia";
@@ -97,10 +98,13 @@ function RecordingPlayback({ url, className = "" }) {
  *   recordingId: string,
  *   active: boolean,
  *   onBack?: () => void,
+ *   onRecordingDeleted?: () => void,
  * }} props
  */
-export function RecordingDetailPage({ isLight, recordingId, active, onBack }) {
-  const { user } = useAuth();
+export function RecordingDetailPage({ isLight, recordingId, active, onBack, onRecordingDeleted }) {
+  const { user, sessionProfile } = useAuth();
+  const myUserId = typeof sessionProfile?.id === "number" ? sessionProfile.id : null;
+  const isAdmin = Number(sessionProfile?.role) === 0;
   const [meta, setMeta] = useState(
     /** @type {{ id: number, user_id: number, url: string, label?: string | null, format: number, created_at: string, owner_username?: string | null, owner_email?: string, first_hero_name?: string | null, first_hero_art_image_url?: string | null, second_hero_name?: string | null, second_hero_art_image_url?: string | null } | null} */ (
       null,
@@ -115,6 +119,9 @@ export function RecordingDetailPage({ isLight, recordingId, active, onBack }) {
   const [commentDraft, setCommentDraft] = useState("");
   const [commentSubmitting, setCommentSubmitting] = useState(false);
   const [commentError, setCommentError] = useState(/** @type {string | null} */ (null));
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState(/** @type {string | null} */ (null));
 
   const load = useCallback(async () => {
     if (!active || !user) return;
@@ -251,6 +258,48 @@ export function RecordingDetailPage({ isLight, recordingId, active, onBack }) {
     }
   }, [user, meta, commentDraft]);
 
+  const canDelete =
+    meta != null && myUserId != null && (meta.user_id === myUserId || isAdmin);
+
+  const closeDeleteModal = useCallback(() => {
+    setDeleteOpen(false);
+    setDeleteError(null);
+  }, []);
+
+  const confirmDeleteRecording = useCallback(async () => {
+    if (!user || !meta || !canDelete) return;
+    setDeleteSubmitting(true);
+    setDeleteError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/recordings/${meta.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(parseApiError(await res.text()));
+      closeDeleteModal();
+      if (typeof onRecordingDeleted === "function") {
+        onRecordingDeleted();
+      } else if (typeof onBack === "function") {
+        onBack();
+      }
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  }, [user, meta, canDelete, closeDeleteModal, onRecordingDeleted, onBack]);
+
+  useEffect(() => {
+    if (!deleteOpen) return undefined;
+    /** @param {KeyboardEvent} e */
+    function onKeyDown(e) {
+      if (e.key === "Escape" && !deleteSubmitting) closeDeleteModal();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [deleteOpen, deleteSubmitting, closeDeleteModal]);
+
   const title = meta?.label ?? (meta ? `Recording #${meta.id}` : "Recording");
   const formatLabel = meta ? (CARD_FORMAT_NAMES[meta.format] ?? `Format ${meta.format}`) : "";
   const heroMatch =
@@ -265,6 +314,11 @@ export function RecordingDetailPage({ isLight, recordingId, active, onBack }) {
     : "border-white/[0.28] bg-black/20 text-[#f4f0fa] hover:border-white/40 hover:bg-black/30";
   const btnPrimary =
     "rounded-lg border border-white/[0.22] bg-gradient-to-br from-[#7b4cb8] to-[#5a2f8f] px-4 py-2 text-[0.8125rem] font-semibold text-white shadow-[0_3px_14px_rgba(90,47,143,0.38)] hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-45";
+  const btnDanger =
+    "rounded-lg border border-red-400/45 bg-red-950/50 px-3 py-1.5 text-[0.875rem] font-medium text-red-100 transition-colors hover:border-red-300/55 hover:bg-red-900/45 disabled:cursor-not-allowed disabled:opacity-45";
+  const modalPanel = isLight
+    ? "border border-white/[0.14] bg-gradient-to-b from-[#434054] to-[#2d2a38] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+    : "border border-white/[0.2] bg-[rgba(12,6,22,0.96)] shadow-[0_24px_80px_rgba(0,0,0,0.5)]";
   const inputCls = isLight
     ? "w-full rounded-lg border border-white/[0.22] bg-black/30 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/55"
     : "w-full rounded-lg border border-white/[0.22] bg-black/40 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/35 focus:border-purple-400/55";
@@ -303,6 +357,19 @@ export function RecordingDetailPage({ isLight, recordingId, active, onBack }) {
             </p>
           ) : null}
         </div>
+        {canDelete ? (
+          <button
+            type="button"
+            className={`shrink-0 self-start ${btnDanger}`}
+            disabled={!user || loading || deleteSubmitting}
+            onClick={() => {
+              setDeleteError(null);
+              setDeleteOpen(true);
+            }}
+          >
+            Delete recording
+          </button>
+        ) : null}
       </header>
 
       {loading ? <p className={`m-0 text-[0.875rem] ${muted}`}>Loading recording…</p> : null}
@@ -391,6 +458,57 @@ export function RecordingDetailPage({ isLight, recordingId, active, onBack }) {
           </section>
         </>
       ) : null}
+
+      {deleteOpen && meta && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[210] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
+              role="presentation"
+              onClick={(e) => {
+                if (e.target === e.currentTarget && !deleteSubmitting) closeDeleteModal();
+              }}
+            >
+              <div
+                className={`relative w-full max-w-md rounded-xl p-5 sm:p-6 ${modalPanel}`}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="recording-delete-title"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 id="recording-delete-title" className="m-0 text-lg font-semibold text-[#f4f0fa]">
+                  Delete “{title}”?
+                </h3>
+                <p className="mt-2 text-[0.85rem] leading-snug text-[#f4f0fa]/75">
+                  This will permanently remove the recording and all of its comments.
+                </p>
+                {deleteError ? (
+                  <p className="mt-3 text-[0.85rem] text-red-200/95" role="alert">
+                    {deleteError}
+                  </p>
+                ) : null}
+                <div className="mt-5 flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    className={`${btnBase} ${btnTheme}`}
+                    disabled={deleteSubmitting}
+                    onClick={closeDeleteModal}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className={btnDanger}
+                    disabled={deleteSubmitting || !user}
+                    onClick={() => void confirmDeleteRecording()}
+                  >
+                    {deleteSubmitting ? "Deleting…" : "Delete recording"}
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

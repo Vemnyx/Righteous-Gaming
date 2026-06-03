@@ -210,6 +210,24 @@ func (r *Repository) GetRecordingByID(ctx context.Context, id int) (*Recording, 
 	return rec, nil
 }
 
+// DeleteRecordingByID removes a recording. recording_comments cascade via FK.
+func (r *Repository) DeleteRecordingByID(ctx context.Context, id int) error {
+	if r.pool == nil {
+		return fmt.Errorf("repository: pool is closed")
+	}
+	if id <= 0 {
+		return fmt.Errorf("repository: invalid recording id")
+	}
+	tag, err := r.pool.Exec(ctx, `DELETE FROM recordings WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("repository: delete recording: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrRecordingNotFound
+	}
+	return nil
+}
+
 // CreateRecording inserts a recording and returns the new row.
 func (r *Repository) CreateRecording(ctx context.Context, in CreateRecordingInput) (*Recording, error) {
 	if r.pool == nil {

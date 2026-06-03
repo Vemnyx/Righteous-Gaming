@@ -72,6 +72,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("GET /api/recordings", rec.listRecordings)
 	mux.HandleFunc("POST /api/recordings", rec.createRecording)
 	mux.HandleFunc("GET /api/recordings/{id}", rec.getRecording)
+	mux.HandleFunc("DELETE /api/recordings/{id}", rec.deleteRecording)
 	mux.HandleFunc("POST /api/recordings/{id}/comments", rec.createRecordingComment)
 
 	mux.HandleFunc("GET /api/announcements", ah.listPublished)

@@ -105,7 +105,7 @@ function RecordingsPagination({ pageIndex, pageSize, total, onPageChange, disabl
   );
 }
 
-const RECORDING_ROW_MIN_H = "min-h-[6.75rem]";
+const RECORDING_ROW_H = "h-[5.25rem] min-h-[5.25rem]";
 
 const heroArtFadeToRight =
   "[mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)]";
@@ -126,16 +126,16 @@ function RecordingRowHeroArt({ side, src, name }) {
     : "bg-gradient-to-l from-purple-900/35 via-purple-800/15 to-transparent";
 
   return (
-    <div className="relative min-h-[6.75rem] min-w-0 overflow-hidden" aria-hidden>
+    <div className={`relative ${RECORDING_ROW_H} min-w-0 overflow-hidden`} aria-hidden>
       {src ? (
         <img
           src={src}
           alt=""
-          className={`h-full min-h-[6.75rem] w-full object-cover object-top ${objectCls} ${fadeCls}`}
+          className={`h-full w-full object-contain object-top ${objectCls} ${fadeCls}`}
           draggable={false}
         />
       ) : (
-        <div className={`min-h-[6.75rem] h-full w-full ${placeholderGradient} ${fadeCls}`} title={label} />
+        <div className={`h-full w-full ${placeholderGradient} ${fadeCls}`} title={label} />
       )}
     </div>
   );
@@ -636,7 +636,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                 type="button"
                 disabled={!openRecording}
                 onClick={openRecording}
-                className={`group grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(10.5rem,18rem)_minmax(0,1fr)] items-stretch overflow-hidden rounded-xl border text-center transition-[border-color,box-shadow,filter] hover:border-purple-400/45 hover:shadow-[0_6px_28px_rgba(90,47,143,0.22)] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 disabled:cursor-default ${RECORDING_ROW_MIN_H} ${cardChromeBorder}`}
+                className={`group grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(9.5rem,16rem)_minmax(0,1fr)] items-stretch overflow-hidden rounded-xl border text-center transition-[border-color,box-shadow,filter] hover:border-purple-400/45 hover:shadow-[0_6px_28px_rgba(90,47,143,0.22)] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 disabled:cursor-default ${RECORDING_ROW_H} ${cardChromeBorder}`}
                 aria-label={`Open recording: ${title}`}
               >
                 <RecordingRowHeroArt
@@ -646,16 +646,16 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                 />
 
                 <div
-                  className={`relative z-[1] flex ${RECORDING_ROW_MIN_H} flex-col items-center justify-center gap-0.5 border-x border-white/[0.08] px-3 py-2.5 sm:px-4`}
+                  className={`relative z-[1] flex ${RECORDING_ROW_H} flex-col items-center justify-center gap-0 border-x border-white/[0.08] px-2.5 py-1.5 sm:px-3`}
                 >
-                  <p className="m-0 max-w-full truncate text-[0.9rem] font-semibold leading-snug text-[#f4f0fa] group-hover:text-purple-100">
+                  <p className="m-0 max-w-full truncate text-[0.85rem] font-semibold leading-tight text-[#f4f0fa] group-hover:text-purple-100">
                     {title}
                   </p>
-                  <p className="m-0 max-w-full truncate text-[0.78rem] text-[#f4f0fa]/72">{formatName}</p>
-                  <p className="m-0 max-w-full truncate text-[0.78rem] text-[#f4f0fa]/72">
+                  <p className="m-0 max-w-full truncate text-[0.75rem] leading-tight text-[#f4f0fa]/72">{formatName}</p>
+                  <p className="m-0 max-w-full truncate text-[0.75rem] leading-tight text-[#f4f0fa]/72">
                     Uploaded {formatDateTime(row.created_at)}
                   </p>
-                  <p className="m-0 max-w-full truncate text-[0.72rem] text-[#f4f0fa]/55">{uploaderLabel(row)}</p>
+                  <p className="m-0 max-w-full truncate text-[0.7rem] leading-tight text-[#f4f0fa]/55">{uploaderLabel(row)}</p>
                 </div>
 
                 <RecordingRowHeroArt

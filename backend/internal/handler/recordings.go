@@ -98,6 +98,10 @@ func (h *recordingsHTTP) sessionUser(w http.ResponseWriter, r *http.Request) (*d
 	return u, true
 }
 
+func (h *recordingsHTTP) isAdmin(u *domain.User) bool {
+	return u != nil && u.Role != nil && *u.Role == domain.RoleAdmin
+}
+
 func recordingToJSON(r *repository.Recording) recordingJSON {
 	if r == nil {
 		return recordingJSON{}
@@ -408,6 +412,46 @@ func (h *recordingsHTTP) createRecordingComment(w http.ResponseWriter, r *http.R
 		return
 	}
 	writeCatalogJSON(w, http.StatusCreated, map[string]any{"comment": recordingCommentToJSON(row)})
+}
+
+func (h *recordingsHTTP) deleteRecording(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+
+	id, ok := parsePathID(w, r, "id")
+	if !ok {
+		return
+	}
+	rec, err := h.app.Repo.GetRecordingByID(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrRecordingNotFound) {
+			writeMessageError(w, http.StatusNotFound, "recording not found")
+			return
+		}
+		log.Error("delete recording lookup", "error", err, "id", id)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	if rec.UserID != u.ID && !h.isAdmin(u) {
+		writeMessageError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+	if err := h.app.Repo.DeleteRecordingByID(r.Context(), id); err != nil {
+		if errors.Is(err, repository.ErrRecordingNotFound) {
+			writeMessageError(w, http.StatusNotFound, "recording not found")
+			return
+		}
+		log.Error("delete recording", "error", err, "id", id, "user_id", u.ID)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func parsePathID(w http.ResponseWriter, r *http.Request, key string) (int, bool) {

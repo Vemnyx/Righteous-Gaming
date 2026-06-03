@@ -1721,6 +1721,7 @@ export default function Dashboard({ onNavigate }) {
                     Boolean(resourcesRecordingId)
                   }
                   onBack={closeRecordingDetail}
+                  onRecordingDeleted={closeRecordingDetail}
                 />
               ) : resourcesChild === "recordings" ? (
                 <RecordingsList
