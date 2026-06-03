@@ -17,6 +17,15 @@ function heroIsLegalInFormat(hero, formatId) {
   return formats.includes(formatId);
 }
 
+/**
+ * @param {HeroOption} hero
+ * @param {number} formatId
+ */
+function heroHasRecordingInFormat(hero, formatId) {
+  const formats = Array.isArray(hero.formats) ? hero.formats : [];
+  return formats.includes(formatId);
+}
+
 /** @typedef {{ id: number, email: string, username?: string | null }} UploaderOption */
 
 const FILTER_ALL = "";
@@ -151,6 +160,8 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
   const [rows, setRows] = useState(/** @type {RecordingRow[]} */ ([]));
   const [total, setTotal] = useState(0);
   const [heroes, setHeroes] = useState(/** @type {HeroOption[]} */ ([]));
+  const [filterHeroes, setFilterHeroes] = useState(/** @type {HeroOption[]} */ ([]));
+  const [recordingFormats, setRecordingFormats] = useState(/** @type {number[]} */ ([]));
   const [uploaders, setUploaders] = useState(/** @type {UploaderOption[]} */ ([]));
   const [loading, setLoading] = useState(false);
   const [metaLoading, setMetaLoading] = useState(false);
@@ -220,6 +231,8 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
       if (!res.ok) throw new Error(parseApiError(await res.text()));
       const data = await res.json();
       const heroList = Array.isArray(data.heroes) ? data.heroes : [];
+      const filterHeroList = Array.isArray(data.filter_heroes) ? data.filter_heroes : [];
+      const formatList = Array.isArray(data.formats) ? data.formats : [];
       const uploaderList = Array.isArray(data.uploaders) ? data.uploaders : [];
       /** @type {HeroOption[]} */
       let nextHeroes = heroList
@@ -239,6 +252,24 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
         nextHeroes = await loadHeroesFromDecks(token, fallbackFormat ?? undefined);
       }
       setHeroes(nextHeroes);
+      setFilterHeroes(
+        filterHeroList
+          .filter((h) => h && typeof h.id === "number")
+          .map((h) => ({
+            id: h.id,
+            name: String(h.name ?? "").trim() || `Hero ${h.id}`,
+            art_image_url:
+              h.art_image_url != null && String(h.art_image_url).trim() !== ""
+                ? String(h.art_image_url).trim()
+                : null,
+            formats: Array.isArray(h.formats)
+              ? h.formats.filter((f) => typeof f === "number" && Number.isInteger(f))
+              : [],
+          })),
+      );
+      setRecordingFormats(
+        formatList.filter((f) => typeof f === "number" && Number.isInteger(f) && isValidCardFormatId(f)),
+      );
       setUploaders(
         uploaderList
           .filter((u) => u && typeof u.id === "number")
@@ -257,12 +288,16 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
         const token = await user.getIdToken();
         const fallbackHeroes = await loadHeroesFromDecks(token, fallbackFormat ?? undefined);
         setHeroes(fallbackHeroes);
+        setFilterHeroes([]);
+        setRecordingFormats([]);
         setUploaders([]);
         if (fallbackHeroes.length === 0) {
           setMetaError(e instanceof Error ? e.message : "Failed to load recording options");
         }
       } catch {
         setHeroes([]);
+        setFilterHeroes([]);
+        setRecordingFormats([]);
         setUploaders([]);
         setMetaError(e instanceof Error ? e.message : "Failed to load recording options");
       }
@@ -351,19 +386,39 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
 
   const formatFilterOptions = useMemo(() => {
     const opts = [{ value: FILTER_ALL, label: "All formats" }];
-    CARD_FORMAT_NAMES.forEach((name, id) => {
-      opts.push({ value: String(id), label: name });
-    });
+    for (const id of recordingFormats) {
+      const name = CARD_FORMAT_NAMES[id];
+      if (name) opts.push({ value: String(id), label: name });
+    }
     return opts;
-  }, []);
+  }, [recordingFormats]);
 
   const heroFilterOptions = useMemo(() => {
     const opts = [{ value: FILTER_ALL, label: "All heroes" }];
-    for (const h of heroes) {
+    const formatId =
+      filterFormat !== FILTER_ALL && isValidCardFormatId(parseInt(filterFormat, 10))
+        ? parseInt(filterFormat, 10)
+        : null;
+    for (const h of filterHeroes) {
+      if (formatId != null && !heroHasRecordingInFormat(h, formatId)) continue;
       opts.push({ value: String(h.id), label: h.name });
     }
     return opts;
-  }, [heroes]);
+  }, [filterHeroes, filterFormat]);
+
+  useEffect(() => {
+    if (filterFormat === FILTER_ALL) return;
+    const id = parseInt(filterFormat, 10);
+    if (!isValidCardFormatId(id) || !recordingFormats.includes(id)) {
+      setFilterFormat(FILTER_ALL);
+    }
+  }, [filterFormat, recordingFormats]);
+
+  useEffect(() => {
+    if (filterHero === FILTER_ALL) return;
+    const valid = new Set(heroFilterOptions.map((o) => o.value).filter((v) => v !== FILTER_ALL));
+    if (!valid.has(filterHero)) setFilterHero(FILTER_ALL);
+  }, [filterHero, heroFilterOptions]);
 
   const uploaderFilterOptions = useMemo(() => {
     const opts = [{ value: FILTER_ALL, label: "All uploaders" }];
@@ -557,7 +612,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
             <select
               className={selectCls}
               value={filterFormat}
-              disabled={loading || metaLoading}
+              disabled={loading || metaLoading || formatFilterOptions.length <= 1}
               onChange={(e) => setFilterFormat(e.target.value)}
             >
               {formatFilterOptions.map((opt) => (

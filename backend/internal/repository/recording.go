@@ -314,6 +314,68 @@ RETURNING id, recording_id, user_id, comment, created_at`
 	return &row, nil
 }
 
+// ListRecordingFormats returns distinct format values present in recordings.
+func (r *Repository) ListRecordingFormats(ctx context.Context) ([]int16, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	const q = `SELECT DISTINCT format FROM recordings ORDER BY format ASC`
+	rows, err := r.pool.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list recording formats: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]int16, 0, 8)
+	for rows.Next() {
+		var format int16
+		if err := rows.Scan(&format); err != nil {
+			return nil, fmt.Errorf("repository: scan recording format: %w", err)
+		}
+		out = append(out, format)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: list recording formats rows: %w", err)
+	}
+	return out, nil
+}
+
+// ListRecordingFilterHeroes returns heroes that appear in recordings, with the formats they appear in.
+func (r *Repository) ListRecordingFilterHeroes(ctx context.Context) ([]RecordingHeroMeta, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	const q = `
+SELECT h.id, h.name, h.art_image_url, COALESCE(array_agg(DISTINCT sub.format ORDER BY sub.format), '{}'::smallint[])
+FROM heroes h
+INNER JOIN (
+	SELECT first_hero_id AS hero_id, format FROM recordings WHERE first_hero_id IS NOT NULL
+	UNION
+	SELECT second_hero_id AS hero_id, format FROM recordings WHERE second_hero_id IS NOT NULL
+) sub ON sub.hero_id = h.id
+GROUP BY h.id, h.name, h.art_image_url
+ORDER BY h.name ASC, h.id ASC`
+
+	rows, err := r.pool.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list recording filter heroes: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]RecordingHeroMeta, 0, 64)
+	for rows.Next() {
+		var row RecordingHeroMeta
+		if err := rows.Scan(&row.ID, &row.Name, &row.ArtImageURL, &row.Formats); err != nil {
+			return nil, fmt.Errorf("repository: scan recording filter hero: %w", err)
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: list recording filter heroes rows: %w", err)
+	}
+	return out, nil
+}
+
 // ListRecordingHeroes returns heroes for recording pickers.
 func (r *Repository) ListRecordingHeroes(ctx context.Context) ([]RecordingHeroMeta, error) {
 	if r.pool == nil {
