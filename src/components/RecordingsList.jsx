@@ -105,13 +105,13 @@ function RecordingsPagination({ pageIndex, pageSize, total, onPageChange, disabl
   );
 }
 
-const RECORDING_ROW_MIN_H = "min-h-[5.25rem]";
+const RECORDING_ROW_MIN_H = "min-h-[6.75rem]";
 
 const heroArtFadeToRight =
-  "[mask-image:linear-gradient(to_right,black_0%,black_70%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_70%,transparent_100%)]";
+  "[mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)]";
 
 const heroArtFadeToLeft =
-  "[mask-image:linear-gradient(to_left,black_0%,black_70%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_70%,transparent_100%)]";
+  "[mask-image:linear-gradient(to_left,black_0%,black_82%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_82%,transparent_100%)]";
 
 /**
  * @param {{ side: "left" | "right", src?: string | null, name?: string | null }} props
@@ -119,7 +119,6 @@ const heroArtFadeToLeft =
 function RecordingRowHeroArt({ side, src, name }) {
   const label = name != null && String(name).trim() !== "" ? String(name).trim() : "Hero";
   const isLeft = side === "left";
-  const positionCls = isLeft ? "left-0" : "right-0";
   const objectCls = isLeft ? "object-left" : "object-right";
   const fadeCls = isLeft ? heroArtFadeToRight : heroArtFadeToLeft;
   const placeholderGradient = isLeft
@@ -127,14 +126,16 @@ function RecordingRowHeroArt({ side, src, name }) {
     : "bg-gradient-to-l from-purple-900/35 via-purple-800/15 to-transparent";
 
   return (
-    <div
-      className={`pointer-events-none absolute inset-y-0 ${positionCls} w-[38%] max-w-[11rem] sm:w-[34%] sm:max-w-[10rem]`}
-      aria-hidden
-    >
+    <div className="relative min-h-[6.75rem] min-w-0 overflow-hidden" aria-hidden>
       {src ? (
-        <img src={src} alt="" className={`h-full w-full object-cover ${objectCls} ${fadeCls}`} draggable={false} />
+        <img
+          src={src}
+          alt=""
+          className={`h-full min-h-[6.75rem] w-full object-cover object-top ${objectCls} ${fadeCls}`}
+          draggable={false}
+        />
       ) : (
-        <div className={`h-full w-full ${placeholderGradient} ${fadeCls}`} title={label} />
+        <div className={`min-h-[6.75rem] h-full w-full ${placeholderGradient} ${fadeCls}`} title={label} />
       )}
     </div>
   );
@@ -607,7 +608,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
         </button>
       </div>
 
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-2.5">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-2.5">
         {loading ? (
           <div
             className={`rounded-xl border px-4 py-10 text-center text-[0.875rem] text-[#f4f0fa]/65 ${cardChromeBorder}`}
@@ -635,7 +636,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                 type="button"
                 disabled={!openRecording}
                 onClick={openRecording}
-                className={`group relative grid w-full cursor-pointer grid-cols-1 overflow-hidden rounded-xl border text-center transition-[border-color,box-shadow,filter] hover:border-purple-400/45 hover:shadow-[0_6px_28px_rgba(90,47,143,0.22)] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 disabled:cursor-default ${RECORDING_ROW_MIN_H} ${cardChromeBorder}`}
+                className={`group grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(10.5rem,18rem)_minmax(0,1fr)] items-stretch overflow-hidden rounded-xl border text-center transition-[border-color,box-shadow,filter] hover:border-purple-400/45 hover:shadow-[0_6px_28px_rgba(90,47,143,0.22)] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 disabled:cursor-default ${RECORDING_ROW_MIN_H} ${cardChromeBorder}`}
                 aria-label={`Open recording: ${title}`}
               >
                 <RecordingRowHeroArt
@@ -643,14 +644,9 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                   src={row.first_hero_art_image_url}
                   name={row.first_hero_name}
                 />
-                <RecordingRowHeroArt
-                  side="right"
-                  src={row.second_hero_art_image_url}
-                  name={row.second_hero_name}
-                />
 
                 <div
-                  className={`relative z-[1] col-start-1 row-start-1 flex ${RECORDING_ROW_MIN_H} flex-col items-center justify-center gap-0.5 self-stretch px-[36%] py-2.5 sm:px-[32%]`}
+                  className={`relative z-[1] flex ${RECORDING_ROW_MIN_H} flex-col items-center justify-center gap-0.5 border-x border-white/[0.08] px-3 py-2.5 sm:px-4`}
                 >
                   <p className="m-0 max-w-full truncate text-[0.9rem] font-semibold leading-snug text-[#f4f0fa] group-hover:text-purple-100">
                     {title}
@@ -661,6 +657,12 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                   </p>
                   <p className="m-0 max-w-full truncate text-[0.72rem] text-[#f4f0fa]/55">{uploaderLabel(row)}</p>
                 </div>
+
+                <RecordingRowHeroArt
+                  side="right"
+                  src={row.second_hero_art_image_url}
+                  name={row.second_hero_name}
+                />
               </button>
             );
           })
