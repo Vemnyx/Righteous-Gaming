@@ -105,7 +105,7 @@ function RecordingsPagination({ pageIndex, pageSize, total, onPageChange, disabl
   );
 }
 
-const RECORDING_ROW_H = "h-[5.25rem] min-h-[5.25rem]";
+const RECORDING_ROW_H = "h-[6.65rem] min-h-[6.65rem]";
 
 const heroArtFadeToRight =
   "[mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)]";
@@ -608,7 +608,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
         </button>
       </div>
 
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-2.5">
+      <div className="mx-auto flex w-full max-w-[61.6rem] flex-col gap-2.5">
         {loading ? (
           <div
             className={`rounded-xl border px-4 py-10 text-center text-[0.875rem] text-[#f4f0fa]/65 ${cardChromeBorder}`}
@@ -636,7 +636,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                 type="button"
                 disabled={!openRecording}
                 onClick={openRecording}
-                className={`group grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(8.5rem,12rem)_minmax(0,1fr)] items-stretch overflow-hidden rounded-xl border text-center transition-[border-color,box-shadow,filter] hover:border-purple-400/45 hover:shadow-[0_6px_28px_rgba(90,47,143,0.22)] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 disabled:cursor-default ${RECORDING_ROW_H} ${cardChromeBorder}`}
+                className={`group grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(10.75rem,15.2rem)_minmax(0,1fr)] items-stretch overflow-hidden rounded-xl border text-center transition-[border-color,box-shadow,filter] hover:border-purple-400/45 hover:shadow-[0_6px_28px_rgba(90,47,143,0.22)] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 disabled:cursor-default ${RECORDING_ROW_H} ${cardChromeBorder}`}
                 aria-label={`Open recording: ${title}`}
               >
                 <RecordingRowHeroArt
