@@ -162,6 +162,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
   const [addEmbedUrl, setAddEmbedUrl] = useState("");
   const [addVideoFile, setAddVideoFile] = useState(/** @type {File | null} */ (null));
   const [addSubmitting, setAddSubmitting] = useState(false);
+  const [addUploadingVideo, setAddUploadingVideo] = useState(false);
   const [addError, setAddError] = useState(/** @type {string | null} */ (null));
 
   const loadHeroesFromDecks = useCallback(async (token) => {
@@ -358,6 +359,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
   const closeAddModal = useCallback(() => {
     if (addSubmitting) return;
     setAddOpen(false);
+    setAddUploadingVideo(false);
     setAddError(null);
     setAddLabel("");
     setAddFormat("0");
@@ -411,9 +413,14 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
         if (!myUserId) throw new Error("Could not resolve your user id.");
         const ext = extFromFilename(addVideoFile.name);
         const objectPath = `recordings/${myUserId}/${crypto.randomUUID()}.${ext}`;
-        url = await uploadPublicAsset(() => user.getIdToken(), objectPath, addVideoFile, {
-          cacheBust: false,
-        });
+        setAddUploadingVideo(true);
+        try {
+          url = await uploadPublicAsset(() => user.getIdToken(), objectPath, addVideoFile, {
+            cacheBust: false,
+          });
+        } finally {
+          setAddUploadingVideo(false);
+        }
       } else {
         url = addEmbedUrl.trim();
         if (url === "") {
@@ -654,6 +661,24 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                   aria-labelledby="recordings-add-modal-title"
                   onClick={(e) => e.stopPropagation()}
                 >
+                {addUploadingVideo ? (
+                  <div
+                    className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-xl bg-black/55 backdrop-blur-[2px]"
+                    role="status"
+                    aria-live="polite"
+                    aria-busy="true"
+                  >
+                    <div
+                      className="h-9 w-9 animate-spin rounded-full border-2 border-[#f4f0fa]/20 border-t-[#f4f0fa]/90"
+                      aria-hidden
+                    />
+                    <p className="m-0 text-[0.875rem] font-medium text-[#f4f0fa]/85">Uploading video…</p>
+                    <p className="m-0 max-w-[16rem] text-center text-[0.78rem] text-[#f4f0fa]/55">
+                      Large files may take a few minutes. Keep this tab open.
+                    </p>
+                  </div>
+                ) : null}
+
                 <h3 id="recordings-add-modal-title" className="m-0 text-lg font-semibold text-[#f4f0fa]">
                   Add Recording
                 </h3>
@@ -811,7 +836,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                     Cancel
                   </button>
                   <button type="button" className={btnPrimary} disabled={addSubmitting || !user} onClick={() => void submitAdd()}>
-                    {addSubmitting ? "Saving…" : "Save recording"}
+                    {addUploadingVideo ? "Uploading…" : addSubmitting ? "Saving…" : "Save recording"}
                   </button>
                 </div>
                 </div>
