@@ -134,6 +134,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
   const [uploaders, setUploaders] = useState(/** @type {UploaderOption[]} */ ([]));
   const [loading, setLoading] = useState(false);
   const [metaLoading, setMetaLoading] = useState(false);
+  const [metaError, setMetaError] = useState(/** @type {string | null} */ (null));
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [reloadSeq, setReloadSeq] = useState(0);
 
@@ -147,15 +148,45 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
   const [addFormat, setAddFormat] = useState("0");
   const [addHero1, setAddHero1] = useState("");
   const [addHero2, setAddHero2] = useState("");
-  const [addMediaMode, setAddMediaMode] = useState(MEDIA_EMBED);
+  const [addMediaMode, setAddMediaMode] = useState(MEDIA_UPLOAD);
   const [addEmbedUrl, setAddEmbedUrl] = useState("");
   const [addVideoFile, setAddVideoFile] = useState(/** @type {File | null} */ (null));
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [addError, setAddError] = useState(/** @type {string | null} */ (null));
 
+  const loadHeroesFromDecks = useCallback(async (token) => {
+    const res = await fetch("/api/me/decks", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const list = Array.isArray(data.decks) ? data.decks : [];
+    /** @type {Map<number, HeroOption>} */
+    const byId = new Map();
+    for (const d of list) {
+      if (!d || typeof d.hero_id !== "number" || d.hero_id <= 0) continue;
+      if (byId.has(d.hero_id)) continue;
+      byId.set(d.hero_id, {
+        id: d.hero_id,
+        name:
+          d.hero_name != null && String(d.hero_name).trim() !== ""
+            ? String(d.hero_name).trim()
+            : `Hero ${d.hero_id}`,
+        art_image_url:
+          d.hero_art_image_url != null && String(d.hero_art_image_url).trim() !== ""
+            ? String(d.hero_art_image_url).trim()
+            : null,
+      });
+    }
+    return [...byId.values()].sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+    );
+  }, []);
+
   const loadMeta = useCallback(async () => {
     if (!user) return;
     setMetaLoading(true);
+    setMetaError(null);
     try {
       const token = await user.getIdToken();
       const res = await fetch("/api/recordings/meta", {
@@ -165,18 +196,21 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
       const data = await res.json();
       const heroList = Array.isArray(data.heroes) ? data.heroes : [];
       const uploaderList = Array.isArray(data.uploaders) ? data.uploaders : [];
-      setHeroes(
-        heroList
-          .filter((h) => h && typeof h.id === "number")
-          .map((h) => ({
-            id: h.id,
-            name: String(h.name ?? "").trim() || `Hero ${h.id}`,
-            art_image_url:
-              h.art_image_url != null && String(h.art_image_url).trim() !== ""
-                ? String(h.art_image_url).trim()
-                : null,
-          })),
-      );
+      /** @type {HeroOption[]} */
+      let nextHeroes = heroList
+        .filter((h) => h && typeof h.id === "number")
+        .map((h) => ({
+          id: h.id,
+          name: String(h.name ?? "").trim() || `Hero ${h.id}`,
+          art_image_url:
+            h.art_image_url != null && String(h.art_image_url).trim() !== ""
+              ? String(h.art_image_url).trim()
+              : null,
+        }));
+      if (nextHeroes.length === 0) {
+        nextHeroes = await loadHeroesFromDecks(token);
+      }
+      setHeroes(nextHeroes);
       setUploaders(
         uploaderList
           .filter((u) => u && typeof u.id === "number")
@@ -187,13 +221,27 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
               u.username != null && String(u.username).trim() !== "" ? String(u.username).trim() : null,
           })),
       );
-    } catch {
-      setHeroes([]);
-      setUploaders([]);
+      if (nextHeroes.length === 0) {
+        setMetaError("Could not load heroes. Try again in a moment.");
+      }
+    } catch (e) {
+      try {
+        const token = await user.getIdToken();
+        const fallbackHeroes = await loadHeroesFromDecks(token);
+        setHeroes(fallbackHeroes);
+        setUploaders([]);
+        if (fallbackHeroes.length === 0) {
+          setMetaError(e instanceof Error ? e.message : "Failed to load recording options");
+        }
+      } catch {
+        setHeroes([]);
+        setUploaders([]);
+        setMetaError(e instanceof Error ? e.message : "Failed to load recording options");
+      }
     } finally {
       setMetaLoading(false);
     }
-  }, [user]);
+  }, [user, loadHeroesFromDecks]);
 
   const load = useCallback(async () => {
     if (!user || !active) return;
@@ -305,7 +353,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
     setAddFormat("0");
     setAddHero1("");
     setAddHero2("");
-    setAddMediaMode(MEDIA_EMBED);
+    setAddMediaMode(MEDIA_UPLOAD);
     setAddEmbedUrl("");
     setAddVideoFile(null);
   }, [addSubmitting]);
@@ -313,7 +361,8 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
   const openAddModal = useCallback(() => {
     setAddError(null);
     setAddOpen(true);
-  }, []);
+    void loadMeta();
+  }, [loadMeta]);
 
   const submitAdd = useCallback(async () => {
     if (!user) return;
@@ -576,19 +625,20 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
       {addOpen && typeof document !== "undefined"
         ? createPortal(
             <div
-              className="fixed inset-0 z-[200] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
+              className="fixed inset-0 z-[200] overflow-y-auto bg-black/55 p-4 backdrop-blur-[2px]"
               role="presentation"
               onClick={(e) => {
                 if (e.target === e.currentTarget && !addSubmitting) closeAddModal();
               }}
             >
-              <div
-                className={`relative max-h-[min(92vh,720px)] w-full max-w-lg overflow-y-auto rounded-xl p-5 sm:p-6 ${modalPanel}`}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="recordings-add-modal-title"
-                onClick={(e) => e.stopPropagation()}
-              >
+              <div className="flex min-h-full items-center justify-center py-4">
+                <div
+                  className={`relative w-full max-w-lg rounded-xl p-5 sm:p-6 ${modalPanel}`}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="recordings-add-modal-title"
+                  onClick={(e) => e.stopPropagation()}
+                >
                 <h3 id="recordings-add-modal-title" className="m-0 text-lg font-semibold text-[#f4f0fa]">
                   Add Recording
                 </h3>
@@ -633,10 +683,12 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                     <select
                       className={selectCls}
                       value={addHero1}
-                      disabled={addSubmitting || heroes.length === 0}
+                      disabled={addSubmitting || metaLoading || heroes.length === 0}
                       onChange={(e) => setAddHero1(e.target.value)}
                     >
-                      <option value="">Select hero…</option>
+                      <option value="">
+                        {metaLoading ? "Loading heroes…" : heroes.length === 0 ? "No heroes available" : "Select hero…"}
+                      </option>
                       {heroes.map((h) => (
                         <option key={h.id} value={String(h.id)}>
                           {h.name}
@@ -651,10 +703,12 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                     <select
                       className={selectCls}
                       value={addHero2}
-                      disabled={addSubmitting || heroes.length === 0}
+                      disabled={addSubmitting || metaLoading || heroes.length === 0}
                       onChange={(e) => setAddHero2(e.target.value)}
                     >
-                      <option value="">Select hero…</option>
+                      <option value="">
+                        {metaLoading ? "Loading heroes…" : heroes.length === 0 ? "No heroes available" : "Select hero…"}
+                      </option>
                       {heroes.map((h) => (
                         <option key={h.id} value={String(h.id)}>
                           {h.name}
@@ -664,6 +718,12 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                   </label>
                 </div>
 
+                {metaError ? (
+                  <p className="mt-2 text-[0.82rem] text-amber-200/90" role="status">
+                    {metaError}
+                  </p>
+                ) : null}
+
                 <fieldset className="mt-4 border-0 p-0">
                   <legend className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
                     Video source
@@ -671,19 +731,19 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                   <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       type="button"
-                      className={`${btnBase} ${addMediaMode === MEDIA_EMBED ? btnPrimary : btnTheme}`}
-                      disabled={addSubmitting}
-                      onClick={() => setAddMediaMode(MEDIA_EMBED)}
-                    >
-                      Embed link
-                    </button>
-                    <button
-                      type="button"
                       className={`${btnBase} ${addMediaMode === MEDIA_UPLOAD ? btnPrimary : btnTheme}`}
                       disabled={addSubmitting}
                       onClick={() => setAddMediaMode(MEDIA_UPLOAD)}
                     >
                       Upload file
+                    </button>
+                    <button
+                      type="button"
+                      className={`${btnBase} ${addMediaMode === MEDIA_EMBED ? btnPrimary : btnTheme}`}
+                      disabled={addSubmitting}
+                      onClick={() => setAddMediaMode(MEDIA_EMBED)}
+                    >
+                      Embed link
                     </button>
                   </div>
                 </fieldset>
@@ -738,6 +798,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                   <button type="button" className={btnPrimary} disabled={addSubmitting || !user} onClick={() => void submitAdd()}>
                     {addSubmitting ? "Saving…" : "Save recording"}
                   </button>
+                </div>
                 </div>
               </div>
             </div>,

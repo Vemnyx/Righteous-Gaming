@@ -178,11 +178,9 @@ func (h *recordingsHTTP) getRecordingsMeta(w http.ResponseWriter, r *http.Reques
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
-	uploaders, err := h.app.Repo.ListRecordingUploaders(r.Context())
-	if err != nil {
-		log.Error("recordings meta uploaders", "error", err)
-		writeMessageError(w, http.StatusInternalServerError, "internal server error")
-		return
+	uploaders, uploaderErr := h.app.Repo.ListRecordingUploaders(r.Context())
+	if uploaderErr != nil {
+		log.Error("recordings meta uploaders", "error", uploaderErr)
 	}
 
 	outHeroes := make([]recordingHeroJSON, 0, len(heroes))
@@ -191,11 +189,14 @@ func (h *recordingsHTTP) getRecordingsMeta(w http.ResponseWriter, r *http.Reques
 			ID: row.ID, Name: row.Name, ArtImageURL: row.ArtImageURL,
 		})
 	}
-	outUploaders := make([]recordingUploaderJSON, 0, len(uploaders))
-	for _, row := range uploaders {
-		outUploaders = append(outUploaders, recordingUploaderJSON{
-			ID: row.ID, Email: row.Email, Username: row.Username,
-		})
+	outUploaders := make([]recordingUploaderJSON, 0)
+	if uploaderErr == nil {
+		outUploaders = make([]recordingUploaderJSON, 0, len(uploaders))
+		for _, row := range uploaders {
+			outUploaders = append(outUploaders, recordingUploaderJSON{
+				ID: row.ID, Email: row.Email, Username: row.Username,
+			})
+		}
 	}
 	writeCatalogJSON(w, http.StatusOK, map[string]any{
 		"heroes":    outHeroes,
