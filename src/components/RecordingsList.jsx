@@ -96,27 +96,37 @@ function RecordingsPagination({ pageIndex, pageSize, total, onPageChange, disabl
   );
 }
 
+const RECORDING_ROW_MIN_H = "min-h-[5.25rem]";
+
+const heroArtFadeToRight =
+  "[mask-image:linear-gradient(to_right,black_0%,black_70%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_70%,transparent_100%)]";
+
+const heroArtFadeToLeft =
+  "[mask-image:linear-gradient(to_left,black_0%,black_70%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_70%,transparent_100%)]";
+
 /**
- * @param {{ src?: string | null, name?: string | null, className?: string }} props
+ * @param {{ side: "left" | "right", src?: string | null, name?: string | null }} props
  */
-function HeroThumb({ src, name, className = "" }) {
+function RecordingRowHeroArt({ side, src, name }) {
   const label = name != null && String(name).trim() !== "" ? String(name).trim() : "Hero";
-  if (src) {
-    return (
-      <img
-        src={src}
-        alt={label}
-        className={`h-16 w-12 shrink-0 rounded-md border border-white/[0.12] object-cover object-top sm:h-[4.5rem] sm:w-14 ${className}`.trim()}
-        draggable={false}
-      />
-    );
-  }
+  const isLeft = side === "left";
+  const positionCls = isLeft ? "left-0" : "right-0";
+  const objectCls = isLeft ? "object-left" : "object-right";
+  const fadeCls = isLeft ? heroArtFadeToRight : heroArtFadeToLeft;
+  const placeholderGradient = isLeft
+    ? "bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent"
+    : "bg-gradient-to-l from-purple-900/35 via-purple-800/15 to-transparent";
+
   return (
     <div
-      className={`flex h-16 w-12 shrink-0 items-center justify-center rounded-md border border-white/[0.12] bg-purple-900/25 text-[0.65rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55 sm:h-[4.5rem] sm:w-14 ${className}`.trim()}
+      className={`pointer-events-none absolute inset-y-0 ${positionCls} w-[38%] max-w-[11rem] sm:w-[34%] sm:max-w-[10rem]`}
       aria-hidden
     >
-      ?
+      {src ? (
+        <img src={src} alt="" className={`h-full w-full object-cover ${objectCls} ${fadeCls}`} draggable={false} />
+      ) : (
+        <div className={`h-full w-full ${placeholderGradient} ${fadeCls}`} title={label} />
+      )}
     </div>
   );
 }
@@ -557,7 +567,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
         </button>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-2.5">
         {loading ? (
           <div
             className={`rounded-xl border px-4 py-10 text-center text-[0.875rem] text-[#f4f0fa]/65 ${cardChromeBorder}`}
@@ -585,42 +595,47 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                 type="button"
                 disabled={!openRecording}
                 onClick={openRecording}
-                className={`group flex w-full cursor-pointer items-stretch gap-3 overflow-hidden rounded-xl border text-left transition-[border-color,box-shadow,filter] hover:border-purple-400/45 hover:shadow-[0_6px_28px_rgba(90,47,143,0.22)] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 disabled:cursor-default sm:gap-4 ${cardChromeBorder}`}
+                className={`group relative grid w-full cursor-pointer grid-cols-1 overflow-hidden rounded-xl border text-center transition-[border-color,box-shadow,filter] hover:border-purple-400/45 hover:shadow-[0_6px_28px_rgba(90,47,143,0.22)] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 disabled:cursor-default ${RECORDING_ROW_MIN_H} ${cardChromeBorder}`}
                 aria-label={`Open recording: ${title}`}
               >
-                <div className="flex shrink-0 items-center gap-2 px-3 py-3 sm:gap-3 sm:px-4">
-                  <HeroThumb src={row.first_hero_art_image_url} name={row.first_hero_name} />
-                  <span className="text-[0.72rem] font-bold uppercase tracking-[0.12em] text-[#f4f0fa]/50 sm:text-[0.78rem]">
-                    Vs
-                  </span>
-                  <HeroThumb src={row.second_hero_art_image_url} name={row.second_hero_name} />
-                </div>
+                <RecordingRowHeroArt
+                  side="left"
+                  src={row.first_hero_art_image_url}
+                  name={row.first_hero_name}
+                />
+                <RecordingRowHeroArt
+                  side="right"
+                  src={row.second_hero_art_image_url}
+                  name={row.second_hero_name}
+                />
 
-                <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 border-l border-white/[0.08] py-3 pr-4">
-                  <p className="m-0 truncate text-[0.95rem] font-semibold leading-snug text-[#f4f0fa] group-hover:text-purple-100">
+                <div
+                  className={`relative z-[1] col-start-1 row-start-1 flex ${RECORDING_ROW_MIN_H} flex-col items-center justify-center gap-0.5 self-stretch px-[36%] py-2.5 sm:px-[32%]`}
+                >
+                  <p className="m-0 max-w-full truncate text-[0.9rem] font-semibold leading-snug text-[#f4f0fa] group-hover:text-purple-100">
                     {title}
                   </p>
-                  <p className="m-0 truncate text-[0.8125rem] text-[#f4f0fa]/72">{formatName}</p>
-                  <p className="m-0 truncate text-[0.8125rem] text-[#f4f0fa]/72">
+                  <p className="m-0 max-w-full truncate text-[0.78rem] text-[#f4f0fa]/72">{formatName}</p>
+                  <p className="m-0 max-w-full truncate text-[0.78rem] text-[#f4f0fa]/72">
                     Uploaded {formatDateTime(row.created_at)}
                   </p>
-                  <p className="m-0 truncate text-[0.75rem] text-[#f4f0fa]/55">{uploaderLabel(row)}</p>
+                  <p className="m-0 max-w-full truncate text-[0.72rem] text-[#f4f0fa]/55">{uploaderLabel(row)}</p>
                 </div>
               </button>
             );
           })
         )}
-      </div>
 
-      {!loading && total > 0 ? (
-        <RecordingsPagination
-          pageIndex={safePageIndex}
-          pageSize={PAGE_SIZE}
-          total={total}
-          disabled={loading}
-          onPageChange={setPageIndex}
-        />
-      ) : null}
+        {!loading && total > 0 ? (
+          <RecordingsPagination
+            pageIndex={safePageIndex}
+            pageSize={PAGE_SIZE}
+            total={total}
+            disabled={loading}
+            onPageChange={setPageIndex}
+          />
+        ) : null}
+      </div>
 
       {addOpen && typeof document !== "undefined"
         ? createPortal(
