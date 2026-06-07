@@ -428,6 +428,12 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
     return opts;
   }, [uploaders]);
 
+  useEffect(() => {
+    if (filterUploader === FILTER_ALL) return;
+    const valid = new Set(uploaderFilterOptions.map((o) => o.value).filter((v) => v !== FILTER_ALL));
+    if (!valid.has(filterUploader)) setFilterUploader(FILTER_ALL);
+  }, [filterUploader, uploaderFilterOptions]);
+
   const addFormatId = useMemo(() => {
     const id = parseInt(addFormat, 10);
     return isValidCardFormatId(id) ? id : null;
@@ -663,7 +669,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
         </button>
       </div>
 
-      <div className="mx-auto flex w-full max-w-[61.6rem] flex-col gap-2.5">
+      <div className="mx-auto mt-3 flex w-full max-w-[61.6rem] flex-col gap-2.5 sm:mt-4">
         {loading ? (
           <div
             className={`rounded-xl border px-4 py-10 text-center text-[0.875rem] text-[#f4f0fa]/65 ${cardChromeBorder}`}

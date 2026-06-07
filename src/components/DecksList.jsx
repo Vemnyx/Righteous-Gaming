@@ -6,6 +6,7 @@ import { deckDisplayName } from "../utils/deckDisplayName";
 import { deckSourceLabel } from "../utils/deckSourceLabel";
 import {
   DECK_FILTER_ALL,
+  DECK_DEFAULT_FORMAT_FILTER,
   buildDeckFormatFilterOptions,
   buildDeckHeroFilterOptions,
   buildDeckMemberUserFilterOptions,
@@ -114,7 +115,7 @@ export function DecksList({ isLight, active, onOpenDeck }) {
   const [createSourceSubmitting, setCreateSourceSubmitting] = useState(false);
   const [createSourceError, setCreateSourceError] = useState(/** @type {string | null} */ (null));
 
-  const [filterFormat, setFilterFormat] = useState(DECK_FILTER_ALL);
+  const [filterFormat, setFilterFormat] = useState(DECK_DEFAULT_FORMAT_FILTER);
   const [filterHero, setFilterHero] = useState(DECK_FILTER_ALL);
   const [filterSource, setFilterSource] = useState(DECK_FILTER_ALL);
   const [filterMemberUser, setFilterMemberUser] = useState(DECK_FILTER_ALL);
@@ -247,6 +248,15 @@ export function DecksList({ isLight, active, onOpenDeck }) {
   useEffect(() => {
     setPageIndex(0);
   }, [filterFormat, filterHero, filterSource, filterMemberUser]);
+
+  useEffect(() => {
+    if (loading || rows.length === 0) return;
+    if (filterFormat === DECK_FILTER_ALL) return;
+    const valid = formatFilterOptions.some((o) => o.value === filterFormat);
+    if (valid) return;
+    const hasDefault = formatFilterOptions.some((o) => o.value === DECK_DEFAULT_FORMAT_FILTER);
+    setFilterFormat(hasDefault ? DECK_DEFAULT_FORMAT_FILTER : DECK_FILTER_ALL);
+  }, [loading, rows.length, filterFormat, formatFilterOptions]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / DECKS_PAGE_SIZE));
   const safePageIndex = Math.min(Math.max(0, pageIndex), totalPages - 1);

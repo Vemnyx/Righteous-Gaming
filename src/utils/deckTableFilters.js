@@ -7,6 +7,9 @@ import { deckHeroLabel } from "./deckHeroLabel";
 
 export const DECK_FILTER_ALL = "";
 
+/** Default format filter: Classic Construction decks. */
+export const DECK_DEFAULT_FORMAT_FILTER = `format:${CardFormat.ClassicConstruction}`;
+
 /**
  * @param {DeckRowLike} row
  * @returns {boolean}

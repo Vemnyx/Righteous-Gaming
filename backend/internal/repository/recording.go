@@ -413,9 +413,9 @@ func (r *Repository) ListRecordingUploaders(ctx context.Context) ([]RecordingUpl
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-SELECT DISTINCT u.id, u.email, u.username
-FROM recordings r
-INNER JOIN users u ON u.id = r.user_id
+SELECT u.id, u.email, u.username
+FROM users u
+WHERE u.id IN (SELECT DISTINCT user_id FROM recordings)
 ORDER BY COALESCE(NULLIF(TRIM(u.username), ''), u.email) ASC, u.id ASC`
 
 	rows, err := r.pool.Query(ctx, q)
