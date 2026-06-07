@@ -97,14 +97,15 @@ func ImportFabrary(
 	linkCopy := normalizedLink
 	setID, fabraryFormat := limitedDeckSetFields(ctx, repo, format, fetched.Format, cardInputs, opts)
 	created, err := repo.CreateDeckWithCards(ctx, repository.CreateDeckInput{
-		UserID:        userID,
-		Name:          fetched.Name,
-		Format:        format,
-		HeroID:        heroID,
-		SetID:         setID,
-		FabraryFormat: fabraryFormat,
-		DeckSourceID:  deckSourceID,
-		FabraryLink:   &linkCopy,
+		UserID:           userID,
+		Name:             fetched.Name,
+		Format:           format,
+		HeroID:           heroID,
+		SetID:            setID,
+		FabraryFormat:    fabraryFormat,
+		DeckSourceID:     deckSourceID,
+		FabraryLink:      &linkCopy,
+		FabraryCreatedAt: fetched.CreatedAt,
 	}, cardInputs)
 	if err != nil {
 		return nil, err

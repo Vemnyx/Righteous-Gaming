@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -25,7 +26,8 @@ type Deck struct {
 	FabraryFormat  *string
 	DeckSourceID   int
 	DeckSourceName string
-	FabraryLink    *string
+	FabraryLink      *string
+	FabraryCreatedAt *time.Time
 	OwnerUsername  *string
 	OwnerEmail     string
 }
@@ -39,8 +41,20 @@ type CreateDeckInput struct {
 	SetID         *int
 	FabraryFormat *string
 	DeckSourceID  int
-	FabraryLink   *string
+	FabraryLink       *string
+	FabraryCreatedAt  *time.Time
 }
+
+// DeckFabraryCreatedAtBackfillRow is a deck needing fabrary_created_at from Fabrary.
+type DeckFabraryCreatedAtBackfillRow struct {
+	ID          int
+	FabraryLink string
+}
+
+const insertDeckSQL = `
+INSERT INTO decks (user_id, name, format, hero_id, set_id, fabrary_format, deck_source_id, fabrary_link, fabrary_created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id`
 
 const deckSelectColumns = `
 d.id, d.user_id, d.name, d.format, d.hero_id, h.name, h.art_image_url, d.set_id, d.fabrary_format, d.deck_source_id, ds.source, d.fabrary_link, u.username, u.email`
@@ -250,14 +264,11 @@ func (r *Repository) CreateDeckWithCards(ctx context.Context, in CreateDeckInput
 	}
 	defer tx.Rollback(ctx)
 
-	const insertDeck = `
-INSERT INTO decks (user_id, name, format, hero_id, set_id, fabrary_format, deck_source_id, fabrary_link)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id`
+	const insertDeck = insertDeckSQL
 
 	var deckID int
 	if err := tx.QueryRow(ctx, insertDeck,
-		in.UserID, in.Name, in.Format, in.HeroID, in.SetID, in.FabraryFormat, in.DeckSourceID, in.FabraryLink,
+		in.UserID, in.Name, in.Format, in.HeroID, in.SetID, in.FabraryFormat, in.DeckSourceID, in.FabraryLink, in.FabraryCreatedAt,
 	).Scan(&deckID); err != nil {
 		return nil, fmt.Errorf("repository: insert deck: %w", err)
 	}
@@ -389,6 +400,79 @@ func (r *Repository) UpdateDeckName(ctx context.Context, deckID int, name string
 	tag, err := r.pool.Exec(ctx, q, deckID, name)
 	if err != nil {
 		return fmt.Errorf("repository: update deck name: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrDeckNotFound
+	}
+	return nil
+}
+
+// ListDecksForFabraryCreatedAtBackfill returns decks with fabrary_link but no fabrary_created_at.
+func (r *Repository) ListDecksForFabraryCreatedAtBackfill(ctx context.Context, f DeckListFilter) ([]DeckFabraryCreatedAtBackfillRow, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+
+	q := `
+SELECT d.id, d.fabrary_link
+FROM decks d
+WHERE d.fabrary_link IS NOT NULL
+  AND TRIM(d.fabrary_link) <> ''
+  AND d.fabrary_created_at IS NULL`
+	args := []any{}
+	n := 1
+	if f.UserID != nil {
+		if *f.UserID <= 0 {
+			return nil, fmt.Errorf("repository: invalid user_id")
+		}
+		q += fmt.Sprintf(" AND d.user_id = $%d", n)
+		args = append(args, *f.UserID)
+		n++
+	}
+	if f.DeckSourceID != nil {
+		if *f.DeckSourceID <= 0 {
+			return nil, fmt.Errorf("repository: invalid deck_source_id")
+		}
+		q += fmt.Sprintf(" AND d.deck_source_id = $%d", n)
+		args = append(args, *f.DeckSourceID)
+	}
+	q += " ORDER BY d.id ASC"
+
+	rows, err := r.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list fabrary created_at backfill: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]DeckFabraryCreatedAtBackfillRow, 0, 64)
+	for rows.Next() {
+		var row DeckFabraryCreatedAtBackfillRow
+		if err := rows.Scan(&row.ID, &row.FabraryLink); err != nil {
+			return nil, fmt.Errorf("repository: scan fabrary created_at backfill: %w", err)
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: list fabrary created_at backfill rows: %w", err)
+	}
+	return out, nil
+}
+
+// UpdateDeckFabraryCreatedAt sets fabrary_created_at for a deck row.
+func (r *Repository) UpdateDeckFabraryCreatedAt(ctx context.Context, deckID int, createdAt time.Time) error {
+	if r.pool == nil {
+		return fmt.Errorf("repository: pool is closed")
+	}
+	if deckID <= 0 {
+		return fmt.Errorf("repository: deck_id required")
+	}
+	if createdAt.IsZero() {
+		return fmt.Errorf("repository: created_at required")
+	}
+	const q = `UPDATE decks SET fabrary_created_at = $2 WHERE id = $1`
+	tag, err := r.pool.Exec(ctx, q, deckID, createdAt.UTC())
+	if err != nil {
+		return fmt.Errorf("repository: update fabrary_created_at: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return ErrDeckNotFound

@@ -35,6 +35,7 @@ type Deck struct {
 	Name           string
 	Format         string
 	HeroIdentifier string
+	CreatedAt      *time.Time
 	Cards          []DeckCard
 }
 
@@ -51,13 +52,14 @@ type graphQLResponse struct {
 }
 
 type fetchedDeck struct {
-	Name           string `json:"name"`
-	Format         string `json:"format"`
-	HeroIdentifier string `json:"heroIdentifier"`
+	Name           string  `json:"name"`
+	Format         string  `json:"format"`
+	HeroIdentifier string  `json:"heroIdentifier"`
+	CreatedAt      *string `json:"createdAt"`
 	DeckCards      []struct {
-		Quantity           int    `json:"quantity"`
-		SideboardQuantity  int    `json:"sideboardQuantity"`
-		CardIdentifier     string `json:"cardIdentifier"`
+		Quantity          int    `json:"quantity"`
+		SideboardQuantity int    `json:"sideboardQuantity"`
+		CardIdentifier    string `json:"cardIdentifier"`
 	} `json:"deckCards"`
 }
 
@@ -67,11 +69,19 @@ query getDeck($deckId: ID!) {
     name
     format
     heroIdentifier
+    createdAt
     deckCards {
       quantity
       sideboardQuantity
       cardIdentifier
     }
+  }
+}`
+
+const getDeckCreatedAtQuery = `
+query getDeck($deckId: ID!) {
+  getDeck(deckId: $deckId) {
+    createdAt
   }
 }`
 
@@ -92,6 +102,133 @@ func FetchDeck(ctx context.Context, deckID string) (*Deck, error) {
 		return nil, fmt.Errorf("fabrary: marshal graphql request: %w", err)
 	}
 
+	respBody, err := postAppSyncGraphQL(ctx, body)
+	if err != nil {
+		return nil, err
+	}
+
+	var gql graphQLResponse
+	if err := json.Unmarshal(respBody, &gql); err != nil {
+		return nil, fmt.Errorf("fabrary: decode graphql response: %w", err)
+	}
+	if len(gql.Errors) > 0 {
+		return nil, fmt.Errorf("fabrary: graphql error: %s", gql.Errors[0].Message)
+	}
+
+	var data struct {
+		GetDeck *fetchedDeck `json:"getDeck"`
+	}
+	if err := json.Unmarshal(gql.Data, &data); err != nil {
+		return nil, fmt.Errorf("fabrary: decode deck payload: %w", err)
+	}
+	if data.GetDeck == nil {
+		return nil, fmt.Errorf("fabrary: deck not found")
+	}
+
+	raw := data.GetDeck
+	out := &Deck{
+		DeckID:         deckID,
+		Name:           strings.TrimSpace(raw.Name),
+		Format:         strings.TrimSpace(raw.Format),
+		HeroIdentifier: strings.TrimSpace(raw.HeroIdentifier),
+		CreatedAt:      parseFabraryTimestamp(raw.CreatedAt),
+	}
+	if out.Name == "" {
+		return nil, fmt.Errorf("fabrary: deck has no name")
+	}
+
+	for _, line := range raw.DeckCards {
+		ident := strings.TrimSpace(line.CardIdentifier)
+		if ident == "" {
+			continue
+		}
+		if line.Quantity > 0 {
+			out.Cards = append(out.Cards, DeckCard{
+				CardIdentifier:    ident,
+				MainboardQuantity: line.Quantity,
+			})
+		}
+		if line.SideboardQuantity > 0 {
+			out.Cards = append(out.Cards, DeckCard{
+				CardIdentifier:    ident,
+				SideboardQuantity: line.SideboardQuantity,
+			})
+		}
+	}
+	if len(out.Cards) == 0 {
+		return nil, fmt.Errorf("fabrary: deck has no cards")
+	}
+	return out, nil
+}
+
+// FetchDeckCreatedAt loads Fabrary createdAt for a deck id (metadata only).
+func FetchDeckCreatedAt(ctx context.Context, deckID string) (time.Time, error) {
+	deckID = strings.TrimSpace(deckID)
+	if deckID == "" {
+		return time.Time{}, fmt.Errorf("fabrary: empty deck id")
+	}
+
+	body, err := json.Marshal(graphQLRequest{
+		Query: getDeckCreatedAtQuery,
+		Variables: map[string]any{
+			"deckId": deckID,
+		},
+	})
+	if err != nil {
+		return time.Time{}, fmt.Errorf("fabrary: marshal graphql request: %w", err)
+	}
+
+	respBody, err := postAppSyncGraphQL(ctx, body)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	var gql graphQLResponse
+	if err := json.Unmarshal(respBody, &gql); err != nil {
+		return time.Time{}, fmt.Errorf("fabrary: decode graphql response: %w", err)
+	}
+	if len(gql.Errors) > 0 {
+		return time.Time{}, fmt.Errorf("fabrary: graphql error: %s", gql.Errors[0].Message)
+	}
+
+	var data struct {
+		GetDeck *struct {
+			CreatedAt *string `json:"createdAt"`
+		} `json:"getDeck"`
+	}
+	if err := json.Unmarshal(gql.Data, &data); err != nil {
+		return time.Time{}, fmt.Errorf("fabrary: decode deck createdAt payload: %w", err)
+	}
+	if data.GetDeck == nil {
+		return time.Time{}, fmt.Errorf("fabrary: deck not found")
+	}
+	createdAt := parseFabraryTimestamp(data.GetDeck.CreatedAt)
+	if createdAt == nil {
+		return time.Time{}, fmt.Errorf("fabrary: deck has no createdAt")
+	}
+	return *createdAt, nil
+}
+
+func parseFabraryTimestamp(raw *string) *time.Time {
+	if raw == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*raw)
+	if s == "" {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		t, err = time.Parse(time.RFC3339, s)
+		if err != nil {
+			return nil
+		}
+	}
+	utc := t.UTC()
+	return &utc
+}
+
+func postAppSyncGraphQL(ctx context.Context, body []byte) ([]byte, error) {
 	creds, err := guestAppSyncCredentials(ctx)
 	if err != nil {
 		return nil, err
@@ -124,58 +261,7 @@ func FetchDeck(ctx context.Context, deckID string) (*Deck, error) {
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("fabrary: graphql HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
 	}
-
-	var gql graphQLResponse
-	if err := json.Unmarshal(respBody, &gql); err != nil {
-		return nil, fmt.Errorf("fabrary: decode graphql response: %w", err)
-	}
-	if len(gql.Errors) > 0 {
-		return nil, fmt.Errorf("fabrary: graphql error: %s", gql.Errors[0].Message)
-	}
-
-	var data struct {
-		GetDeck *fetchedDeck `json:"getDeck"`
-	}
-	if err := json.Unmarshal(gql.Data, &data); err != nil {
-		return nil, fmt.Errorf("fabrary: decode deck payload: %w", err)
-	}
-	if data.GetDeck == nil {
-		return nil, fmt.Errorf("fabrary: deck not found")
-	}
-
-	raw := data.GetDeck
-	out := &Deck{
-		DeckID:         deckID,
-		Name:           strings.TrimSpace(raw.Name),
-		Format:         strings.TrimSpace(raw.Format),
-		HeroIdentifier: strings.TrimSpace(raw.HeroIdentifier),
-	}
-	if out.Name == "" {
-		return nil, fmt.Errorf("fabrary: deck has no name")
-	}
-
-	for _, line := range raw.DeckCards {
-		ident := strings.TrimSpace(line.CardIdentifier)
-		if ident == "" {
-			continue
-		}
-		if line.Quantity > 0 {
-			out.Cards = append(out.Cards, DeckCard{
-				CardIdentifier:    ident,
-				MainboardQuantity: line.Quantity,
-			})
-		}
-		if line.SideboardQuantity > 0 {
-			out.Cards = append(out.Cards, DeckCard{
-				CardIdentifier:    ident,
-				SideboardQuantity: line.SideboardQuantity,
-			})
-		}
-	}
-	if len(out.Cards) == 0 {
-		return nil, fmt.Errorf("fabrary: deck has no cards")
-	}
-	return out, nil
+	return respBody, nil
 }
 
 func guestAppSyncCredentials(ctx context.Context) (aws.Credentials, error) {
