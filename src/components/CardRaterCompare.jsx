@@ -47,6 +47,32 @@ function formatRankDelta(delta) {
   return `↓${delta}`;
 }
 
+/** @param {Record<string, unknown> | null} rater @param {string} fallback */
+function raterTitle(rater, fallback) {
+  if (!rater) return fallback;
+  const label = typeof rater.label === "string" && rater.label.trim() !== "" ? rater.label.trim() : null;
+  if (label) return label;
+  const format = numOrNull(rater.format);
+  if (format != null) return cardFormatName(format) ?? fallback;
+  return fallback;
+}
+
+/** @param {Record<string, unknown> | null} rater */
+function raterDetails(rater) {
+  if (!rater) return "—";
+  const parts = [];
+  const hasLabel = typeof rater.label === "string" && rater.label.trim() !== "";
+  const format = numOrNull(rater.format);
+  if (hasLabel && format != null) parts.push(cardFormatName(format) ?? String(format));
+  if (typeof rater.started_at === "string") parts.push(`Started ${formatDateTime(rater.started_at)}`);
+  if (rater.completed_at != null && String(rater.completed_at).trim() !== "") {
+    parts.push(`Completed ${formatDateTime(String(rater.completed_at))}`);
+  } else {
+    parts.push("Active session");
+  }
+  return parts.length > 0 ? parts.join(" · ") : "—";
+}
+
 /**
  * @param {{
  *   isLight: boolean,
@@ -168,24 +194,8 @@ export function CardRaterCompare({ isLight, active, raterId, baselineRaterId, on
     return null;
   }
 
-  /** @param {Record<string, unknown> | null} rater */
-  function sessionLine(rater) {
-    if (!rater) return "—";
-    const label = typeof rater.label === "string" && rater.label.trim() !== "" ? rater.label.trim() : null;
-    const format = numOrNull(rater.format);
-    const started = typeof rater.started_at === "string" ? formatDateTime(rater.started_at) : null;
-    const completed =
-      rater.completed_at != null && String(rater.completed_at).trim() !== ""
-        ? formatDateTime(String(rater.completed_at))
-        : "Active";
-    const parts = [
-      label ? label : null,
-      format != null ? (cardFormatName(format) ?? `Format ${format}`) : null,
-      started ? `Started ${started}` : null,
-      `Completed ${completed}`,
-    ].filter(Boolean);
-    return parts.join(" · ");
-  }
+  const baselineTitle = raterTitle(parsed?.baseline ?? null, "Baseline");
+  const currentTitle = raterTitle(parsed?.current ?? null, "Current");
 
   /** @param {Record<string, unknown> | null} summary @param {string} key */
   function summaryValue(summary, key) {
@@ -205,9 +215,11 @@ export function CardRaterCompare({ isLight, active, raterId, baselineRaterId, on
             ← Back to results
           </button>
           <h2 className="m-0 text-lg font-semibold text-[#f4f0fa] sm:text-xl">Session comparison</h2>
-          <p className="mt-1.5 text-[0.85rem] leading-snug text-[#f4f0fa]/70">
-            Baseline session #{baselineId} → current session #{currentId}
-          </p>
+          {parsed ? (
+            <p className="mt-1.5 text-[0.85rem] leading-snug text-[#f4f0fa]/70">
+              {baselineTitle} → {currentTitle}
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -229,17 +241,17 @@ export function CardRaterCompare({ isLight, active, raterId, baselineRaterId, on
         <>
           <div className="grid gap-3 lg:grid-cols-2">
             <div className={panel}>
-              <p className={`m-0 ${labelMuted}`}>Baseline session</p>
-              <p className="m-0 mt-1 text-[0.9rem] font-semibold text-[#f4f0fa]">#{baselineId}</p>
+              <p className={`m-0 ${labelMuted}`}>Baseline</p>
+              <p className="m-0 mt-1 text-[0.9rem] font-semibold text-[#f4f0fa]">{baselineTitle}</p>
               <p className="m-0 mt-1 text-[0.8125rem] leading-snug text-[#f4f0fa]/70">
-                {sessionLine(parsed.baseline)}
+                {raterDetails(parsed.baseline)}
               </p>
             </div>
             <div className={panel}>
-              <p className={`m-0 ${labelMuted}`}>Current session</p>
-              <p className="m-0 mt-1 text-[0.9rem] font-semibold text-[#f4f0fa]">#{currentId}</p>
+              <p className={`m-0 ${labelMuted}`}>Current</p>
+              <p className="m-0 mt-1 text-[0.9rem] font-semibold text-[#f4f0fa]">{currentTitle}</p>
               <p className="m-0 mt-1 text-[0.8125rem] leading-snug text-[#f4f0fa]/70">
-                {sessionLine(parsed.current)}
+                {raterDetails(parsed.current)}
               </p>
             </div>
           </div>
