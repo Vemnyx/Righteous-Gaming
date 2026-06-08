@@ -62,7 +62,7 @@ export function CardRaterCompare({ isLight, active, raterId, baselineRaterId, on
   const [error, setError] = useState(/** @type {string | null} */ (null));
   /** @type {unknown} */
   const [raw, setRaw] = useState(null);
-  const [filter, setFilter] = useState(/** @type {"all" | "gains" | "drops" | "new" | "removed"} */ ("all"));
+  const [filter, setFilter] = useState(/** @type {"all" | "gains" | "drops"} */ ("all"));
   const [rowPreview, setRowPreview] = useState(
     /** @type {{ src: string, x: number, y: number } | null} */ (null),
   );
@@ -128,25 +128,29 @@ export function CardRaterCompare({ isLight, active, raterId, baselineRaterId, on
 
   const filteredCards = useMemo(() => {
     if (!parsed) return [];
-    return parsed.cards.filter((row) => {
+    const rows = parsed.cards.filter((row) => {
       if (!row || typeof row !== "object") return false;
       const r = /** @type {Record<string, unknown>} */ (row);
-      const baseline = parseStats(r.baseline);
-      const current = parseStats(r.current);
       const delta = numOrNull(r.avg_rating_delta);
       switch (filter) {
         case "gains":
           return delta != null && delta > 0.001;
         case "drops":
           return delta != null && delta < -0.001;
-        case "new":
-          return baseline == null && current != null;
-        case "removed":
-          return baseline != null && current == null;
         default:
           return true;
       }
     });
+    if (filter === "drops") {
+      return [...rows].sort((a, b) => {
+        const ra = /** @type {Record<string, unknown>} */ (a);
+        const rb = /** @type {Record<string, unknown>} */ (b);
+        const da = numOrNull(ra.avg_rating_delta) ?? 0;
+        const db = numOrNull(rb.avg_rating_delta) ?? 0;
+        return da - db;
+      });
+    }
+    return rows;
   }, [parsed, filter]);
 
   const panel =
@@ -240,9 +244,8 @@ export function CardRaterCompare({ isLight, active, raterId, baselineRaterId, on
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {[
-              ["Total ratings", "total_ratings", 0],
               ["Raters (users)", "unique_users", 0],
               ["Cards rated", "distinct_cards", 0],
               ["Session average", "average_rating", 2],
@@ -285,14 +288,12 @@ export function CardRaterCompare({ isLight, active, raterId, baselineRaterId, on
                   ["all", "All"],
                   ["gains", "Rating gains"],
                   ["drops", "Rating drops"],
-                  ["new", "New in current"],
-                  ["removed", "Missing in current"],
                 ].map(([id, label]) => (
                   <button
                     key={id}
                     type="button"
                     className={`rounded-lg border px-2.5 py-1 text-[0.72rem] font-semibold ${filterBtn(id)}`}
-                    onClick={() => setFilter(/** @type {"all" | "gains" | "drops" | "new" | "removed"} */ (id))}
+                    onClick={() => setFilter(/** @type {"all" | "gains" | "drops"} */ (id))}
                   >
                     {label}
                   </button>

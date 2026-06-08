@@ -14,7 +14,7 @@ const PREVIEW_WIDTH = 320;
 const PREVIEW_GAP_X = 36;
 const PREVIEW_GAP_Y = 10;
 
-/** @typedef {'distribution' | 'top-picks' | 'bottom-picks' | 'sideboard' | 'decklists' | 'trends'} CategoryTab */
+/** @typedef {'distribution' | 'top-picks' | 'bottom-picks' | 'sideboard' | 'decklists' | 'trends' | 'build-styles'} CategoryTab */
 
 /** @typedef {{ id: number, name: string, owner_username?: string | null, owner_email?: string | null, mainboard_count: number, fabrary_link?: string | null }} RunawaysDeckRow */
 
@@ -623,9 +623,211 @@ function SubmissionTimelineChart({ buckets, panelBorder }) {
   );
 }
 
+/**
+ * @param {{
+ *   archetypes: Record<string, unknown> | null,
+ *   deckCount: number,
+ *   panelBorder: string,
+ *   onPreview: (preview: { url: string, x: number, y: number } | null) => void,
+ * }} props
+ */
+function BuildStylesPanel({ archetypes, deckCount, panelBorder, onPreview }) {
+  const typical =
+    archetypes?.typical != null && typeof archetypes.typical === "object"
+      ? /** @type {Record<string, unknown>} */ (archetypes.typical)
+      : null;
+  const tags = Array.isArray(archetypes?.tags) ? archetypes.tags : [];
+  const packages = Array.isArray(archetypes?.packages) ? archetypes.packages : [];
+
+  if (!archetypes?.available) {
+    return (
+      <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
+        <p className="m-0 text-[0.875rem] text-[#f4f0fa]/75">
+          {archetypes?.unavailable_reason != null
+            ? String(archetypes.unavailable_reason)
+            : `Need at least ${numOrNull(archetypes?.min_decks_for_analysis) ?? 10} decks to infer build styles.`}
+        </p>
+        {deckCount > 0 ? (
+          <p className="m-0 mt-2 text-[0.78rem] text-[#f4f0fa]/55">{deckCount} decks in this slice.</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  /** @param {unknown} pct @param {string} colorClass */
+  const pitchBar = (pct, colorClass) => {
+    const p = (numOrNull(pct) ?? 0) * 100;
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="flex items-baseline justify-between gap-2 text-[0.78rem]">
+          <span className="truncate text-[#f4f0fa]/82">{p.toFixed(1)}% of pitched cards</span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-black/35">
+          <div
+            className={`h-full rounded-full ${colorClass}`}
+            style={{ width: `${Math.max(p, p > 0 ? 2 : 0)}%` }}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-5">
+      <p className="m-0 text-[0.82rem] leading-snug text-[#f4f0fa]/65">
+        Heuristic build styles from submitted mainboards. Decks can match multiple tags. Card packages are pairs that
+        co-occur more often than expected (lift ≥ 1.2).
+      </p>
+
+      {typical ? (
+        <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
+          <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Typical mainboard profile</h3>
+          <p className="m-0 mt-1 text-[0.78rem] text-[#f4f0fa]/55">Average across {deckCount} decks.</p>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            <div className="flex flex-col gap-2.5">
+              <p className="m-0 text-[0.72rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/50">Pitch mix</p>
+              <div className="flex flex-col gap-2">
+                <div>
+                  <p className="m-0 mb-1 text-[0.78rem] text-red-300/90">Red</p>
+                  {pitchBar(typical.red_pct, "bg-red-500/75")}
+                </div>
+                <div>
+                  <p className="m-0 mb-1 text-[0.78rem] text-yellow-300/90">Yellow</p>
+                  {pitchBar(typical.yellow_pct, "bg-yellow-400/80")}
+                </div>
+                <div>
+                  <p className="m-0 mb-1 text-[0.78rem] text-sky-300/90">Blue</p>
+                  {pitchBar(typical.blue_pct, "bg-sky-500/75")}
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <StatTile title="Avg cost" value={fmtNum(typical.avg_cost, 2)} />
+              <StatTile title="Avg 3-blocks" value={fmtNum(typical.avg_block3, 1)} />
+              <StatTile title="Reaction share" value={fmtPct(numOrNull(typical.reaction_pct) ?? 0)} />
+              <StatTile title="Equip / weapon share" value={fmtPct(numOrNull(typical.equipment_weapon_pct) ?? 0)} />
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {tags.length > 0 ? (
+        <div className="flex flex-col gap-3">
+          <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Detected build styles</h3>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {tags.map((raw) => {
+              if (!raw || typeof raw !== "object") return null;
+              const tag = /** @type {Record<string, unknown>} */ (raw);
+              const sig = Array.isArray(tag.signature_cards) ? tag.signature_cards : [];
+              return (
+                <div
+                  key={String(tag.key ?? tag.label ?? "")}
+                  className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <h4 className="m-0 text-[0.95rem] font-semibold text-[#f4f0fa]">
+                      {String(tag.label ?? tag.key ?? "Style")}
+                    </h4>
+                    <span className="text-[0.82rem] tabular-nums text-[#f4f0fa]/70">
+                      {numOrNull(tag.deck_count) ?? 0} decks · {fmtPct(numOrNull(tag.share) ?? 0)}
+                    </span>
+                  </div>
+                  {tag.description != null ? (
+                    <p className="m-0 mt-1 text-[0.78rem] text-[#f4f0fa]/55">{String(tag.description)}</p>
+                  ) : null}
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[0.75rem] tabular-nums text-[#f4f0fa]/60">
+                    <span>Red {fmtPct(numOrNull(tag.avg_red_pct) ?? 0)}</span>
+                    <span>Blue {fmtPct(numOrNull(tag.avg_blue_pct) ?? 0)}</span>
+                    <span>Cost {fmtNum(tag.avg_cost, 2)}</span>
+                  </div>
+                  {sig.length > 0 ? (
+                    <div className="mt-3 border-t border-white/[0.08] pt-3">
+                      <p className="m-0 text-[0.68rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/45">
+                        Signature picks
+                      </p>
+                      <ul className="m-0 mt-1.5 list-none space-y-1 p-0">
+                        {sig.map((cRaw) => {
+                          if (!cRaw || typeof cRaw !== "object") return null;
+                          const c = /** @type {Record<string, unknown>} */ (cRaw);
+                          const name = String(c.name ?? "Card");
+                          const imageUrl = c.image_url != null ? String(c.image_url) : "";
+                          return (
+                            <li key={String(c.card_id ?? name)} className="truncate text-[0.8rem] text-[#f4f0fa]/85">
+                              <CardNameWithPreview name={name} imageUrl={imageUrl} onPreview={onPreview} />
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <p className="m-0 text-[0.875rem] text-[#f4f0fa]/65">No build styles matched the heuristics for this slice.</p>
+      )}
+
+      {packages.length > 0 ? (
+        <div className={`overflow-hidden rounded-xl border ${panelBorder} bg-black/20`}>
+          <div className="border-b border-white/[0.08] px-4 py-3">
+            <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Card packages</h3>
+            <p className="m-0 mt-1 text-[0.78rem] text-[#f4f0fa]/55">Pairs that show up together disproportionately often.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[32rem] border-collapse text-left text-[0.82rem]">
+              <thead>
+                <tr className="border-b border-white/[0.08] text-[0.68rem] uppercase tracking-wide text-[#f4f0fa]/45">
+                  <th className="px-4 py-2.5 font-semibold">Cards</th>
+                  <th className="px-3 py-2.5 font-semibold">Decks</th>
+                  <th className="px-3 py-2.5 font-semibold">Share</th>
+                  <th className="px-3 py-2.5 font-semibold">Lift</th>
+                </tr>
+              </thead>
+              <tbody>
+                {packages.map((raw, idx) => {
+                  if (!raw || typeof raw !== "object") return null;
+                  const pkg = /** @type {Record<string, unknown>} */ (raw);
+                  const cards = Array.isArray(pkg.cards) ? pkg.cards : [];
+                  return (
+                    <tr key={idx} className="border-b border-white/[0.06] last:border-b-0">
+                      <td className="px-4 py-2.5">
+                        <div className="flex flex-col gap-1">
+                          {cards.map((cRaw) => {
+                            if (!cRaw || typeof cRaw !== "object") return null;
+                            const c = /** @type {Record<string, unknown>} */ (cRaw);
+                            const name = String(c.name ?? "Card");
+                            const imageUrl = c.image_url != null ? String(c.image_url) : "";
+                            return (
+                              <span key={String(c.card_id ?? name)} className="block truncate text-[#f4f0fa]/90">
+                                <CardNameWithPreview name={name} imageUrl={imageUrl} onPreview={onPreview} />
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 tabular-nums text-[#f4f0fa]/80">{numOrNull(pkg.deck_count) ?? 0}</td>
+                      <td className="px-3 py-2.5 tabular-nums text-[#f4f0fa]/80">{fmtPct(numOrNull(pkg.share) ?? 0)}</td>
+                      <td className="px-3 py-2.5 tabular-nums text-emerald-300/90">{fmtNum(pkg.lift, 2)}×</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <p className="m-0 text-[0.875rem] text-[#f4f0fa]/65">No strong card pairs detected for this hero yet.</p>
+      )}
+    </div>
+  );
+}
+
 const CATEGORY_TABS = /** @type {{ id: CategoryTab, label: string }[]} */ ([
   { id: "distribution", label: "Distribution" },
   { id: "trends", label: "Trends over time" },
+  { id: "build-styles", label: "Build styles" },
   { id: "top-picks", label: "Top picks" },
   { id: "bottom-picks", label: "Bottom picks" },
   { id: "sideboard", label: "Sideboard" },
@@ -806,8 +1008,10 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
   const [selectedSetId, setSelectedSetId] = useState(/** @type {number | null} */ (null));
   const [selectedHeroId, setSelectedHeroId] = useState(/** @type {number | null} */ (null));
   const [analytics, setAnalytics] = useState(/** @type {Record<string, unknown> | null} */ (null));
+  const [archetypes, setArchetypes] = useState(/** @type {Record<string, unknown> | null} */ (null));
   const [loadingMeta, setLoadingMeta] = useState(false);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [loadingArchetypes, setLoadingArchetypes] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [categoryTab, setCategoryTab] = useState(/** @type {CategoryTab} */ ("distribution"));
   const [pickRarityFilter, setPickRarityFilter] = useState("");
@@ -933,6 +1137,33 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
       setAnalytics(null);
     } finally {
       setLoadingAnalytics(false);
+    }
+  }, [user, selectedSetId, selectedHeroId]);
+
+  const loadArchetypes = useCallback(async () => {
+    if (!user || selectedSetId == null || selectedHeroId == null) {
+      setArchetypes(null);
+      return;
+    }
+    setLoadingArchetypes(true);
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      const qs = new URLSearchParams({
+        deck_source_id: String(RUNAWAYS_SOURCE_ID),
+        set_id: String(selectedSetId),
+        hero_id: String(selectedHeroId),
+      });
+      const res = await fetch(`/api/data/runaways-drafts/archetypes?${qs}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(parseApiError(await res.text()));
+      setArchetypes(await res.json());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load build styles");
+      setArchetypes(null);
+    } finally {
+      setLoadingArchetypes(false);
     }
   }, [user, selectedSetId, selectedHeroId]);
 
@@ -1089,6 +1320,7 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
     setBottomPickPageIndex(0);
     setDecklistPageIndex(0);
     setDecklists([]);
+    setArchetypes(null);
     setDeckModalOpen(false);
     setDeckModalLoading(false);
     setDeckModalError(null);
@@ -1107,6 +1339,13 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
     void loadDecklists();
     return undefined;
   }, [active, user, categoryTab, selectedSetId, selectedHeroId, loadDecklists]);
+
+  useEffect(() => {
+    if (!active || !user || categoryTab !== "build-styles") return undefined;
+    if (selectedSetId == null || selectedHeroId == null) return undefined;
+    void loadArchetypes();
+    return undefined;
+  }, [active, user, categoryTab, selectedSetId, selectedHeroId, loadArchetypes]);
 
   const deckCount = typeof analytics?.deck_count === "number" ? analytics.deck_count : 0;
 
@@ -1288,7 +1527,7 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
         </label>
       </div>
 
-      {loadingAnalytics || loadingMeta ? (
+      {loadingAnalytics || loadingMeta || (categoryTab === "build-styles" && loadingArchetypes) ? (
         <p className="m-0 mt-6 text-[0.875rem] text-[#f4f0fa]/65">Loading analytics…</p>
       ) : null}
 
@@ -1539,6 +1778,19 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
 
           {categoryTab === "trends" && deckCount === 0 ? (
             <p className="m-0 text-[0.875rem] text-[#f4f0fa]/65">No deck data for trend analysis.</p>
+          ) : null}
+
+          {categoryTab === "build-styles" && deckCount > 0 && !loadingArchetypes ? (
+            <BuildStylesPanel
+              archetypes={archetypes}
+              deckCount={deckCount}
+              panelBorder={panelBorder}
+              onPreview={setImagePreview}
+            />
+          ) : null}
+
+          {categoryTab === "build-styles" && deckCount === 0 ? (
+            <p className="m-0 text-[0.875rem] text-[#f4f0fa]/65">No deck data for build style analysis.</p>
           ) : null}
 
           {categoryTab === "top-picks" && deckCount > 0 ? (

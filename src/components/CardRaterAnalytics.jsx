@@ -122,6 +122,23 @@ function formatDateTime(iso) {
   return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
+/** @param {Record<string, unknown> | null | undefined} rater */
+function formatRaterSummary(rater) {
+  if (!rater) return null;
+  const parts = [];
+  const label = typeof rater.label === "string" && rater.label.trim() !== "" ? rater.label.trim() : null;
+  if (label) parts.push(label);
+  const format = numOrNull(rater.format);
+  if (format != null) parts.push(cardFormatName(format) ?? String(format));
+  if (typeof rater.started_at === "string") parts.push(`Started ${formatDateTime(rater.started_at)}`);
+  if (rater.completed_at != null && String(rater.completed_at).trim() !== "") {
+    parts.push(`Completed ${formatDateTime(String(rater.completed_at))}`);
+  } else {
+    parts.push("Active session");
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 /**
  * @param {{ isLight: boolean, active: boolean, raterId: string, onOpenCompare?: (baselineId: number) => void }} props
  */
@@ -435,6 +452,10 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCompare }) 
       ? "rounded-xl border border-white/[0.12] bg-black/20 px-4 py-4 sm:px-5"
       : "rounded-xl border border-white/[0.14] bg-black/25 px-4 py-4 sm:px-5";
 
+  const compareModalPanel = isLight
+    ? "border border-white/[0.14] bg-gradient-to-b from-[#434054] to-[#2d2a38] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+    : "border border-white/[0.2] bg-[rgba(12,6,22,0.96)] shadow-[0_24px_80px_rgba(0,0,0,0.5)]";
+
   const labelMuted = "text-[0.72rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/50";
   const selectCls =
     "min-h-10 w-full max-w-[14rem] rounded-lg border border-white/[0.18] bg-black/35 px-3 py-2 text-[0.8125rem] text-[#f4f0fa] outline-none focus-visible:ring-2 focus-visible:ring-purple-500/55";
@@ -448,32 +469,16 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCompare }) 
     return null;
   }
 
-  const fmtName = (n) => {
-    if (typeof n !== "number" || !Number.isFinite(n)) return String(n);
-    return cardFormatName(n) ?? String(n);
-  };
+  const raterSummary = formatRaterSummary(parsed?.rater ?? null);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 text-left">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="m-0 text-lg font-semibold text-[#f4f0fa] sm:text-xl">Card rater results</h2>
-          {parsed?.rater ? (
-            <p className="mt-1.5 text-[0.85rem] leading-snug text-[#f4f0fa]/70">
-              Session #{idNum}
-              {typeof parsed.rater.label === "string" && String(parsed.rater.label).trim() !== ""
-                ? ` — ${String(parsed.rater.label).trim()}`
-                : ""}
-              {" · "}
-              {fmtName(/** @type {number} */ (parsed.rater.format))}
-              {typeof parsed.rater.started_at === "string" ? ` · Started ${formatDateTime(parsed.rater.started_at)}` : ""}
-              {parsed.rater.completed_at != null && String(parsed.rater.completed_at).trim() !== ""
-                ? ` · Completed ${formatDateTime(String(parsed.rater.completed_at))}`
-                : " · Active session"}
-            </p>
-          ) : (
-            <p className="mt-1.5 text-[0.85rem] text-[#f4f0fa]/65">Session #{idNum}</p>
-          )}
+          {raterSummary ? (
+            <p className="mt-1.5 text-[0.85rem] leading-snug text-[#f4f0fa]/70">{raterSummary}</p>
+          ) : null}
         </div>
         {typeof onOpenCompare === "function" ? (
           <button
@@ -504,9 +509,8 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCompare }) 
       ) : null}
 
       {parsed?.summary ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {[
-            ["Total ratings", String(parsed.summary.total_ratings ?? "—")],
             ["Raters (users)", String(parsed.summary.unique_users ?? "—")],
             ["Cards rated", String(parsed.summary.distinct_cards ?? "—")],
             ["Session average", typeof parsed.summary.average_rating === "number" ? parsed.summary.average_rating.toFixed(2) : "—"],
@@ -1160,7 +1164,6 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCompare }) 
                     ? String(cardDetailModal.card.name)
                     : "Card"}
                 </p>
-                <p className="m-0 mt-0.5 text-[0.72rem] text-[#f4f0fa]/50">Session #{idNum}</p>
               </div>
               <button
                 type="button"
@@ -1242,14 +1245,14 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCompare }) 
       {compareModalOpen && typeof document !== "undefined"
         ? createPortal(
             <div
-              className="fixed inset-0 z-[210] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
+              className="fixed inset-0 z-[210] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
               role="presentation"
               onClick={(e) => {
                 if (e.target === e.currentTarget && !compareModalLoading) closeCompareModal();
               }}
             >
               <div
-                className={`relative max-h-[min(80vh,40rem)] w-full max-w-lg overflow-hidden rounded-xl p-5 sm:p-6 ${panel}`}
+                className={`relative max-h-[min(80vh,40rem)] w-full max-w-lg overflow-hidden rounded-xl p-5 sm:p-6 ${compareModalPanel}`}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="card-rater-compare-title"
@@ -1259,7 +1262,7 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCompare }) 
                   Compare to another session
                 </h3>
                 <p className="mt-2 text-[0.85rem] leading-snug text-[#f4f0fa]/75">
-                  Choose a completed session for this set to compare against session #{idNum}.
+                  Choose a completed session for this set to compare against the current results.
                 </p>
                 {compareModalError ? (
                   <p className="mt-3 text-[0.85rem] text-red-200" role="alert">
@@ -1277,6 +1280,12 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCompare }) 
                     {compareSessions.map((session) => {
                       const label =
                         session.label != null && session.label.trim() !== "" ? session.label.trim() : null;
+                      const formatLabel = cardFormatName(session.format) ?? String(session.format);
+                      const completed = session.completed_at
+                        ? `Completed ${formatDateTime(session.completed_at)}`
+                        : null;
+                      const title = label ?? formatLabel;
+                      const subtitle = (label ? [formatLabel, completed] : [completed]).filter(Boolean).join(" · ");
                       return (
                         <li key={session.id}>
                           <button
@@ -1284,13 +1293,10 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCompare }) 
                             className="w-full rounded-lg border border-white/[0.12] bg-black/25 px-3 py-2.5 text-left hover:bg-white/[0.05]"
                             onClick={() => selectCompareSession(session.id)}
                           >
-                            <span className="block text-[0.875rem] font-semibold text-[#f4f0fa]">
-                              {label ? label : `Session #${session.id}`}
-                            </span>
-                            <span className="mt-0.5 block text-[0.75rem] text-[#f4f0fa]/60">
-                              #{session.id} · {cardFormatName(session.format) ?? session.format}
-                              {session.completed_at ? ` · Completed ${formatDateTime(session.completed_at)}` : ""}
-                            </span>
+                            <span className="block text-[0.875rem] font-semibold text-[#f4f0fa]">{title}</span>
+                            {subtitle ? (
+                              <span className="mt-0.5 block text-[0.75rem] text-[#f4f0fa]/60">{subtitle}</span>
+                            ) : null}
                           </button>
                         </li>
                       );

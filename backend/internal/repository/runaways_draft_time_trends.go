@@ -93,12 +93,8 @@ WHERE d.deck_source_id = $1 AND d.set_id = $2 AND d.hero_id = $3 AND d.fabrary_c
 		return nil
 	}
 
-	var splitAt time.Time
-	const medianQ = `
-SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY d.fabrary_created_at)
-FROM decks d
-WHERE d.deck_source_id = $1 AND d.set_id = $2 AND d.hero_id = $3 AND d.fabrary_created_at IS NOT NULL`
-	if err := r.pool.QueryRow(ctx, medianQ, deckSourceID, setID, heroID).Scan(&splitAt); err != nil {
+	splitAt, err := r.runawaysDraftMedianCreatedAt(ctx, deckSourceID, setID, heroID)
+	if err != nil {
 		return fmt.Errorf("repository: runaways median split: %w", err)
 	}
 	trends.SplitAt = &splitAt
@@ -185,6 +181,46 @@ ORDER BY 1 ASC`
 		return err
 	}
 	return nil
+}
+
+func (r *Repository) runawaysDraftMedianCreatedAt(ctx context.Context, deckSourceID, setID, heroID int) (time.Time, error) {
+	const q = `
+SELECT d.fabrary_created_at
+FROM decks d
+WHERE d.deck_source_id = $1 AND d.set_id = $2 AND d.hero_id = $3 AND d.fabrary_created_at IS NOT NULL
+ORDER BY d.fabrary_created_at ASC`
+
+	rows, err := r.pool.Query(ctx, q, deckSourceID, setID, heroID)
+	if err != nil {
+		return time.Time{}, err
+	}
+	defer rows.Close()
+
+	times := make([]time.Time, 0, 64)
+	for rows.Next() {
+		var t time.Time
+		if err := rows.Scan(&t); err != nil {
+			return time.Time{}, err
+		}
+		times = append(times, t)
+	}
+	if err := rows.Err(); err != nil {
+		return time.Time{}, err
+	}
+	if len(times) == 0 {
+		return time.Time{}, fmt.Errorf("no timed decks")
+	}
+	return medianTime(times), nil
+}
+
+func medianTime(times []time.Time) time.Time {
+	n := len(times)
+	if n%2 == 1 {
+		return times[n/2]
+	}
+	a := times[n/2-1]
+	b := times[n/2]
+	return a.Add(b.Sub(a) / 2)
 }
 
 func (r *Repository) scanRunawaysDraftCompositionTrends(
