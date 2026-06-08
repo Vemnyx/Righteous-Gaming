@@ -91,9 +91,13 @@ function ThemeToggle({ theme, onChange, className = "" }) {
  */
 export function UserSettings({ isLight, active, theme, onThemeChange }) {
   const { user, sessionProfile, sessionProfileLoading, updateSessionProfileSettings } = useAuth();
-  const quickSubmit = userSettingsFromProfile(sessionProfile).card_rater_quick_submit;
+  const profileSettings = userSettingsFromProfile(sessionProfile);
+  const quickSubmit = profileSettings.card_rater_quick_submit;
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
 
   useEffect(() => {
@@ -105,10 +109,16 @@ export function UserSettings({ isLight, active, theme, onThemeChange }) {
       try {
         const token = await user.getIdToken();
         const settings = await fetchUserSettingsFromApi(token);
-        if (!cancelled) updateSessionProfileSettings(settings);
+        if (!cancelled) {
+          updateSessionProfileSettings(settings);
+          setFirstName(settings.first_name != null ? String(settings.first_name) : "");
+          setLastName(settings.last_name != null ? String(settings.last_name) : "");
+        }
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Failed to load settings");
+          setFirstName(sessionProfile?.first_name != null ? String(sessionProfile.first_name) : "");
+          setLastName(sessionProfile?.last_name != null ? String(sessionProfile.last_name) : "");
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -117,7 +127,7 @@ export function UserSettings({ isLight, active, theme, onThemeChange }) {
     return () => {
       cancelled = true;
     };
-  }, [active, user, sessionProfileLoading, updateSessionProfileSettings]);
+  }, [active, user, sessionProfileLoading, updateSessionProfileSettings, sessionProfile?.first_name, sessionProfile?.last_name]);
 
   const onQuickSubmitChange = useCallback(
     async (next) => {
@@ -140,9 +150,34 @@ export function UserSettings({ isLight, active, theme, onThemeChange }) {
     [user, saving, loading, quickSubmit, updateSessionProfileSettings],
   );
 
+  const onSaveProfile = useCallback(async () => {
+    if (!user || savingProfile || loading) return;
+    setError(null);
+    setSavingProfile(true);
+    try {
+      const token = await user.getIdToken();
+      const saved = await saveUserSettingsFromApi(token, {
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+      });
+      updateSessionProfileSettings(saved);
+      setFirstName(saved.first_name != null ? String(saved.first_name) : "");
+      setLastName(saved.last_name != null ? String(saved.last_name) : "");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save profile");
+    } finally {
+      setSavingProfile(false);
+    }
+  }, [user, savingProfile, loading, firstName, lastName, updateSessionProfileSettings]);
+
   const sectionCls = isLight
     ? "rounded-xl border border-white/[0.18] bg-black/25 p-5 shadow-sm"
     : "rounded-xl border border-white/[0.14] bg-black/35 p-5 shadow-sm";
+  const inputCls = isLight
+    ? "w-full rounded-lg border border-white/[0.22] bg-black/30 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/55"
+    : "w-full rounded-lg border border-white/[0.22] bg-black/40 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/35 focus:border-purple-400/55";
+  const btnPrimary =
+    "rounded-lg border border-white/[0.22] bg-gradient-to-br from-[#7b4cb8] to-[#5a2f8f] px-4 py-2 text-[0.8125rem] font-semibold text-white shadow-[0_3px_14px_rgba(90,47,143,0.38)] hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-45";
 
   if (!active) return null;
 
@@ -154,6 +189,56 @@ export function UserSettings({ isLight, active, theme, onThemeChange }) {
           Manage your personal preferences for Righteous Gaming.
         </p>
       </div>
+
+      <section className={sectionCls} aria-labelledby="user-settings-profile-heading">
+        <h2 id="user-settings-profile-heading" className="m-0 text-[1.05rem] font-semibold text-[#f4f0fa]">
+          Profile
+        </h2>
+        <div className="mt-4 border-t border-white/[0.1] pt-4">
+          {loading ? (
+            <p className="m-0 text-[0.88rem] text-[#f4f0fa]/70">Loading settings…</p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
+                  First name
+                </span>
+                <input
+                  type="text"
+                  className={inputCls}
+                  value={firstName}
+                  autoComplete="given-name"
+                  disabled={savingProfile || !user}
+                  onChange={(e) => setFirstName(e.target.value)}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
+                  Last name
+                </span>
+                <input
+                  type="text"
+                  className={inputCls}
+                  value={lastName}
+                  autoComplete="family-name"
+                  disabled={savingProfile || !user}
+                  onChange={(e) => setLastName(e.target.value)}
+                />
+              </label>
+              <div>
+                <button
+                  type="button"
+                  className={btnPrimary}
+                  disabled={savingProfile || !user}
+                  onClick={() => void onSaveProfile()}
+                >
+                  {savingProfile ? "Saving…" : "Save profile"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
 
       <section className={sectionCls} aria-labelledby="user-settings-appearance-heading">
         <h2 id="user-settings-appearance-heading" className="m-0 text-[1.05rem] font-semibold text-[#f4f0fa]">

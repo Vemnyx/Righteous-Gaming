@@ -2,9 +2,9 @@
 
 export const SESSION_PROFILE_STORAGE_KEY = "rg-session-profile";
 
-/** @typedef {{ card_rater_quick_submit?: boolean }} UserSettings */
+/** @typedef {{ card_rater_quick_submit?: boolean, first_name?: string | null, last_name?: string | null }} UserSettings */
 
-/** @typedef {{ id?: number, email?: string, username?: string|null, uid?: string, role?: number|null, created_at?: string, settings?: UserSettings }} SessionProfile */
+/** @typedef {{ id?: number, email?: string, username?: string|null, first_name?: string|null, last_name?: string|null, uid?: string, role?: number|null, created_at?: string, settings?: UserSettings }} SessionProfile */
 
 /**
  * @param {SessionProfile | null | undefined} profile
@@ -14,6 +14,8 @@ export function userSettingsFromProfile(profile) {
   const s = profile?.settings;
   return {
     card_rater_quick_submit: s?.card_rater_quick_submit === true,
+    first_name: profile?.first_name ?? s?.first_name ?? null,
+    last_name: profile?.last_name ?? s?.last_name ?? null,
   };
 }
 
@@ -98,22 +100,24 @@ export async function fetchUserSettingsFromApi(idToken) {
   const saved = data?.settings;
   return {
     card_rater_quick_submit: saved?.card_rater_quick_submit === true,
+    first_name: data?.first_name ?? null,
+    last_name: data?.last_name ?? null,
   };
 }
 
 /**
  * @param {string} idToken
- * @param {UserSettings} settings
+ * @param {Partial<UserSettings>} patch
  * @returns {Promise<UserSettings>}
  */
-export async function saveUserSettingsFromApi(idToken, settings) {
+export async function saveUserSettingsFromApi(idToken, patch) {
   const res = await fetch("/api/me/settings", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${idToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(settings),
+    body: JSON.stringify(patch),
   });
   if (!res.ok) {
     const t = await res.text();
@@ -123,5 +127,7 @@ export async function saveUserSettingsFromApi(idToken, settings) {
   const saved = data?.settings;
   return {
     card_rater_quick_submit: saved?.card_rater_quick_submit === true,
+    first_name: data?.first_name ?? null,
+    last_name: data?.last_name ?? null,
   };
 }

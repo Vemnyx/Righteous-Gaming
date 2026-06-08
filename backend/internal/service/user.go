@@ -67,37 +67,94 @@ func (s *UserService) UserForIDToken(ctx context.Context, idToken string) (*doma
 	return u, nil
 }
 
-// UserSettingsForIDToken returns settings for the authenticated user.
-func (s *UserService) UserSettingsForIDToken(ctx context.Context, idToken string) (domain.UserSettings, error) {
+// UserSettingsForIDToken returns settings and profile fields for the authenticated user.
+func (s *UserService) UserSettingsForIDToken(ctx context.Context, idToken string) (domain.UserMeSettings, error) {
 	u, err := s.UserForIDToken(ctx, idToken)
 	if err != nil {
-		return domain.UserSettings{}, err
+		return domain.UserMeSettings{}, err
 	}
-	return u.Settings, nil
+	return domain.UserMeSettings{
+		Settings:  u.Settings,
+		FirstName: u.FirstName,
+		LastName:  u.LastName,
+	}, nil
 }
 
-// UpdateUserSettingsForIDToken verifies the token and upserts settings for the authenticated user.
-func (s *UserService) UpdateUserSettingsForIDToken(ctx context.Context, idToken string, settings domain.UserSettings) (domain.UserSettings, error) {
+// UserMeSettingsPatch is a partial update for /api/me/settings.
+type UserMeSettingsPatch struct {
+	CardRaterQuickSubmit *bool
+	FirstName            *string
+	LastName             *string
+}
+
+// UpdateUserSettingsForIDToken verifies the token and upserts settings/profile for the authenticated user.
+func (s *UserService) UpdateUserSettingsForIDToken(ctx context.Context, idToken string, patch UserMeSettingsPatch) (domain.UserMeSettings, error) {
 	idToken = strings.TrimSpace(idToken)
 	if idToken == "" {
-		return domain.UserSettings{}, fmt.Errorf("%w: id token required", ErrValidation)
+		return domain.UserMeSettings{}, fmt.Errorf("%w: id token required", ErrValidation)
+	}
+	if patch.CardRaterQuickSubmit == nil && patch.FirstName == nil && patch.LastName == nil {
+		return domain.UserMeSettings{}, fmt.Errorf("%w: no settings fields to update", ErrValidation)
 	}
 	tok, err := s.fb.VerifyIDToken(ctx, idToken)
 	if err != nil {
-		return domain.UserSettings{}, fmt.Errorf("%w: %v", ErrUnauthenticated, err)
+		return domain.UserMeSettings{}, fmt.Errorf("%w: %v", ErrUnauthenticated, err)
 	}
 	row, err := s.repo.UserByUID(ctx, tok.UID)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
-			return domain.UserSettings{}, fmt.Errorf("%w", ErrUserNotFound)
+			return domain.UserMeSettings{}, fmt.Errorf("%w", ErrUserNotFound)
 		}
-		return domain.UserSettings{}, fmt.Errorf("service: user by uid: %w", err)
+		return domain.UserMeSettings{}, fmt.Errorf("service: user by uid: %w", err)
 	}
-	updated, err := s.repo.UpsertUserSettings(ctx, row.ID, settings.CardRaterQuickSubmit)
-	if err != nil {
-		return domain.UserSettings{}, fmt.Errorf("service: upsert user settings: %w", err)
+
+	settings := domain.UserSettings{CardRaterQuickSubmit: false}
+	if patch.CardRaterQuickSubmit != nil {
+		updated, err := s.repo.UpsertUserSettings(ctx, row.ID, *patch.CardRaterQuickSubmit)
+		if err != nil {
+			return domain.UserMeSettings{}, fmt.Errorf("service: upsert user settings: %w", err)
+		}
+		settings.CardRaterQuickSubmit = updated.CardRaterQuickSubmit
+	} else {
+		existing, err := s.repo.GetUserSettings(ctx, row.ID)
+		if err != nil {
+			return domain.UserMeSettings{}, fmt.Errorf("service: get user settings: %w", err)
+		}
+		settings.CardRaterQuickSubmit = existing.CardRaterQuickSubmit
 	}
-	return domain.UserSettings{CardRaterQuickSubmit: updated.CardRaterQuickSubmit}, nil
+
+	firstName := row.FirstName
+	lastName := row.LastName
+	if patch.FirstName != nil || patch.LastName != nil {
+		if patch.FirstName != nil {
+			trimmed := strings.TrimSpace(*patch.FirstName)
+			if trimmed == "" {
+				firstName = nil
+			} else {
+				firstName = &trimmed
+			}
+		}
+		if patch.LastName != nil {
+			trimmed := strings.TrimSpace(*patch.LastName)
+			if trimmed == "" {
+				lastName = nil
+			} else {
+				lastName = &trimmed
+			}
+		}
+		updated, err := s.repo.UpdateUserProfile(ctx, row.ID, firstName, lastName)
+		if err != nil {
+			return domain.UserMeSettings{}, fmt.Errorf("service: update user profile: %w", err)
+		}
+		firstName = updated.FirstName
+		lastName = updated.LastName
+	}
+
+	return domain.UserMeSettings{
+		Settings:  settings,
+		FirstName: firstName,
+		LastName:  lastName,
+	}, nil
 }
 
 // ListUsersPagedForAdmin verifies the Firebase token, ensures the caller is an admin,
@@ -193,8 +250,8 @@ func (s *UserService) CreateUser(ctx context.Context, in domain.User) (*domain.U
 }
 
 // CompleteRegistration completes an invited registration by creating Firebase credentials,
-// then updating the existing invited DB row with uid/username/registered_at and removing the invite row.
-func (s *UserService) CompleteRegistration(ctx context.Context, email, registrationCode string, username *string, password string) (*domain.User, error) {
+// then updating the existing invited DB row with uid/username/names/registered_at and removing the invite row.
+func (s *UserService) CompleteRegistration(ctx context.Context, email, registrationCode string, username, firstName, lastName *string, password string) (*domain.User, error) {
 	email = strings.TrimSpace(email)
 	registrationCode = strings.TrimSpace(registrationCode)
 	password = strings.TrimSpace(password)
@@ -218,6 +275,17 @@ func (s *UserService) CompleteRegistration(ctx context.Context, email, registrat
 			cleanUsername = &n
 		}
 	}
+
+	cleanFirstName := strings.TrimSpace(ptrStr(firstName))
+	cleanLastName := strings.TrimSpace(ptrStr(lastName))
+	if cleanFirstName == "" {
+		return nil, fmt.Errorf("%w: first name is required", ErrValidation)
+	}
+	if cleanLastName == "" {
+		return nil, fmt.Errorf("%w: last name is required", ErrValidation)
+	}
+	firstNamePtr := &cleanFirstName
+	lastNamePtr := &cleanLastName
 
 	invitedUser, err := s.repo.UserByEmailWithoutUID(ctx, email)
 	if err != nil {
@@ -267,7 +335,7 @@ func (s *UserService) CompleteRegistration(ctx context.Context, email, registrat
 		return nil, fmt.Errorf("service: firebase create user: %w", err)
 	}
 
-	row, err := s.repo.CompleteRegistrationByIDAndDeleteInvite(ctx, invitedUser.ID, fbUser.UID, cleanUsername, registrationCode)
+	row, err := s.repo.CompleteRegistrationByIDAndDeleteInvite(ctx, invitedUser.ID, fbUser.UID, cleanUsername, firstNamePtr, lastNamePtr, registrationCode)
 	if err != nil {
 		if deleteErr := s.fb.DeleteUser(ctx, fbUser.UID); deleteErr != nil {
 			return nil, fmt.Errorf(
@@ -339,8 +407,17 @@ func domainUserFromRepo(u *repository.User) *domain.User {
 		ID:        u.ID,
 		Email:     u.Email,
 		Username:  u.Username,
+		FirstName: u.FirstName,
+		LastName:  u.LastName,
 		UID:       u.UID,
 		Role:      &r,
 		CreatedAt: &u.CreatedAt,
 	}
+}
+
+func ptrStr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

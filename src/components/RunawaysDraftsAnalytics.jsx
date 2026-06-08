@@ -502,6 +502,186 @@ function SideboardTopTable({ cards, deckCount, isLight, onPreview }) {
 }
 
 /**
+ * @param {{ buckets: { label: string, key?: string, deck_count: number, decks_with_card?: number, pick_rate?: number }[] }} props
+ */
+function CardPickRateTimelineChart({ buckets }) {
+  if (!buckets.length) {
+    return <p className="m-0 text-[0.82rem] text-[#f4f0fa]/55">No dated submissions to chart.</p>;
+  }
+
+  const width = 640;
+  const height = 220;
+  const pad = { top: 18, right: 16, bottom: 42, left: 52 };
+  const innerW = width - pad.left - pad.right;
+  const innerH = height - pad.top - pad.bottom;
+  const maxRate = buckets.reduce((m, b) => Math.max(m, numOrNull(b.pick_rate) ?? 0), 0);
+  const yMax = Math.min(1, Math.max(0.25, maxRate * 1.15));
+
+  /** @param {number} rate */
+  const yForRate = (rate) => pad.top + innerH - (rate / yMax) * innerH;
+
+  const points = buckets.map((b, i) => {
+    const x =
+      buckets.length === 1 ? pad.left + innerW / 2 : pad.left + (i / (buckets.length - 1)) * innerW;
+    const rate = numOrNull(b.pick_rate) ?? 0;
+    return { x, y: yForRate(rate), rate, bucket: b };
+  });
+
+  const pathD = points
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+    .join(" ");
+
+  const labelEvery = Math.max(1, Math.ceil(buckets.length / 6));
+  const yTicks = [0, yMax / 2, yMax];
+
+  return (
+    <div className="w-full overflow-x-auto">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-auto w-full min-w-[20rem]"
+        role="img"
+        aria-label="Pick rate over time line chart"
+      >
+        {yTicks.map((tick) => {
+          const y = yForRate(tick);
+          return (
+            <g key={tick}>
+              <line x1={pad.left} y1={y} x2={width - pad.right} y2={y} stroke="rgba(255,255,255,0.08)" />
+              <text x={pad.left - 8} y={y + 4} textAnchor="end" fill="rgba(244,240,250,0.5)" fontSize="10">
+                {fmtPct(tick)}
+              </text>
+            </g>
+          );
+        })}
+        <path d={pathD} fill="none" stroke="#9b6fd8" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        {points.map((p) => (
+          <g key={p.bucket.key ?? p.bucket.label}>
+            <circle cx={p.x} cy={p.y} r="4.5" fill="#c4a9ef" stroke="#1a1424" strokeWidth="1.5">
+              <title>
+                {p.bucket.label}: {fmtPct(p.rate)} ({p.bucket.decks_with_card ?? 0}/{p.bucket.deck_count} decks)
+              </title>
+            </circle>
+          </g>
+        ))}
+        {points.map((p, i) => {
+          if (i % labelEvery !== 0 && i !== points.length - 1) return null;
+          return (
+            <text
+              key={`${p.bucket.key ?? p.bucket.label}-x`}
+              x={p.x}
+              y={height - 14}
+              textAnchor="middle"
+              fill="rgba(244,240,250,0.55)"
+              fontSize="10"
+            >
+              {p.bucket.label}
+            </text>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/**
+ * @param {{
+ *   cardName: string,
+ *   imageUrl: string | null,
+ *   loading: boolean,
+ *   error: string | null,
+ *   timeline: Record<string, unknown> | null,
+ *   isLight: boolean,
+ *   onClose: () => void,
+ * }} props
+ */
+function CardTrendPickModal({ cardName, imageUrl, loading, error, timeline, isLight, onClose }) {
+  const modalPanel = isLight
+    ? "border border-white/[0.14] bg-gradient-to-b from-[#434054] to-[#2d2a38] shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+    : "border border-white/[0.2] bg-[rgba(12,6,22,0.96)] shadow-[0_24px_80px_rgba(0,0,0,0.5)]";
+
+  const buckets = Array.isArray(timeline?.buckets)
+    ? timeline.buckets.map((raw) => {
+        if (!raw || typeof raw !== "object") return null;
+        const b = /** @type {Record<string, unknown>} */ (raw);
+        return {
+          label: String(b.label ?? ""),
+          key: b.key != null ? String(b.key) : undefined,
+          deck_count: numOrNull(b.deck_count) ?? 0,
+          decks_with_card: numOrNull(b.decks_with_card) ?? 0,
+          pick_rate: numOrNull(b.pick_rate) ?? 0,
+        };
+      }).filter(Boolean)
+    : [];
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[210] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+      role="presentation"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !loading) onClose();
+      }}
+    >
+      <div
+        className={`relative flex max-h-[min(90vh,720px)] w-full max-w-3xl flex-col rounded-xl p-5 sm:p-6 ${modalPanel}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="runaways-card-trend-modal-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            {imageUrl ? (
+              <img
+                src={imageUrl}
+                alt=""
+                className="h-16 w-auto shrink-0 rounded-md border border-white/[0.14] bg-black/30 object-contain sm:h-20"
+              />
+            ) : null}
+            <div className="min-w-0">
+              <h3 id="runaways-card-trend-modal-title" className="m-0 truncate text-lg font-semibold text-[#f4f0fa]">
+                {cardName}
+              </h3>
+              <p className="m-0 mt-1 text-[0.78rem] text-[#f4f0fa]/55">
+                Mainboard pick rate by Fabrary deck created date (UTC days).
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="shrink-0 rounded-lg border border-white/[0.18] bg-black/30 px-2.5 py-1 text-[0.78rem] font-semibold text-[#f4f0fa]/85 hover:bg-white/[0.06]"
+            disabled={loading}
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+          {loading ? (
+            <p className="m-0 py-10 text-center text-[0.875rem] text-[#f4f0fa]/70">Loading pick trend…</p>
+          ) : error ? (
+            <p className="m-0 text-[0.875rem] text-red-200/95" role="alert">
+              {error}
+            </p>
+          ) : !timeline?.available ? (
+            <p className="m-0 text-[0.875rem] text-[#f4f0fa]/70">
+              {timeline?.unavailable_reason != null
+                ? String(timeline.unavailable_reason)
+                : "Pick trend is not available for this card."}
+            </p>
+          ) : (
+            <CardPickRateTimelineChart buckets={/** @type {NonNullable<typeof buckets>} */ (buckets)} />
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
  * @param {{
  *   title: string,
  *   cards: unknown[],
@@ -509,9 +689,10 @@ function SideboardTopTable({ cards, deckCount, isLight, onPreview }) {
  *   lateDeckCount: number,
  *   isLight: boolean,
  *   onPreview: (preview: { url: string, x: number, y: number } | null) => void,
+ *   onCardClick?: (card: Record<string, unknown>) => void,
  * }} props
  */
-function CardTrendTable({ title, cards, earlyDeckCount, lateDeckCount, isLight, onPreview }) {
+function CardTrendTable({ title, cards, earlyDeckCount, lateDeckCount, isLight, onPreview, onCardClick }) {
   const tableHeadBorder = isLight ? "border-white/12" : "border-white/[0.20]";
   const tableRowBorder = isLight ? "border-white/[0.08]" : "border-white/[0.12]";
 
@@ -527,6 +708,9 @@ function CardTrendTable({ title, cards, earlyDeckCount, lateDeckCount, isLight, 
   return (
     <section>
       <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">{title}</h3>
+      {onCardClick ? (
+        <p className="m-0 mt-1 text-[0.78rem] text-[#f4f0fa]/55">Click a row to view pick rate over time.</p>
+      ) : null}
       <div className="mt-2 overflow-x-auto rounded-xl border border-white/[0.12] bg-black/20">
         <table className="w-full min-w-[32rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
           <thead>
@@ -557,7 +741,13 @@ function CardTrendTable({ title, cards, earlyDeckCount, lateDeckCount, isLight, 
                     : "";
 
               return (
-                <tr key={String(c.card_id)} className={`border-b ${tableRowBorder} last:border-b-0`}>
+                <tr
+                  key={String(c.card_id)}
+                  className={`border-b ${tableRowBorder} last:border-b-0 ${
+                    onCardClick ? "cursor-pointer hover:bg-white/[0.04]" : ""
+                  }`}
+                  onClick={() => onCardClick?.(c)}
+                >
                   <td className="px-3 py-2 tabular-nums text-[#f4f0fa]/45 sm:px-4">{index + 1}</td>
                   <td className="max-w-[16rem] px-3 py-2 sm:px-4">
                     <div className="min-w-0">
@@ -1031,6 +1221,15 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
     /** @type {ReturnType<typeof partitionDeckCards> | null} */ (null),
   );
   const [imagePreview, setImagePreview] = useState(/** @type {{ url: string, x: number, y: number } | null} */ (null));
+  const [trendCardModalOpen, setTrendCardModalOpen] = useState(false);
+  const [trendCardModalLoading, setTrendCardModalLoading] = useState(false);
+  const [trendCardModalError, setTrendCardModalError] = useState(/** @type {string | null} */ (null));
+  const [trendCardModalTimeline, setTrendCardModalTimeline] = useState(
+    /** @type {Record<string, unknown> | null} */ (null),
+  );
+  const [trendCardModalMeta, setTrendCardModalMeta] = useState(
+    /** @type {{ name: string, imageUrl: string | null } | null} */ (null),
+  );
 
   const panelBorder = isLight ? "border-white/[0.14]" : "border-white/[0.2]";
   const selectCls = isLight
@@ -1166,6 +1365,51 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
       setLoadingArchetypes(false);
     }
   }, [user, selectedSetId, selectedHeroId]);
+
+  const closeTrendCardModal = useCallback(() => {
+    if (trendCardModalLoading) return;
+    setTrendCardModalOpen(false);
+    setTrendCardModalError(null);
+    setTrendCardModalTimeline(null);
+    setTrendCardModalMeta(null);
+  }, [trendCardModalLoading]);
+
+  const openTrendCardModal = useCallback(
+    async (cardRaw) => {
+      if (!user || selectedSetId == null || selectedHeroId == null) return;
+      const c = /** @type {Record<string, unknown>} */ (cardRaw);
+      const cardId = numOrNull(c.card_id);
+      if (cardId == null) return;
+
+      const name = String(c.name ?? "Card");
+      const imageUrl = c.image_url != null ? String(c.image_url) : null;
+      setTrendCardModalMeta({ name, imageUrl });
+      setTrendCardModalOpen(true);
+      setTrendCardModalLoading(true);
+      setTrendCardModalError(null);
+      setTrendCardModalTimeline(null);
+
+      try {
+        const token = await user.getIdToken();
+        const qs = new URLSearchParams({
+          deck_source_id: String(RUNAWAYS_SOURCE_ID),
+          set_id: String(selectedSetId),
+          hero_id: String(selectedHeroId),
+          card_id: String(cardId),
+        });
+        const res = await fetch(`/api/data/runaways-drafts/card-pick-timeline?${qs}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(parseApiError(await res.text()));
+        setTrendCardModalTimeline(await res.json());
+      } catch (e) {
+        setTrendCardModalError(e instanceof Error ? e.message : "Failed to load pick trend");
+      } finally {
+        setTrendCardModalLoading(false);
+      }
+    },
+    [user, selectedSetId, selectedHeroId],
+  );
 
   const loadDecklists = useCallback(async () => {
     if (!user || selectedSetId == null || selectedHeroId == null) {
@@ -1326,6 +1570,11 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
     setDeckModalError(null);
     setDeckModalSections(null);
     setDeckModalMeta(null);
+    setTrendCardModalOpen(false);
+    setTrendCardModalLoading(false);
+    setTrendCardModalError(null);
+    setTrendCardModalTimeline(null);
+    setTrendCardModalMeta(null);
   }, [selectedSetId, selectedHeroId]);
 
   useEffect(() => {
@@ -1761,6 +2010,7 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
                       lateDeckCount={trendLateDeckCount}
                       isLight={isLight}
                       onPreview={setImagePreview}
+                      onCardClick={(card) => void openTrendCardModal(card)}
                     />
                     <CardTrendTable
                       title="Falling picks"
@@ -1769,6 +2019,7 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
                       lateDeckCount={trendLateDeckCount}
                       isLight={isLight}
                       onPreview={setImagePreview}
+                      onCardClick={(card) => void openTrendCardModal(card)}
                     />
                   </div>
                 </>
@@ -1863,6 +2114,18 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
             />
           ) : null}
         </div>
+      ) : null}
+
+      {trendCardModalOpen && trendCardModalMeta ? (
+        <CardTrendPickModal
+          cardName={trendCardModalMeta.name}
+          imageUrl={trendCardModalMeta.imageUrl}
+          loading={trendCardModalLoading}
+          error={trendCardModalError}
+          timeline={trendCardModalTimeline}
+          isLight={isLight}
+          onClose={closeTrendCardModal}
+        />
       ) : null}
 
       {deckModalOpen && deckModalMeta ? (

@@ -50,6 +50,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("GET /api/data/runaways-drafts/decks/{id}", rdh.getRunawaysDraftDeck)
 	mux.HandleFunc("GET /api/data/runaways-drafts/analytics", rdh.getRunawaysDraftAnalytics)
 	mux.HandleFunc("GET /api/data/runaways-drafts/archetypes", rdh.getRunawaysDraftArchetypes)
+	mux.HandleFunc("GET /api/data/runaways-drafts/card-pick-timeline", rdh.getRunawaysDraftCardPickTimeline)
 	mux.HandleFunc("POST /api/card-raters", rh.createCardRater)
 	mux.HandleFunc("PATCH /api/card-raters/active/complete", rh.completeActiveCardRater)
 	mux.HandleFunc("PATCH /api/card-raters/{id}/reopen", rh.reopenCardRater)

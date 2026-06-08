@@ -37,10 +37,13 @@ function uploaderLabel(row) {
 }
 
 /**
- * @param {{ url: string, className?: string }} props
+ * @param {{ url: string, startSeconds?: number | null, className?: string }} props
  */
-function RecordingPlayback({ url, className = "" }) {
-  const playback = useMemo(() => resolveRecordingPlayback(url), [url]);
+function RecordingPlayback({ url, startSeconds, className = "" }) {
+  const playback = useMemo(
+    () => resolveRecordingPlayback(url, startSeconds ?? undefined),
+    [url, startSeconds],
+  );
   const shell = `overflow-hidden rounded-xl border border-white/[0.12] bg-black/35 ${className}`.trim();
 
   if (playback.kind === "none") {
@@ -56,7 +59,7 @@ function RecordingPlayback({ url, className = "" }) {
       <div className={shell}>
         <iframe
           className="aspect-video h-auto w-full min-w-0 border-0"
-          src={youtubeEmbedSrc(playback.videoId)}
+          src={youtubeEmbedSrc(playback.videoId, playback.startSeconds)}
           title="Recording video"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowFullScreen
@@ -106,7 +109,7 @@ export function RecordingDetailPage({ isLight, recordingId, active, onBack, onRe
   const myUserId = typeof sessionProfile?.id === "number" ? sessionProfile.id : null;
   const isAdmin = Number(sessionProfile?.role) === 0;
   const [meta, setMeta] = useState(
-    /** @type {{ id: number, user_id: number, url: string, label?: string | null, format: number, created_at: string, owner_username?: string | null, owner_email?: string, first_hero_name?: string | null, first_hero_art_image_url?: string | null, second_hero_name?: string | null, second_hero_art_image_url?: string | null } | null} */ (
+    /** @type {{ id: number, user_id: number, url: string, label?: string | null, format: number, start_seconds?: number | null, created_at: string, owner_username?: string | null, owner_email?: string, first_hero_name?: string | null, first_hero_art_image_url?: string | null, second_hero_name?: string | null, second_hero_art_image_url?: string | null } | null} */ (
       null,
     ),
   );
@@ -159,6 +162,8 @@ export function RecordingDetailPage({ isLight, recordingId, active, onBack, onRe
         label:
           r.label != null && String(r.label).trim() !== "" ? String(r.label).trim() : null,
         format: typeof r.format === "number" ? r.format : 0,
+        start_seconds:
+          typeof r.start_seconds === "number" && r.start_seconds > 0 ? r.start_seconds : null,
         created_at: typeof r.created_at === "string" ? r.created_at : "",
         owner_username:
           r.owner_username != null && String(r.owner_username).trim() !== ""
@@ -395,7 +400,7 @@ export function RecordingDetailPage({ isLight, recordingId, active, onBack, onRe
 
       {meta && !notFound ? (
         <>
-          <RecordingPlayback url={meta.url} />
+          <RecordingPlayback url={meta.url} startSeconds={meta.start_seconds} />
 
           <section className={`rounded-xl border p-4 sm:p-5 ${cardChromeBorder}`} aria-label="Comments">
             <h3 className="m-0 text-left text-lg font-semibold text-[#f4f0fa]">Comments</h3>

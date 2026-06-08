@@ -25,12 +25,16 @@ const ghostBtnFullClass = `${ghostBtnClass} w-full`;
 export default function Register({ onSuccess, onBackToLogin }) {
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPasswords, setShowPasswords] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [emailError, setEmailError] = useState(null);
   const [usernameError, setUsernameError] = useState(null);
+  const [firstNameError, setFirstNameError] = useState(null);
+  const [lastNameError, setLastNameError] = useState(null);
   const [error, setError] = useState(null);
   const [loadingRegistration, setLoadingRegistration] = useState(true);
   const [registrationExpired, setRegistrationExpired] = useState(false);
@@ -77,9 +81,19 @@ export default function Register({ onSuccess, onBackToLogin }) {
     e.preventDefault();
     setEmailError(null);
     setUsernameError(null);
+    setFirstNameError(null);
+    setLastNameError(null);
     setError(null);
     if (!isFirebaseConfigured()) {
       setError("Firebase is not configured.");
+      return;
+    }
+    if (firstName.trim() === "") {
+      setFirstNameError("First name is required.");
+      return;
+    }
+    if (lastName.trim() === "") {
+      setLastNameError("Last name is required.");
       return;
     }
     if (password.length < 8 || password.length > 64) {
@@ -104,6 +118,8 @@ export default function Register({ onSuccess, onBackToLogin }) {
           email: email.trim(),
           code: inviteCode.trim(),
           username: username.trim() || null,
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
           password,
         }),
       });
@@ -117,6 +133,14 @@ export default function Register({ onSuccess, onBackToLogin }) {
           }
           if (body?.field === "username") {
             setUsernameError(body?.message || "Username is not available.");
+            return;
+          }
+          if (body?.field === "first_name") {
+            setFirstNameError(body?.message || "First name is required.");
+            return;
+          }
+          if (body?.field === "last_name") {
+            setLastNameError(body?.message || "Last name is required.");
             return;
           }
           if (typeof body?.message === "string" && body.message.trim()) {
@@ -210,6 +234,46 @@ export default function Register({ onSuccess, onBackToLogin }) {
         />
         {usernameError ? (
           <p className="-mt-0.5 mb-0.5 text-[0.85rem] text-[#ffb4b4]">{usernameError}</p>
+        ) : null}
+
+        <label className={labelClass} htmlFor="register-first-name">
+          First name
+        </label>
+        <input
+          id="register-first-name"
+          className={`${baseInput} ${firstNameError ? inputErrorRing : ""}`}
+          type="text"
+          autoComplete="given-name"
+          value={firstName}
+          onChange={(e) => {
+            setFirstName(e.target.value);
+            setFirstNameError(null);
+          }}
+          required
+          disabled={submitting}
+        />
+        {firstNameError ? (
+          <p className="-mt-0.5 mb-0.5 text-[0.85rem] text-[#ffb4b4]">{firstNameError}</p>
+        ) : null}
+
+        <label className={labelClass} htmlFor="register-last-name">
+          Last name
+        </label>
+        <input
+          id="register-last-name"
+          className={`${baseInput} ${lastNameError ? inputErrorRing : ""}`}
+          type="text"
+          autoComplete="family-name"
+          value={lastName}
+          onChange={(e) => {
+            setLastName(e.target.value);
+            setLastNameError(null);
+          }}
+          required
+          disabled={submitting}
+        />
+        {lastNameError ? (
+          <p className="-mt-0.5 mb-0.5 text-[0.85rem] text-[#ffb4b4]">{lastNameError}</p>
         ) : null}
 
         <label className={labelClass} htmlFor="register-password">

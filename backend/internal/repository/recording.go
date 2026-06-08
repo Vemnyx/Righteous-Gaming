@@ -22,6 +22,7 @@ type Recording struct {
 	FirstHeroID          *int
 	SecondHeroID         *int
 	Format               int16
+	StartSeconds         *int
 	CreatedAt            time.Time
 	OwnerUsername        *string
 	OwnerEmail           string
@@ -74,6 +75,7 @@ type CreateRecordingInput struct {
 	FirstHeroID  int
 	SecondHeroID int
 	Format       int16
+	StartSeconds *int
 }
 
 const recordingSelectColumns = `
@@ -85,6 +87,7 @@ SELECT
   r.first_hero_id,
   r.second_hero_id,
   r.format,
+  r.start_seconds,
   r.created_at,
   u.username,
   u.email,
@@ -101,7 +104,7 @@ func scanRecording(row pgx.Row) (*Recording, error) {
 	var rec Recording
 	if err := row.Scan(
 		&rec.ID, &rec.UserID, &rec.URL, &rec.Label,
-		&rec.FirstHeroID, &rec.SecondHeroID, &rec.Format, &rec.CreatedAt,
+		&rec.FirstHeroID, &rec.SecondHeroID, &rec.Format, &rec.StartSeconds, &rec.CreatedAt,
 		&rec.OwnerUsername, &rec.OwnerEmail,
 		&rec.FirstHeroName, &rec.FirstHeroArtImageURL,
 		&rec.SecondHeroName, &rec.SecondHeroArtImageURL,
@@ -234,13 +237,13 @@ func (r *Repository) CreateRecording(ctx context.Context, in CreateRecordingInpu
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-INSERT INTO recordings (user_id, url, label, first_hero_id, second_hero_id, format)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO recordings (user_id, url, label, first_hero_id, second_hero_id, format, start_seconds)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id`
 
 	var id int
 	if err := r.pool.QueryRow(ctx, q,
-		in.UserID, in.URL, in.Label, in.FirstHeroID, in.SecondHeroID, in.Format,
+		in.UserID, in.URL, in.Label, in.FirstHeroID, in.SecondHeroID, in.Format, in.StartSeconds,
 	).Scan(&id); err != nil {
 		return nil, fmt.Errorf("repository: create recording: %w", err)
 	}

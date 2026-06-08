@@ -82,11 +82,21 @@ export function AuthProvider({ children }) {
     await firebaseSignOut(getFirebaseAuth());
   }, [configured]);
 
-  const updateSessionProfileSettings = useCallback((/** @type {import("./sessionProfile").UserSettings} */ settings) => {
+  const updateSessionProfileSettings = useCallback((/** @type {Partial<import("./sessionProfile").UserSettings>} */ patch) => {
     setSessionProfile((prev) => {
       if (!prev) return prev;
-      const merged = userSettingsFromProfile({ ...prev, settings: { ...prev.settings, ...settings } });
-      const next = { ...prev, settings: merged };
+      const next = {
+        ...prev,
+        settings: {
+          ...userSettingsFromProfile(prev),
+          ...(patch.card_rater_quick_submit !== undefined
+            ? { card_rater_quick_submit: patch.card_rater_quick_submit }
+            : {}),
+        },
+      };
+      if (patch.first_name !== undefined) next.first_name = patch.first_name;
+      if (patch.last_name !== undefined) next.last_name = patch.last_name;
+      next.settings = userSettingsFromProfile(next);
       writeSessionProfile(next);
       return next;
     });

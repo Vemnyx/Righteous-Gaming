@@ -16,39 +16,52 @@ type User struct {
 	ID           int
 	Email        string
 	Username     *string
+	FirstName    *string
+	LastName     *string
 	UID          string
 	Role         int
 	CreatedAt    time.Time
 	RegisteredAt *time.Time
 }
 
+const userSelectColumns = `
+SELECT id, email, username, first_name, last_name, COALESCE(uid, ''), role, created_at`
+
 // CreateUserInput holds fields required to insert a user (id and created_at are set by the DB).
 type CreateUserInput struct {
-	Email    string
-	Username *string
-	UID      string
-	Role     int
+	Email     string
+	Username  *string
+	FirstName *string
+	LastName  *string
+	UID       string
+	Role      int
 }
 
-// UserByUID returns the user with the given uid, or ErrUserNotFound.
+func scanUserRow(row pgx.Row) (*User, error) {
+	var u User
+	if err := row.Scan(
+		&u.ID, &u.Email, &u.Username, &u.FirstName, &u.LastName, &u.UID, &u.Role, &u.CreatedAt,
+	); err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
 func (r *Repository) UserByUID(ctx context.Context, uid string) (*User, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
-	const q = `
-SELECT id, email, username, uid, role, created_at
+	const q = userSelectColumns + `
 FROM users
 WHERE uid = $1`
 	row := r.pool.QueryRow(ctx, q, uid)
-	var u User
-	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt)
+	u, err := scanUserRow(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
 		return nil, fmt.Errorf("repository: user by uid: %w", err)
 	}
-	return &u, nil
+	return u, nil
 }
 
 // UserByID returns the user with the given primary key, or ErrUserNotFound.
@@ -59,20 +72,18 @@ func (r *Repository) UserByID(ctx context.Context, id int) (*User, error) {
 	if id <= 0 {
 		return nil, fmt.Errorf("repository: invalid user id")
 	}
-	const q = `
-SELECT id, email, username, COALESCE(uid, ''), role, created_at
+	const q = userSelectColumns + `
 FROM users
 WHERE id = $1`
 	row := r.pool.QueryRow(ctx, q, id)
-	var u User
-	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt)
+	u, err := scanUserRow(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
 		return nil, fmt.Errorf("repository: user by id: %w", err)
 	}
-	return &u, nil
+	return u, nil
 }
 
 // UserByEmail returns the user with the given email, or ErrUserNotFound.
@@ -80,20 +91,18 @@ func (r *Repository) UserByEmail(ctx context.Context, email string) (*User, erro
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
-	const q = `
-SELECT id, email, username, COALESCE(uid, ''), role, created_at
+	const q = userSelectColumns + `
 FROM users
 WHERE email = $1`
 	row := r.pool.QueryRow(ctx, q, email)
-	var u User
-	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt)
+	u, err := scanUserRow(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
 		return nil, fmt.Errorf("repository: user by email: %w", err)
 	}
-	return &u, nil
+	return u, nil
 }
 
 // UserByEmailWithoutUID returns the invited user row for email where uid is null/empty.
@@ -101,20 +110,18 @@ func (r *Repository) UserByEmailWithoutUID(ctx context.Context, email string) (*
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
-	const q = `
-SELECT id, email, username, COALESCE(uid, ''), role, created_at
+	const q = userSelectColumns + `
 FROM users
 WHERE email = $1 AND (uid IS NULL OR btrim(uid) = '')`
 	row := r.pool.QueryRow(ctx, q, email)
-	var u User
-	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt)
+	u, err := scanUserRow(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
 		return nil, fmt.Errorf("repository: user by email without uid: %w", err)
 	}
-	return &u, nil
+	return u, nil
 }
 
 // UsersByEmailOrUsername returns all users whose email matches, or whose username
@@ -123,8 +130,7 @@ func (r *Repository) UsersByEmailOrUsername(ctx context.Context, email string, u
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
-	const q = `
-SELECT id, email, username, COALESCE(uid, ''), role, created_at
+	const q = userSelectColumns + `
 FROM users
 WHERE email = $1 OR ($2::varchar IS NOT NULL AND username = $2)`
 	rows, err := r.pool.Query(ctx, q, email, username)
@@ -135,11 +141,11 @@ WHERE email = $1 OR ($2::varchar IS NOT NULL AND username = $2)`
 
 	out := make([]User, 0, 2)
 	for rows.Next() {
-		var u User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt); err != nil {
+		u, err := scanUserRow(rows)
+		if err != nil {
 			return nil, fmt.Errorf("repository: users by email or username scan: %w", err)
 		}
-		out = append(out, u)
+		out = append(out, *u)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("repository: users by email or username rows: %w", err)
@@ -147,8 +153,8 @@ WHERE email = $1 OR ($2::varchar IS NOT NULL AND username = $2)`
 	return out, nil
 }
 
-// CompleteRegistrationByID updates the invited row with uid, username, and registration timestamp.
-func (r *Repository) CompleteRegistrationByID(ctx context.Context, id int, uid string, username *string) (*User, error) {
+// CompleteRegistrationByID updates the invited row with uid, username, names, and registration timestamp.
+func (r *Repository) CompleteRegistrationByID(ctx context.Context, id int, uid string, username, firstName, lastName *string) (*User, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
@@ -156,23 +162,24 @@ func (r *Repository) CompleteRegistrationByID(ctx context.Context, id int, uid s
 UPDATE users
 SET uid = $2,
     username = $3,
+    first_name = $4,
+    last_name = $5,
     registered_at = now()
 WHERE id = $1
-RETURNING id, email, username, COALESCE(uid, ''), role, created_at`
-	row := r.pool.QueryRow(ctx, q, id, uid, username)
-	var u User
-	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt)
+RETURNING id, email, username, first_name, last_name, COALESCE(uid, ''), role, created_at`
+	row := r.pool.QueryRow(ctx, q, id, uid, username, firstName, lastName)
+	u, err := scanUserRow(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
 		return nil, fmt.Errorf("repository: complete registration by id: %w", err)
 	}
-	return &u, nil
+	return u, nil
 }
 
 // CompleteRegistrationByIDAndDeleteInvite updates the invited user and removes the invite row in one transaction.
-func (r *Repository) CompleteRegistrationByIDAndDeleteInvite(ctx context.Context, userID int, uid string, username *string, inviteCode string) (*User, error) {
+func (r *Repository) CompleteRegistrationByIDAndDeleteInvite(ctx context.Context, userID int, uid string, username, firstName, lastName *string, inviteCode string) (*User, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
@@ -186,12 +193,14 @@ func (r *Repository) CompleteRegistrationByIDAndDeleteInvite(ctx context.Context
 UPDATE users
 SET uid = $2,
     username = $3,
+    first_name = $4,
+    last_name = $5,
     registered_at = now()
 WHERE id = $1
-RETURNING id, email, username, COALESCE(uid, ''), role, created_at`
-	row := tx.QueryRow(ctx, updateQ, userID, uid, username)
-	var u User
-	if err := row.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt); err != nil {
+RETURNING id, email, username, first_name, last_name, COALESCE(uid, ''), role, created_at`
+	row := tx.QueryRow(ctx, updateQ, userID, uid, username, firstName, lastName)
+	u, err := scanUserRow(row)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
@@ -209,7 +218,7 @@ RETURNING id, email, username, COALESCE(uid, ''), role, created_at`
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("repository: commit complete registration: %w", err)
 	}
-	return &u, nil
+	return u, nil
 }
 
 // CreateUser inserts a new user and returns the persisted row.
@@ -220,14 +229,38 @@ func (r *Repository) CreateUser(ctx context.Context, in CreateUserInput) (*User,
 	const q = `
 INSERT INTO users (email, username, uid, role)
 VALUES ($1, $2, $3, $4)
-RETURNING id, email, username, uid, role, created_at`
+RETURNING id, email, username, first_name, last_name, uid, role, created_at`
 	row := r.pool.QueryRow(ctx, q, in.Email, in.Username, in.UID, in.Role)
-	var u User
-	err := row.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt)
+	u, err := scanUserRow(row)
 	if err != nil {
 		return nil, fmt.Errorf("repository: create user: %w", err)
 	}
-	return &u, nil
+	return u, nil
+}
+
+// UpdateUserProfile updates first and last name for a user.
+func (r *Repository) UpdateUserProfile(ctx context.Context, userID int, firstName, lastName *string) (*User, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	if userID <= 0 {
+		return nil, fmt.Errorf("repository: invalid user id")
+	}
+	const q = `
+UPDATE users
+SET first_name = $2,
+    last_name = $3
+WHERE id = $1
+RETURNING id, email, username, first_name, last_name, COALESCE(uid, ''), role, created_at`
+	row := r.pool.QueryRow(ctx, q, userID, firstName, lastName)
+	u, err := scanUserRow(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("repository: update user profile: %w", err)
+	}
+	return u, nil
 }
 
 // CreateUserIfAbsent inserts a user row for email/role and ignores duplicate-email conflicts.

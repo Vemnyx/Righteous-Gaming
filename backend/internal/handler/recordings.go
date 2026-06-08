@@ -40,6 +40,7 @@ type recordingJSON struct {
 	FirstHeroID           *int    `json:"first_hero_id,omitempty"`
 	SecondHeroID          *int    `json:"second_hero_id,omitempty"`
 	Format                int16   `json:"format"`
+	StartSeconds          *int    `json:"start_seconds,omitempty"`
 	CreatedAt             string  `json:"created_at"`
 	OwnerUsername         *string `json:"owner_username,omitempty"`
 	OwnerEmail            string  `json:"owner_email,omitempty"`
@@ -65,6 +66,7 @@ type createRecordingRequest struct {
 	FirstHeroID  int     `json:"first_hero_id"`
 	SecondHeroID int     `json:"second_hero_id"`
 	Format       int16   `json:"format"`
+	StartSeconds *int    `json:"start_seconds"`
 }
 
 type createRecordingCommentRequest struct {
@@ -114,6 +116,7 @@ func recordingToJSON(r *repository.Recording) recordingJSON {
 		FirstHeroID:           r.FirstHeroID,
 		SecondHeroID:          r.SecondHeroID,
 		Format:                r.Format,
+		StartSeconds:          r.StartSeconds,
 		CreatedAt:             r.CreatedAt.UTC().Format(time.RFC3339Nano),
 		OwnerUsername:         r.OwnerUsername,
 		OwnerEmail:            r.OwnerEmail,
@@ -328,6 +331,18 @@ func (h *recordingsHTTP) createRecording(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	var startSeconds *int
+	if body.StartSeconds != nil {
+		if *body.StartSeconds < 0 || *body.StartSeconds > 86400 {
+			writeFieldError(w, http.StatusBadRequest, "start_seconds", "invalid")
+			return
+		}
+		if *body.StartSeconds > 0 {
+			v := *body.StartSeconds
+			startSeconds = &v
+		}
+	}
+
 	var label *string
 	if body.Label != nil {
 		t := strings.TrimSpace(*body.Label)
@@ -343,6 +358,7 @@ func (h *recordingsHTTP) createRecording(w http.ResponseWriter, r *http.Request)
 		FirstHeroID:  body.FirstHeroID,
 		SecondHeroID: body.SecondHeroID,
 		Format:       body.Format,
+		StartSeconds: startSeconds,
 	})
 	if err != nil {
 		log.Error("create recording", "error", err, "user_id", u.ID)

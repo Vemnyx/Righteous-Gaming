@@ -33,8 +33,17 @@ type User struct {
 	ID        int        `json:"id,omitempty"`
 	Email     string     `json:"email"`
 	Username  *string    `json:"username,omitempty"`
+	FirstName *string    `json:"first_name,omitempty"`
+	LastName  *string    `json:"last_name,omitempty"`
 	UID       string     `json:"uid"`
 	Role      *Role      `json:"role,omitempty"`
 	CreatedAt *time.Time `json:"created_at,omitempty"`
 	Settings  UserSettings `json:"settings"`
+}
+
+// UserMeSettings combines app preferences with profile fields stored on users.
+type UserMeSettings struct {
+	Settings  UserSettings `json:"settings"`
+	FirstName *string      `json:"first_name,omitempty"`
+	LastName  *string      `json:"last_name,omitempty"`
 }

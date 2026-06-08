@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
 import { CARD_FORMAT_NAMES, isValidCardFormatId } from "../constants/cardFormat";
 import { extFromFilename, MAX_UPLOAD_SIZE_LABEL, uploadPublicAsset, uploadSizeError } from "../utils/uploadPublicAsset";
+import { youtubeVideoIdFromInput } from "../utils/youtube";
+import { YouTubeTimestampPreview } from "./YouTubeTimestampPreview";
 
 /** @typedef {{ id: number, user_id: number, url: string, label?: string | null, first_hero_id?: number | null, second_hero_id?: number | null, format: number, created_at: string, owner_username?: string | null, owner_email?: string, first_hero_name?: string | null, first_hero_art_image_url?: string | null, second_hero_name?: string | null, second_hero_art_image_url?: string | null }} RecordingRow */
 
@@ -182,6 +184,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
   const [addMediaMode, setAddMediaMode] = useState(MEDIA_UPLOAD);
   const [addEmbedUrl, setAddEmbedUrl] = useState("");
   const [addVideoFile, setAddVideoFile] = useState(/** @type {File | null} */ (null));
+  const youtubePreviewRef = useRef(/** @type {{ getCurrentTime: () => number } | null} */ (null));
   const [addSubmitting, setAddSubmitting] = useState(false);
   const [addUploadingVideo, setAddUploadingVideo] = useState(false);
   const [addError, setAddError] = useState(/** @type {string | null} */ (null));
@@ -439,6 +442,8 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
     return isValidCardFormatId(id) ? id : null;
   }, [addFormat]);
 
+  const addEmbedYoutubeId = useMemo(() => youtubeVideoIdFromInput(addEmbedUrl), [addEmbedUrl]);
+
   const addModalHeroOptions = useMemo(() => {
     if (addFormatId == null) return [];
     return heroes.filter((h) => heroIsLegalInFormat(h, addFormatId));
@@ -463,6 +468,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
     setAddMediaMode(MEDIA_UPLOAD);
     setAddEmbedUrl("");
     setAddVideoFile(null);
+    youtubePreviewRef.current = null;
   }, [addSubmitting]);
 
   const openAddModal = useCallback(() => {
@@ -526,6 +532,12 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
       }
 
       const labelTrim = addLabel.trim();
+      let startSeconds = null;
+      if (addMediaMode === MEDIA_EMBED && addEmbedYoutubeId && youtubePreviewRef.current) {
+        const t = Math.floor(youtubePreviewRef.current.getCurrentTime());
+        if (t > 0) startSeconds = t;
+      }
+
       const token = await user.getIdToken();
       const res = await fetch("/api/recordings", {
         method: "POST",
@@ -539,6 +551,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
           first_hero_id: hero1,
           second_hero_id: hero2,
           format,
+          start_seconds: startSeconds,
         }),
       });
       if (!res.ok) throw new Error(parseApiError(await res.text()));
@@ -559,6 +572,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
     addLabel,
     addMediaMode,
     addEmbedUrl,
+    addEmbedYoutubeId,
     addVideoFile,
     closeAddModal,
   ]);
@@ -751,7 +765,7 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
             >
               <div className="flex min-h-full items-center justify-center py-4">
                 <div
-                  className={`relative w-full max-w-lg rounded-xl p-5 sm:p-6 ${modalPanel}`}
+                  className={`relative w-full rounded-xl p-5 sm:p-6 ${addEmbedYoutubeId ? "max-w-2xl" : "max-w-lg"} ${modalPanel}`}
                   role="dialog"
                   aria-modal="true"
                   aria-labelledby="recordings-add-modal-title"
@@ -928,6 +942,17 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
                     </span>
                   </label>
                 )}
+
+                {addMediaMode === MEDIA_EMBED && addEmbedYoutubeId ? (
+                  <div className="mt-3">
+                    <YouTubeTimestampPreview
+                      videoId={addEmbedYoutubeId}
+                      embedUrl={addEmbedUrl}
+                      playerRef={youtubePreviewRef}
+                      disabled={addSubmitting}
+                    />
+                  </div>
+                ) : null}
 
                 {addError ? (
                   <p className="mt-3 text-[0.85rem] text-red-200/95" role="alert">

@@ -28,10 +28,12 @@ type userHTTP struct {
 }
 
 type completeRegistrationRequest struct {
-	Email    string  `json:"email"`
-	Code     string  `json:"code"`
-	Username *string `json:"username"`
-	Password string  `json:"password"`
+	Email     string  `json:"email"`
+	Code      string  `json:"code"`
+	Username  *string `json:"username"`
+	FirstName string  `json:"first_name"`
+	LastName  string  `json:"last_name"`
+	Password  string  `json:"password"`
 }
 
 type messageErrorResponse struct {
@@ -198,7 +200,7 @@ func (h *userHTTP) completeRegistration(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if _, err := h.svc.CompleteRegistration(r.Context(), body.Email, body.Code, body.Username, body.Password); err != nil {
+	if _, err := h.svc.CompleteRegistration(r.Context(), body.Email, body.Code, body.Username, &body.FirstName, &body.LastName, body.Password); err != nil {
 		if errors.Is(err, service.ErrValidation) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -267,11 +269,15 @@ func (h *userHTTP) sessionMe(w http.ResponseWriter, r *http.Request) {
 }
 
 type patchUserSettingsRequest struct {
-	CardRaterQuickSubmit *bool `json:"card_rater_quick_submit"`
+	CardRaterQuickSubmit *bool   `json:"card_rater_quick_submit"`
+	FirstName            *string `json:"first_name"`
+	LastName             *string `json:"last_name"`
 }
 
 type userSettingsResponse struct {
-	Settings domain.UserSettings `json:"settings"`
+	Settings  domain.UserSettings `json:"settings"`
+	FirstName *string             `json:"first_name,omitempty"`
+	LastName  *string             `json:"last_name,omitempty"`
 }
 
 func (h *userHTTP) getMySettings(w http.ResponseWriter, r *http.Request) {
@@ -304,7 +310,11 @@ func (h *userHTTP) getMySettings(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(userSettingsResponse{Settings: settings})
+	_ = json.NewEncoder(w).Encode(userSettingsResponse{
+		Settings:  settings.Settings,
+		FirstName: settings.FirstName,
+		LastName:  settings.LastName,
+	})
 }
 
 func (h *userHTTP) saveMySettings(w http.ResponseWriter, r *http.Request) {
@@ -323,12 +333,14 @@ func (h *userHTTP) saveMySettings(w http.ResponseWriter, r *http.Request) {
 		writeMessageError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if body.CardRaterQuickSubmit == nil {
-		writeFieldError(w, http.StatusBadRequest, "card_rater_quick_submit", "required")
+	if body.CardRaterQuickSubmit == nil && body.FirstName == nil && body.LastName == nil {
+		writeMessageError(w, http.StatusBadRequest, "no settings fields to update")
 		return
 	}
-	settings, err := h.svc.UpdateUserSettingsForIDToken(r.Context(), idToken, domain.UserSettings{
-		CardRaterQuickSubmit: *body.CardRaterQuickSubmit,
+	settings, err := h.svc.UpdateUserSettingsForIDToken(r.Context(), idToken, service.UserMeSettingsPatch{
+		CardRaterQuickSubmit: body.CardRaterQuickSubmit,
+		FirstName:            body.FirstName,
+		LastName:             body.LastName,
 	})
 	if err != nil {
 		if errors.Is(err, service.ErrValidation) {
@@ -349,7 +361,11 @@ func (h *userHTTP) saveMySettings(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(userSettingsResponse{Settings: settings})
+	_ = json.NewEncoder(w).Encode(userSettingsResponse{
+		Settings:  settings.Settings,
+		FirstName: settings.FirstName,
+		LastName:  settings.LastName,
+	})
 }
 
 func (h *userHTTP) registrationByCode(w http.ResponseWriter, r *http.Request) {
