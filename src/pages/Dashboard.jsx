@@ -10,6 +10,7 @@ import { AnnouncementsAdmin } from "../components/AnnouncementsAdmin";
 import { CardRaterAdmin } from "../components/CardRaterAdmin";
 import { CardRaterRedirect } from "../components/CardRaterRedirect";
 import { CardRaterAnalytics } from "../components/CardRaterAnalytics";
+import { CardRaterCompare } from "../components/CardRaterCompare";
 import { CardRatingsList } from "../components/CardRatingsList";
 import { RunawaysDraftsAnalytics } from "../components/RunawaysDraftsAnalytics";
 import { DecksList } from "../components/DecksList";
@@ -77,6 +78,8 @@ const ADMIN_SUB_LINKS = [
  * @param {string | null} [dataCardRaterId] — numeric id for `/data/card-ratings/:id` analytics
  * @param {string | null} [resourcesDeckId] — numeric id for `/resources/decks/:id`
  * @param {string | null} [resourcesRecordingId] — numeric id for `/resources/recordings/:id`
+ * @param {string | null} [dataCardRaterCompareBaselineId] — baseline session for `/data/card-ratings/:id/compare/:baselineId`
+ * @param {string | null} [resourcesCardRaterCompareBaselineId] — baseline session for `/resources/card-rater/:id/compare/:baselineId`
  */
 function buildDashboardPathname(
   tabId,
@@ -89,6 +92,8 @@ function buildDashboardPathname(
   dataCardRaterId = null,
   resourcesDeckId = null,
   resourcesRecordingId = null,
+  dataCardRaterCompareBaselineId = null,
+  resourcesCardRaterCompareBaselineId = null,
 ) {
   if (tabId === SETTINGS_TAB_ID) return "/settings";
   if (tabId === DATA_TAB_ID) {
@@ -101,6 +106,14 @@ function buildDashboardPathname(
       if (rawId !== "") {
         const rid = parseInt(rawId, 10);
         if (Number.isFinite(rid) && rid > 0 && String(rid) === rawId) {
+          const rawBaseline =
+            dataCardRaterCompareBaselineId != null ? String(dataCardRaterCompareBaselineId).trim() : "";
+          if (rawBaseline !== "") {
+            const bid = parseInt(rawBaseline, 10);
+            if (Number.isFinite(bid) && bid > 0 && String(bid) === rawBaseline) {
+              return `/data/card-ratings/${rid}/compare/${bid}`;
+            }
+          }
           return `/data/card-ratings/${rid}`;
         }
       }
@@ -151,6 +164,16 @@ function buildDashboardPathname(
       if (rawId !== "") {
         const rid = parseInt(rawId, 10);
         if (Number.isFinite(rid) && rid > 0 && String(rid) === rawId) {
+          const rawBaseline =
+            resourcesCardRaterCompareBaselineId != null
+              ? String(resourcesCardRaterCompareBaselineId).trim()
+              : "";
+          if (rawBaseline !== "") {
+            const bid = parseInt(rawBaseline, 10);
+            if (Number.isFinite(bid) && bid > 0 && String(bid) === rawBaseline) {
+              return `/resources/card-rater/${rid}/compare/${bid}`;
+            }
+          }
           return `/resources/card-rater/${rid}`;
         }
       }
@@ -192,6 +215,8 @@ function replaceDashboardUrl(
   dataCardRaterId = null,
   resourcesDeckId = null,
   resourcesRecordingId = null,
+  dataCardRaterCompareBaselineId = null,
+  resourcesCardRaterCompareBaselineId = null,
 ) {
   try {
     const u = new URL(window.location.href);
@@ -206,6 +231,8 @@ function replaceDashboardUrl(
       dataCardRaterId,
       resourcesDeckId,
       resourcesRecordingId,
+      dataCardRaterCompareBaselineId,
+      resourcesCardRaterCompareBaselineId,
     );
     u.search = "";
     const next = `${u.pathname}${u.search}${u.hash}`;
@@ -227,6 +254,8 @@ function pushDashboardUrl(
   dataCardRaterId = null,
   resourcesDeckId = null,
   resourcesRecordingId = null,
+  dataCardRaterCompareBaselineId = null,
+  resourcesCardRaterCompareBaselineId = null,
 ) {
   try {
     const u = new URL(window.location.href);
@@ -241,6 +270,8 @@ function pushDashboardUrl(
       dataCardRaterId,
       resourcesDeckId,
       resourcesRecordingId,
+      dataCardRaterCompareBaselineId,
+      resourcesCardRaterCompareBaselineId,
     );
     u.search = "";
     const next = `${u.pathname}${u.search}${u.hash}`;
@@ -262,8 +293,8 @@ function parseDashboardPathname(pathname) {
   const [a, b, c, ...rest] = parts;
 
   if (a === "resources") {
-    if (rest.length > 0) return { kind: "invalid" };
     if (b === "cards") {
+      if (c === undefined && rest.length > 0) return { kind: "invalid" };
       if (c === undefined) {
         return {
           kind: "ok",
@@ -286,6 +317,7 @@ function parseDashboardPathname(pathname) {
       };
     }
     if (b === "card-rater" || b === "card-ranker") {
+      if (c === undefined && rest.length > 0) return { kind: "invalid" };
       if (c === undefined) {
         return {
           kind: "ok",
@@ -310,6 +342,23 @@ function parseDashboardPathname(pathname) {
       }
       const rid = parseInt(String(c), 10);
       if (Number.isFinite(rid) && rid > 0 && String(rid) === String(c)) {
+        if (rest[0] === "compare" && rest.length === 2) {
+          const bid = parseInt(String(rest[1]), 10);
+          if (Number.isFinite(bid) && bid > 0 && String(bid) === String(rest[1])) {
+            return {
+              kind: "ok",
+              tabId: RESOURCES_TAB_ID,
+              resourcesChild: "card-rater",
+              resourcesCardIdentifier: null,
+              resourcesCardRaterId: String(rid),
+              resourcesCardRaterCompareBaselineId: String(bid),
+              adminChild: null,
+              adminAnnouncementForm: null,
+            };
+          }
+          return { kind: "invalid" };
+        }
+        if (rest.length > 0) return { kind: "invalid" };
         return {
           kind: "ok",
           tabId: RESOURCES_TAB_ID,
@@ -323,6 +372,7 @@ function parseDashboardPathname(pathname) {
       return { kind: "invalid" };
     }
     if (b === "decks") {
+      if (c === undefined && rest.length > 0) return { kind: "invalid" };
       if (c === undefined) {
         return {
           kind: "ok",
@@ -337,6 +387,7 @@ function parseDashboardPathname(pathname) {
       }
       const did = parseInt(String(c), 10);
       if (Number.isFinite(did) && did > 0 && String(did) === String(c)) {
+        if (rest.length > 0) return { kind: "invalid" };
         return {
           kind: "ok",
           tabId: RESOURCES_TAB_ID,
@@ -351,6 +402,7 @@ function parseDashboardPathname(pathname) {
       return { kind: "invalid" };
     }
     if (b === "recordings") {
+      if (c === undefined && rest.length > 0) return { kind: "invalid" };
       if (c === undefined) {
         return {
           kind: "ok",
@@ -366,6 +418,7 @@ function parseDashboardPathname(pathname) {
       }
       const rid = parseInt(String(c), 10);
       if (Number.isFinite(rid) && rid > 0 && String(rid) === String(c)) {
+        if (rest.length > 0) return { kind: "invalid" };
         return {
           kind: "ok",
           tabId: RESOURCES_TAB_ID,
@@ -506,7 +559,7 @@ function parseDashboardPathname(pathname) {
   }
 
   if (a === "data") {
-    if (rest.length > 0) return { kind: "invalid" };
+    if (b === undefined && rest.length > 0) return { kind: "invalid" };
     if (b === undefined) {
       return {
         kind: "ok",
@@ -521,6 +574,7 @@ function parseDashboardPathname(pathname) {
       };
     }
     if (b === "card-ratings") {
+      if (c === undefined && rest.length > 0) return { kind: "invalid" };
       if (c === undefined) {
         return {
           kind: "ok",
@@ -538,6 +592,25 @@ function parseDashboardPathname(pathname) {
       if (!Number.isFinite(rid) || rid <= 0 || String(rid) !== String(c)) {
         return { kind: "invalid" };
       }
+      if (rest[0] === "compare" && rest.length === 2) {
+        const bid = parseInt(String(rest[1]), 10);
+        if (!Number.isFinite(bid) || bid <= 0 || String(bid) !== String(rest[1])) {
+          return { kind: "invalid" };
+        }
+        return {
+          kind: "ok",
+          tabId: DATA_TAB_ID,
+          resourcesChild: null,
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
+          adminChild: null,
+          adminAnnouncementForm: null,
+          dataChild: "card-ratings",
+          dataCardRaterId: String(rid),
+          dataCardRaterCompareBaselineId: String(bid),
+        };
+      }
+      if (rest.length > 0) return { kind: "invalid" };
       return {
         kind: "ok",
         tabId: DATA_TAB_ID,
@@ -550,7 +623,7 @@ function parseDashboardPathname(pathname) {
         dataCardRaterId: String(rid),
       };
     }
-    if (b === "runaways-drafts" && c === undefined) {
+    if (b === "runaways-drafts" && c === undefined && rest.length === 0) {
       return {
         kind: "ok",
         tabId: DATA_TAB_ID,
@@ -591,9 +664,10 @@ function resolveDataFields(tabId, parsed) {
     return {
       dataChild: parsed.dataChild ?? DEFAULT_DATA_SEGMENT,
       dataCardRaterId: parsed.dataCardRaterId ?? null,
+      dataCardRaterCompareBaselineId: parsed.dataCardRaterCompareBaselineId ?? null,
     };
   }
-  return { dataChild: null, dataCardRaterId: null };
+  return { dataChild: null, dataCardRaterId: null, dataCardRaterCompareBaselineId: null };
 }
 
 function resolveDashboardLocation(pathname, search, tabsAllowed) {
@@ -693,19 +767,21 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
     };
   }
 
-  const { dataChild, dataCardRaterId } = resolveDataFields(tabId, parsed);
+  const { dataChild, dataCardRaterId, dataCardRaterCompareBaselineId } = resolveDataFields(tabId, parsed);
 
   return {
     tabId,
     resourcesChild,
     resourcesCardIdentifier,
     resourcesCardRaterId,
+    resourcesCardRaterCompareBaselineId: parsed.resourcesCardRaterCompareBaselineId ?? null,
     resourcesDeckId: parsed.resourcesDeckId ?? null,
     resourcesRecordingId: parsed.resourcesRecordingId ?? null,
     adminChild,
     adminAnnouncementForm,
     dataChild,
     dataCardRaterId,
+    dataCardRaterCompareBaselineId,
   };
 }
 
@@ -867,6 +943,14 @@ export default function Dashboard({ onNavigate }) {
   const [dataChild, setDataChild] = useState(/** @type {string | null} */ (null));
   /** Numeric `card_rater.id` when URL is `/data/card-ratings/:id` (analytics). */
   const [dataCardRaterId, setDataCardRaterId] = useState(/** @type {string | null} */ (null));
+  /** Baseline session id when URL is `/data/card-ratings/:id/compare/:baselineId`. */
+  const [dataCardRaterCompareBaselineId, setDataCardRaterCompareBaselineId] = useState(
+    /** @type {string | null} */ (null),
+  );
+  /** Baseline session id when URL is `/resources/card-rater/:id/compare/:baselineId`. */
+  const [resourcesCardRaterCompareBaselineId, setResourcesCardRaterCompareBaselineId] = useState(
+    /** @type {string | null} */ (null),
+  );
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileResourcesOpen, setMobileResourcesOpen] = useState(false);
   const [mobileAdminOpen, setMobileAdminOpen] = useState(false);
@@ -1088,15 +1172,51 @@ export default function Dashboard({ onNavigate }) {
     setActiveTab(DATA_TAB_ID);
     setDataChild("card-ratings");
     setDataCardRaterId(sid);
+    setDataCardRaterCompareBaselineId(null);
     setResourcesChild(null);
     setResourcesCardIdentifier(null);
     setResourcesCardRaterId(null);
+    setResourcesCardRaterCompareBaselineId(null);
     setCardRaterPlayAtRoot(false);
     setAdminChild(null);
     setAdminAnnouncementForm(null);
     pushDashboardUrl(DATA_TAB_ID, null, null, null, null, null, "card-ratings", sid);
     setMobileNavOpen(false);
   }, []);
+
+  const openDataCardRaterCompare = useCallback((raterId, baselineId) => {
+    const sid = String(raterId).trim();
+    const bid = String(baselineId).trim();
+    if (!/^\d+$/.test(sid) || !/^\d+$/.test(bid)) return;
+    setActiveTab(DATA_TAB_ID);
+    setDataChild("card-ratings");
+    setDataCardRaterId(sid);
+    setDataCardRaterCompareBaselineId(bid);
+    setResourcesChild(null);
+    setResourcesCardIdentifier(null);
+    setResourcesCardRaterId(null);
+    setResourcesCardRaterCompareBaselineId(null);
+    setCardRaterPlayAtRoot(false);
+    setAdminChild(null);
+    setAdminAnnouncementForm(null);
+    pushDashboardUrl(DATA_TAB_ID, null, null, null, null, null, "card-ratings", sid, null, null, bid);
+    setMobileNavOpen(false);
+  }, []);
+
+  const closeDataCardRaterCompare = useCallback(() => {
+    if (dataCardRaterId == null) return;
+    setDataCardRaterCompareBaselineId(null);
+    pushDashboardUrl(
+      DATA_TAB_ID,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "card-ratings",
+      dataCardRaterId,
+    );
+  }, [dataCardRaterId]);
 
   const openCardRaterAnalytics = useCallback((raterId) => {
     const sid = String(raterId).trim();
@@ -1106,11 +1226,34 @@ export default function Dashboard({ onNavigate }) {
     setResourcesChild("card-rater");
     setResourcesCardIdentifier(null);
     setResourcesCardRaterId(sid);
+    setResourcesCardRaterCompareBaselineId(null);
     setAdminChild(null);
     setAdminAnnouncementForm(null);
     pushDashboardUrl(RESOURCES_TAB_ID, "card-rater", null, sid, null, null);
     setMobileNavOpen(false);
   }, []);
+
+  const openResourcesCardRaterCompare = useCallback((raterId, baselineId) => {
+    const sid = String(raterId).trim();
+    const bid = String(baselineId).trim();
+    if (!/^\d+$/.test(sid) || !/^\d+$/.test(bid)) return;
+    setCardRaterPlayAtRoot(false);
+    setActiveTab(RESOURCES_TAB_ID);
+    setResourcesChild("card-rater");
+    setResourcesCardIdentifier(null);
+    setResourcesCardRaterId(sid);
+    setResourcesCardRaterCompareBaselineId(bid);
+    setAdminChild(null);
+    setAdminAnnouncementForm(null);
+    pushDashboardUrl(RESOURCES_TAB_ID, "card-rater", null, sid, null, null, null, null, null, null, null, bid);
+    setMobileNavOpen(false);
+  }, []);
+
+  const closeResourcesCardRaterCompare = useCallback(() => {
+    if (resourcesCardRaterId == null) return;
+    setResourcesCardRaterCompareBaselineId(null);
+    pushDashboardUrl(RESOURCES_TAB_ID, "card-rater", null, resourcesCardRaterId, null, null);
+  }, [resourcesCardRaterId]);
 
   const openCardRaterPlayAtRoot = useCallback(() => {
     setCardRaterPlayAtRoot(true);
@@ -1152,10 +1295,15 @@ export default function Dashboard({ onNavigate }) {
           : null;
       const nextDataChild = nextTab === DATA_TAB_ID ? resolved.dataChild : null;
       const nextDataRaterId = nextTab === DATA_TAB_ID ? resolved.dataCardRaterId : null;
+      const nextDataCompareBaselineId =
+        nextTab === DATA_TAB_ID ? resolved.dataCardRaterCompareBaselineId : null;
+      const nextResourcesCompareBaselineId =
+        nextTab === RESOURCES_TAB_ID ? resolved.resourcesCardRaterCompareBaselineId : null;
       setActiveTab(nextTab);
       setResourcesChild(nextChild);
       setResourcesCardIdentifier(nextCardId);
       setResourcesCardRaterId(nextRaterId);
+      setResourcesCardRaterCompareBaselineId(nextResourcesCompareBaselineId);
       setResourcesDeckId(nextDeckId);
       setResourcesRecordingId(nextRecordingId);
       const cardRaterAtRoot =
@@ -1167,6 +1315,7 @@ export default function Dashboard({ onNavigate }) {
       setAdminAnnouncementForm(nextAnnouncementForm);
       setDataChild(nextDataChild);
       setDataCardRaterId(nextDataRaterId);
+      setDataCardRaterCompareBaselineId(nextDataCompareBaselineId);
       replaceDashboardUrl(
         nextTab,
         nextTab === RESOURCES_TAB_ID ? nextChild : null,
@@ -1178,6 +1327,8 @@ export default function Dashboard({ onNavigate }) {
         nextTab === DATA_TAB_ID ? nextDataRaterId : null,
         nextTab === RESOURCES_TAB_ID ? nextDeckId : null,
         nextTab === RESOURCES_TAB_ID ? nextRecordingId : null,
+        nextTab === DATA_TAB_ID ? nextDataCompareBaselineId : null,
+        nextTab === RESOURCES_TAB_ID ? nextResourcesCompareBaselineId : null,
       );
       setMobileResourcesOpen(false);
       setMobileAdminOpen(false);
@@ -1734,6 +1885,19 @@ export default function Dashboard({ onNavigate }) {
                   isLight={isLight}
                   active={activeTab === RESOURCES_TAB_ID && showCardRankerResources}
                 />
+              ) : resourcesChild === "card-rater" && resourcesCardRaterId && resourcesCardRaterCompareBaselineId ? (
+                <CardRaterCompare
+                  isLight={isLight}
+                  raterId={resourcesCardRaterId}
+                  baselineRaterId={resourcesCardRaterCompareBaselineId}
+                  active={
+                    activeTab === RESOURCES_TAB_ID &&
+                    resourcesChild === "card-rater" &&
+                    Boolean(resourcesCardRaterId) &&
+                    Boolean(resourcesCardRaterCompareBaselineId)
+                  }
+                  onBack={closeResourcesCardRaterCompare}
+                />
               ) : resourcesChild === "card-rater" && resourcesCardRaterId ? (
                 <CardRaterAnalytics
                   isLight={isLight}
@@ -1742,6 +1906,9 @@ export default function Dashboard({ onNavigate }) {
                     activeTab === RESOURCES_TAB_ID &&
                     resourcesChild === "card-rater" &&
                     Boolean(resourcesCardRaterId)
+                  }
+                  onOpenCompare={(baselineId) =>
+                    openResourcesCardRaterCompare(resourcesCardRaterId, baselineId)
                   }
                 />
               ) : resourcesChild === "card-rater" ? (
@@ -1759,7 +1926,20 @@ export default function Dashboard({ onNavigate }) {
                 </div>
               )
             ) : tab.id === DATA_TAB_ID ? (
-              dataChild === "card-ratings" && dataCardRaterId ? (
+              dataChild === "card-ratings" && dataCardRaterId && dataCardRaterCompareBaselineId ? (
+                <CardRaterCompare
+                  isLight={isLight}
+                  raterId={dataCardRaterId}
+                  baselineRaterId={dataCardRaterCompareBaselineId}
+                  active={
+                    activeTab === DATA_TAB_ID &&
+                    dataChild === "card-ratings" &&
+                    Boolean(dataCardRaterId) &&
+                    Boolean(dataCardRaterCompareBaselineId)
+                  }
+                  onBack={closeDataCardRaterCompare}
+                />
+              ) : dataChild === "card-ratings" && dataCardRaterId ? (
                 <CardRaterAnalytics
                   isLight={isLight}
                   raterId={dataCardRaterId}
@@ -1768,6 +1948,7 @@ export default function Dashboard({ onNavigate }) {
                     dataChild === "card-ratings" &&
                     Boolean(dataCardRaterId)
                   }
+                  onOpenCompare={(baselineId) => openDataCardRaterCompare(dataCardRaterId, baselineId)}
                 />
               ) : dataChild === "card-ratings" ? (
                 <CardRatingsList

@@ -44,6 +44,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("GET /api/card-raters/{id}/cards/{cardId}/session-ratings", rh.getCardRaterCardSessionRatings)
 	mux.HandleFunc("GET /api/card-raters/{id}/cards/{cardId}/rating-notes", rh.getCardRaterCardRatingNotes)
 	mux.HandleFunc("GET /api/card-raters/{id}/analytics", rh.getCardRaterAnalytics)
+	mux.HandleFunc("GET /api/card-raters/{id}/compare", rh.getCardRaterCompare)
 	mux.HandleFunc("GET /api/data/runaways-drafts/meta", rdh.getRunawaysDraftMeta)
 	mux.HandleFunc("GET /api/data/runaways-drafts/decks", rdh.listRunawaysDraftDecks)
 	mux.HandleFunc("GET /api/data/runaways-drafts/decks/{id}", rdh.getRunawaysDraftDeck)

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
 import { cardFormatName } from "../constants/cardFormat";
 import { cardClassName } from "../constants/cardClass";
 import { cardTalentName } from "../constants/cardTalent";
 import { cardTypeName } from "../constants/cardType";
+import { cardRarityName } from "../constants/cardRarity";
 import { cardImageUrl } from "../utils/cardPrintings";
 
 /** @param {unknown} v */
@@ -22,7 +24,7 @@ function cardIdFromRecord(card) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-const TABLE_PAGE_SIZE = 50;
+const TABLE_PAGE_SIZE = 25;
 
 /**
  * @param {unknown} pageObj
@@ -121,9 +123,9 @@ function formatDateTime(iso) {
 }
 
 /**
- * @param {{ isLight: boolean, active: boolean, raterId: string }} props
+ * @param {{ isLight: boolean, active: boolean, raterId: string, onOpenCompare?: (baselineId: number) => void }} props
  */
-export function CardRaterAnalytics({ isLight, active, raterId }) {
+export function CardRaterAnalytics({ isLight, active, raterId, onOpenCompare }) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
@@ -133,6 +135,7 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
   const [filterClass, setFilterClass] = useState("");
   const [filterTalent, setFilterTalent] = useState("");
   const [filterType, setFilterType] = useState("");
+  const [filterRarity, setFilterRarity] = useState("");
 
   const [resultsTab, setResultsTab] = useState(/** @type {'top_rated' | 'controversial' | 'talked'} */ ("top_rated"));
   const [tablePage, setTablePage] = useState(
@@ -141,6 +144,9 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
       controversial: 0,
       talked: 0,
     }),
+  );
+  const [ratedRowPreview, setRatedRowPreview] = useState(
+    /** @type {{ src: string, x: number, y: number } | null} */ (null),
   );
 
   const [cardDetailModal, setCardDetailModal] = useState({
@@ -154,6 +160,12 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
     /** @type {{ user_id: number, user_label: string, rating: number, notes?: string | null }[]} */
     ratings: [],
   });
+  const [compareModalOpen, setCompareModalOpen] = useState(false);
+  const [compareModalLoading, setCompareModalLoading] = useState(false);
+  const [compareModalError, setCompareModalError] = useState(/** @type {string | null} */ (null));
+  const [compareSessions, setCompareSessions] = useState(
+    /** @type {{ id: number, label?: string | null, format: number, started_at: string, completed_at?: string | null }[]} */ ([]),
+  );
 
   const idNum = useMemo(() => {
     const n = Number.parseInt(String(raterId), 10);
@@ -170,9 +182,11 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
       const c = numOrNull(filterClass);
       const t = numOrNull(filterTalent);
       const ty = numOrNull(filterType);
+      const r = numOrNull(filterRarity);
       if (c != null) qs.set("class", String(c));
       if (t != null) qs.set("talent", String(t));
       if (ty != null) qs.set("type", String(ty));
+      if (r != null) qs.set("rarity", String(r));
       qs.set("top_limit", "10");
       qs.set("rated_offset", String(tablePage.top_rated * TABLE_PAGE_SIZE));
       qs.set("rated_limit", String(TABLE_PAGE_SIZE));
@@ -192,11 +206,15 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
     } finally {
       setLoading(false);
     }
-  }, [user, idNum, filterClass, filterTalent, filterType, tablePage]);
+  }, [user, idNum, filterClass, filterTalent, filterType, filterRarity, tablePage]);
 
   useEffect(() => {
     setTablePage({ top_rated: 0, controversial: 0, talked: 0 });
-  }, [filterClass, filterTalent, filterType]);
+  }, [filterClass, filterTalent, filterType, filterRarity]);
+
+  useEffect(() => {
+    if (resultsTab !== "top_rated") setRatedRowPreview(null);
+  }, [resultsTab]);
 
   useEffect(() => {
     if (!active || !user || idNum <= 0) return undefined;
@@ -348,6 +366,70 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
     });
   }, []);
 
+  const openCompareModal = useCallback(async () => {
+    if (!user || idNum <= 0 || typeof onOpenCompare !== "function") return;
+    const setId = numOrNull(parsed?.rater?.set_id);
+    if (setId == null) return;
+    setCompareModalOpen(true);
+    setCompareModalLoading(true);
+    setCompareModalError(null);
+    setCompareSessions([]);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/card-raters", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      const list = Array.isArray(data.raters) ? data.raters : [];
+      const sessions = list
+        .filter((row) => row && typeof row === "object")
+        .map((row) => /** @type {Record<string, unknown>} */ (row))
+        .filter((row) => {
+          const sid = numOrNull(row.set_id);
+          const rid = numOrNull(row.id);
+          const completed = row.completed_at != null && String(row.completed_at).trim() !== "";
+          return sid === setId && completed && rid != null && rid !== idNum;
+        })
+        .map((row) => ({
+          id: /** @type {number} */ (numOrNull(row.id)),
+          label: row.label != null ? String(row.label) : null,
+          format: /** @type {number} */ (numOrNull(row.format) ?? 0),
+          started_at: String(row.started_at ?? ""),
+          completed_at: row.completed_at != null ? String(row.completed_at) : null,
+        }))
+        .sort((a, b) => {
+          const ta = a.completed_at ? new Date(a.completed_at).getTime() : 0;
+          const tb = b.completed_at ? new Date(b.completed_at).getTime() : 0;
+          if (tb !== ta) return tb - ta;
+          return b.id - a.id;
+        });
+      setCompareSessions(sessions);
+    } catch (e) {
+      setCompareModalError(e instanceof Error ? e.message : "Failed to load sessions");
+    } finally {
+      setCompareModalLoading(false);
+    }
+  }, [user, idNum, onOpenCompare, parsed?.rater?.set_id]);
+
+  const closeCompareModal = useCallback(() => {
+    if (compareModalLoading) return;
+    setCompareModalOpen(false);
+    setCompareModalError(null);
+    setCompareSessions([]);
+  }, [compareModalLoading]);
+
+  const selectCompareSession = useCallback(
+    (baselineId) => {
+      if (typeof onOpenCompare !== "function") return;
+      setCompareModalOpen(false);
+      setCompareModalError(null);
+      setCompareSessions([]);
+      onOpenCompare(baselineId);
+    },
+    [onOpenCompare],
+  );
+
   const panel =
     isLight
       ? "rounded-xl border border-white/[0.12] bg-black/20 px-4 py-4 sm:px-5"
@@ -373,7 +455,7 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 text-left">
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="m-0 text-lg font-semibold text-[#f4f0fa] sm:text-xl">Card rater results</h2>
           {parsed?.rater ? (
@@ -393,6 +475,16 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
             <p className="mt-1.5 text-[0.85rem] text-[#f4f0fa]/65">Session #{idNum}</p>
           )}
         </div>
+        {typeof onOpenCompare === "function" ? (
+          <button
+            type="button"
+            className="shrink-0 self-start rounded-lg border border-violet-400/45 bg-violet-950/30 px-3.5 py-2 text-[0.8125rem] font-semibold text-violet-100/95 hover:bg-violet-950/45 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={loading || !parsed?.rater}
+            onClick={() => void openCompareModal()}
+          >
+            Compare
+          </button>
+        ) : null}
       </div>
 
       {error ? (
@@ -590,6 +682,27 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
                     })}
                   </select>
                 </label>
+                <label className="flex min-w-[10rem] flex-col gap-1">
+                  <span className={labelMuted}>Rarity</span>
+                  <select
+                    className={selectCls}
+                    value={filterRarity}
+                    onChange={(e) => setFilterRarity(e.target.value)}
+                    disabled={loading}
+                  >
+                    <option value="">All rarities</option>
+                    {(Array.isArray(parsed.fo.rarities) ? parsed.fo.rarities : []).map((x) => {
+                      const id = typeof x === "number" ? x : Number(x);
+                      if (!Number.isFinite(id)) return null;
+                      const name = cardRarityName(id) ?? `Rarity ${id}`;
+                      return (
+                        <option key={id} value={String(id)}>
+                          {name}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
               </div>
 
               <p className={`m-0 mt-6 ${labelMuted}`}>Top 10</p>
@@ -674,6 +787,7 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
                           const avg = typeof r.avg_rating === "number" ? r.avg_rating : Number(r.avg_rating);
                           const votes = typeof r.vote_count === "number" ? r.vote_count : Number(r.vote_count);
                           const cid = cardIdFromRecord(card);
+                          const img = cardImageUrl(card);
                           const rank = parsed.ratedTable.offset + idx + 1;
                           return (
                             <tr
@@ -682,6 +796,18 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
                                 cid != null ? "cursor-pointer hover:bg-white/[0.04]" : ""
                               }`}
                               onClick={() => cid != null && void openCardSessionDetail(cid)}
+                              onMouseEnter={(e) => {
+                                if (!img) {
+                                  setRatedRowPreview(null);
+                                  return;
+                                }
+                                setRatedRowPreview({ src: img, x: e.clientX + 18, y: e.clientY });
+                              }}
+                              onMouseMove={(e) => {
+                                if (!img) return;
+                                setRatedRowPreview({ src: img, x: e.clientX + 18, y: e.clientY });
+                              }}
+                              onMouseLeave={() => setRatedRowPreview(null)}
                               onKeyDown={(e) => {
                                 if (cid != null && (e.key === "Enter" || e.key === " ")) {
                                   e.preventDefault();
@@ -730,6 +856,18 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
                       disabled={loading}
                       onPageChange={(next) => setTablePage((p) => ({ ...p, top_rated: next }))}
                     />
+                    {ratedRowPreview ? (
+                      <div
+                        className="pointer-events-none fixed z-[500] -translate-y-1/2"
+                        style={{ left: ratedRowPreview.x, top: ratedRowPreview.y }}
+                      >
+                        <img
+                          src={ratedRowPreview.src}
+                          alt=""
+                          className="h-[14rem] w-auto max-w-[10rem] rounded-md border border-white/20 bg-[#0d0914] shadow-2xl"
+                        />
+                      </div>
+                    ) : null}
                   </>
                 )}
               </div>
@@ -1100,6 +1238,80 @@ export function CardRaterAnalytics({ isLight, active, raterId }) {
           </div>
         </div>
       ) : null}
+
+      {compareModalOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[210] flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]"
+              role="presentation"
+              onClick={(e) => {
+                if (e.target === e.currentTarget && !compareModalLoading) closeCompareModal();
+              }}
+            >
+              <div
+                className={`relative max-h-[min(80vh,40rem)] w-full max-w-lg overflow-hidden rounded-xl p-5 sm:p-6 ${panel}`}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="card-rater-compare-title"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 id="card-rater-compare-title" className="m-0 text-lg font-semibold text-[#f4f0fa]">
+                  Compare to another session
+                </h3>
+                <p className="mt-2 text-[0.85rem] leading-snug text-[#f4f0fa]/75">
+                  Choose a completed session for this set to compare against session #{idNum}.
+                </p>
+                {compareModalError ? (
+                  <p className="mt-3 text-[0.85rem] text-red-200" role="alert">
+                    {compareModalError}
+                  </p>
+                ) : null}
+                {compareModalLoading ? (
+                  <p className="mt-4 text-[0.85rem] text-[#f4f0fa]/65">Loading sessions…</p>
+                ) : compareSessions.length === 0 ? (
+                  <p className="mt-4 text-[0.85rem] text-[#f4f0fa]/60">
+                    No other completed sessions for this set.
+                  </p>
+                ) : (
+                  <ul className="mt-4 max-h-[min(52vh,28rem)] space-y-2 overflow-y-auto pr-1">
+                    {compareSessions.map((session) => {
+                      const label =
+                        session.label != null && session.label.trim() !== "" ? session.label.trim() : null;
+                      return (
+                        <li key={session.id}>
+                          <button
+                            type="button"
+                            className="w-full rounded-lg border border-white/[0.12] bg-black/25 px-3 py-2.5 text-left hover:bg-white/[0.05]"
+                            onClick={() => selectCompareSession(session.id)}
+                          >
+                            <span className="block text-[0.875rem] font-semibold text-[#f4f0fa]">
+                              {label ? label : `Session #${session.id}`}
+                            </span>
+                            <span className="mt-0.5 block text-[0.75rem] text-[#f4f0fa]/60">
+                              #{session.id} · {cardFormatName(session.format) ?? session.format}
+                              {session.completed_at ? ` · Completed ${formatDateTime(session.completed_at)}` : ""}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                <div className="mt-5 flex justify-end">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-white/[0.18] bg-black/30 px-3.5 py-2 text-[0.8125rem] font-semibold text-[#f4f0fa]/85 hover:bg-white/[0.05] disabled:opacity-50"
+                    disabled={compareModalLoading}
+                    onClick={closeCompareModal}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

@@ -51,11 +51,12 @@ type CardRaterNotedCard struct {
 	NoteCount int
 }
 
-// CardRaterFilterOptions lists distinct class / talent / type values present among rated cards.
+// CardRaterFilterOptions lists distinct class / talent / type / rarity values present among rated cards.
 type CardRaterFilterOptions struct {
 	Classes   []int16
 	Talents   []int16
 	CardTypes []int16
+	Rarities  []int16
 }
 
 // CardRaterUserAvgRating is one user's mean rating across all cards they rated in a session.
@@ -295,12 +296,13 @@ WHERE r.rater_id = $1
 	AND ($2::smallint IS NULL OR $2 = ANY(c.classes))
 	AND ($3::smallint IS NULL OR $3 = ANY(c.talents))
 	AND ($4::smallint IS NULL OR c.type = $4)
+	AND ($5::smallint IS NULL OR c.rarity = $5)
 GROUP BY ` + cardPrintingGroupBy + `
 ORDER BY avg_rating DESC NULLS LAST, vote_count DESC, c.id ASC
 `
 
 // CardRaterAnalytics loads summary, distribution, filter facets, and ranked card lists for a rater session.
-func (r *Repository) CardRaterAnalytics(ctx context.Context, raterID int, classFilter, talentFilter, typeFilter *int16, paging CardRaterAnalyticsPaging) (*CardRaterAnalytics, error) {
+func (r *Repository) CardRaterAnalytics(ctx context.Context, raterID int, classFilter, talentFilter, typeFilter, rarityFilter *int16, paging CardRaterAnalyticsPaging) (*CardRaterAnalytics, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
@@ -310,6 +312,7 @@ func (r *Repository) CardRaterAnalytics(ctx context.Context, raterID int, classF
 	var classArg any
 	var talentArg any
 	var typeArg any
+	var rarityArg any
 	if classFilter != nil {
 		classArg = *classFilter
 	}
@@ -318,6 +321,9 @@ func (r *Repository) CardRaterAnalytics(ctx context.Context, raterID int, classF
 	}
 	if typeFilter != nil {
 		typeArg = *typeFilter
+	}
+	if rarityFilter != nil {
+		rarityArg = *rarityFilter
 	}
 
 	out := &CardRaterAnalytics{
@@ -432,8 +438,19 @@ ORDER BY 1`
 		return nil, err
 	}
 
-	topQ := ratedCardsFromSession + ` LIMIT $5`
-	topRows, err := r.pool.Query(ctx, topQ, raterID, classArg, talentArg, typeArg, topLimit)
+	const raritiesQ = `
+SELECT DISTINCT c.rarity
+FROM user_card_ratings r
+INNER JOIN cards c ON c.id = r.card_id
+WHERE r.rater_id = $1 AND c.rarity IS NOT NULL
+ORDER BY 1`
+	out.FilterOptions.Rarities, err = r.queryDistinctSmallints(ctx, raritiesQ, raterID)
+	if err != nil {
+		return nil, err
+	}
+
+	topQ := ratedCardsFromSession + ` LIMIT $6`
+	topRows, err := r.pool.Query(ctx, topQ, raterID, classArg, talentArg, typeArg, rarityArg, topLimit)
 	if err != nil {
 		return nil, fmt.Errorf("repository: card rater analytics top cards: %w", err)
 	}
@@ -459,14 +476,15 @@ FROM (
 		AND ($2::smallint IS NULL OR $2 = ANY(c.classes))
 		AND ($3::smallint IS NULL OR $3 = ANY(c.talents))
 		AND ($4::smallint IS NULL OR c.type = $4)
+		AND ($5::smallint IS NULL OR c.rarity = $5)
 	GROUP BY c.id
 ) sub`
-	if err := r.pool.QueryRow(ctx, ratedCountQ, raterID, classArg, talentArg, typeArg).Scan(&out.RatedTable.Total); err != nil {
+	if err := r.pool.QueryRow(ctx, ratedCountQ, raterID, classArg, talentArg, typeArg, rarityArg).Scan(&out.RatedTable.Total); err != nil {
 		return nil, fmt.Errorf("repository: card rater analytics rated table count: %w", err)
 	}
 
-	tableQ := ratedCardsFromSession + ` OFFSET $5 LIMIT $6`
-	tableRows, err := r.pool.Query(ctx, tableQ, raterID, classArg, talentArg, typeArg, paging.RatedOffset, paging.RatedLimit)
+	tableQ := ratedCardsFromSession + ` OFFSET $6 LIMIT $7`
+	tableRows, err := r.pool.Query(ctx, tableQ, raterID, classArg, talentArg, typeArg, rarityArg, paging.RatedOffset, paging.RatedLimit)
 	if err != nil {
 		return nil, fmt.Errorf("repository: card rater analytics rated table: %w", err)
 	}

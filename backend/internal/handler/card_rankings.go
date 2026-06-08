@@ -802,7 +802,7 @@ func (h *cardRatingsHTTP) deleteCardRater(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// GET /api/card-raters/{id}/analytics?class=&talent=&type=&top_limit=&table_limit=
+// GET /api/card-raters/{id}/analytics?class=&talent=&type=&rarity=&top_limit=&table_limit=
 func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -828,7 +828,7 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	var classF, talentF, typeF *int16
+	var classF, talentF, typeF, rarityF *int16
 	if s := strings.TrimSpace(r.URL.Query().Get("class")); s != "" {
 		v64, err := strconv.ParseInt(s, 10, 16)
 		if err != nil || !domain.CardClass(int16(v64)).Valid() {
@@ -855,6 +855,15 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 		}
 		v := int16(v64)
 		typeF = &v
+	}
+	if s := strings.TrimSpace(r.URL.Query().Get("rarity")); s != "" {
+		v64, err := strconv.ParseInt(s, 10, 16)
+		if err != nil || !domain.CardRarity(int16(v64)).Valid() {
+			writeFieldError(w, http.StatusBadRequest, "rarity", "invalid rarity id")
+			return
+		}
+		v := int16(v64)
+		rarityF = &v
 	}
 
 	parseOffset := func(key string) (int, bool) {
@@ -943,7 +952,7 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 		TalkedLimit:         talkedLimit,
 	}
 
-	analytics, err := h.app.Repo.CardRaterAnalytics(r.Context(), id, classF, talentF, typeF, paging)
+	analytics, err := h.app.Repo.CardRaterAnalytics(r.Context(), id, classF, talentF, typeF, rarityF, paging)
 	if err != nil {
 		log.Error("card rater analytics", "error", err, "id", id)
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
@@ -1072,9 +1081,10 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 		"rating_distribution": dist,
 		"user_avg_ratings":      userAvgs,
 		"filter_options": map[string]any{
-			"classes": analytics.FilterOptions.Classes,
-			"talents": analytics.FilterOptions.Talents,
-			"types":   analytics.FilterOptions.CardTypes,
+			"classes":  analytics.FilterOptions.Classes,
+			"talents":  analytics.FilterOptions.Talents,
+			"types":    analytics.FilterOptions.CardTypes,
+			"rarities": analytics.FilterOptions.Rarities,
 		},
 		"top_cards": top,
 		"rated_table": map[string]any{
@@ -1101,6 +1111,101 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 		"most_controversial":      contTop,
 		"most_talked_about_cards": notedTop,
 		"ranked_table":            tblRows,
+	})
+}
+
+// GET /api/card-raters/{id}/compare?baseline_id=
+func (h *cardRatingsHTTP) getCardRaterCompare(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := h.sessionUser(w, r); !ok {
+		return
+	}
+	idStr := strings.TrimSpace(r.PathValue("id"))
+	currentID, err := strconv.Atoi(idStr)
+	if err != nil || currentID <= 0 {
+		writeMessageError(w, http.StatusBadRequest, "invalid card rater id")
+		return
+	}
+	baselineStr := strings.TrimSpace(r.URL.Query().Get("baseline_id"))
+	baselineID, err := strconv.Atoi(baselineStr)
+	if err != nil || baselineID <= 0 {
+		writeFieldError(w, http.StatusBadRequest, "baseline_id", "required positive integer")
+		return
+	}
+
+	compare, err := h.app.Repo.CardRaterCompare(r.Context(), currentID, baselineID)
+	if err != nil {
+		if errors.Is(err, repository.ErrCardRaterNotFound) {
+			writeMessageError(w, http.StatusNotFound, "card rater not found")
+			return
+		}
+		if errors.Is(err, repository.ErrCardRaterCompareInvalid) {
+			writeMessageError(w, http.StatusBadRequest, "sessions cannot be compared")
+			return
+		}
+		log.Error("card rater compare", "error", err, "current_id", currentID, "baseline_id", baselineID)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	if err := attachPrintings(r.Context(), h.app.Repo, compareCardPointers(compare)...); err != nil {
+		log.Error("card rater compare attach printings", "error", err, "current_id", currentID, "baseline_id", baselineID)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	type statsJSON struct {
+		AvgRating float64 `json:"avg_rating"`
+		VoteCount int     `json:"vote_count"`
+		Rank      int     `json:"rank"`
+	}
+	type rowJSON struct {
+		Card           cardJSON `json:"card"`
+		Baseline       *statsJSON `json:"baseline,omitempty"`
+		Current        *statsJSON `json:"current,omitempty"`
+		AvgRatingDelta *float64 `json:"avg_rating_delta,omitempty"`
+		RankDelta      *int     `json:"rank_delta,omitempty"`
+	}
+	rows := make([]rowJSON, 0, len(compare.Cards))
+	for _, e := range compare.Cards {
+		row := rowJSON{Card: cardToJSON(&e.Card)}
+		if e.Baseline != nil {
+			row.Baseline = &statsJSON{
+				AvgRating: e.Baseline.AvgRating,
+				VoteCount: e.Baseline.VoteCount,
+				Rank:      e.Baseline.Rank,
+			}
+		}
+		if e.Current != nil {
+			row.Current = &statsJSON{
+				AvgRating: e.Current.AvgRating,
+				VoteCount: e.Current.VoteCount,
+				Rank:      e.Current.Rank,
+			}
+		}
+		row.AvgRatingDelta = e.AvgRatingDelta
+		row.RankDelta = e.RankDelta
+		rows = append(rows, row)
+	}
+
+	writeCatalogJSON(w, http.StatusOK, map[string]any{
+		"baseline": cardRaterToJSON(compare.Baseline),
+		"current":  cardRaterToJSON(compare.Current),
+		"baseline_summary": map[string]any{
+			"total_ratings":  compare.BaselineSummary.TotalRatings,
+			"unique_users":   compare.BaselineSummary.UniqueUsers,
+			"average_rating": compare.BaselineSummary.AvgRating,
+			"distinct_cards": compare.BaselineSummary.DistinctCards,
+		},
+		"current_summary": map[string]any{
+			"total_ratings":  compare.CurrentSummary.TotalRatings,
+			"unique_users":   compare.CurrentSummary.UniqueUsers,
+			"average_rating": compare.CurrentSummary.AvgRating,
+			"distinct_cards": compare.CurrentSummary.DistinctCards,
+		},
+		"cards": rows,
 	})
 }
 

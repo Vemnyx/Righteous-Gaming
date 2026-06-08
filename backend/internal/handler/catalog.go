@@ -246,6 +246,17 @@ func analyticsCardPointers(a *repository.CardRaterAnalytics) []*repository.Card 
 	return ptrs
 }
 
+func compareCardPointers(c *repository.CardRaterCompareResult) []*repository.Card {
+	if c == nil {
+		return nil
+	}
+	ptrs := make([]*repository.Card, 0, len(c.Cards))
+	for i := range c.Cards {
+		ptrs = append(ptrs, &c.Cards[i].Card)
+	}
+	return ptrs
+}
+
 func setToJSON(s *repository.Set) setJSON {
 	if s == nil {
 		return setJSON{}
