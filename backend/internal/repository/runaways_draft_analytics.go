@@ -75,6 +75,7 @@ type RunawaysDraftAnalytics struct {
 	MostPicked             []RunawaysDraftCardStat
 	LeastPicked            []RunawaysDraftCardStat
 	TopSideboard           []RunawaysDraftCardStat
+	TimeTrends             *RunawaysDraftTimeTrends
 }
 
 // ListRunawaysDraftSets returns sets represented by decks with the given source id.
@@ -200,6 +201,9 @@ func (r *Repository) RunawaysDraftAnalytics(ctx context.Context, deckSourceID, s
 		return nil, err
 	}
 	if err := r.scanRunawaysDraftTopSideboard(ctx, deckSourceID, setID, heroID, deckCount, out); err != nil {
+		return nil, err
+	}
+	if err := r.scanRunawaysDraftTimeTrends(ctx, deckSourceID, setID, heroID, out); err != nil {
 		return nil, err
 	}
 

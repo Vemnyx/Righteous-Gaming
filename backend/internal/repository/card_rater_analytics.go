@@ -296,7 +296,7 @@ WHERE r.rater_id = $1
 	AND ($2::smallint IS NULL OR $2 = ANY(c.classes))
 	AND ($3::smallint IS NULL OR $3 = ANY(c.talents))
 	AND ($4::smallint IS NULL OR c.type = $4)
-	AND ($5::smallint IS NULL OR c.rarity = $5)
+	AND ($5::smallint IS NULL OR cp.rarity = $5)
 GROUP BY ` + cardPrintingGroupBy + `
 ORDER BY avg_rating DESC NULLS LAST, vote_count DESC, c.id ASC
 `
@@ -439,10 +439,11 @@ ORDER BY 1`
 	}
 
 	const raritiesQ = `
-SELECT DISTINCT c.rarity
+SELECT DISTINCT cp.rarity::smallint
 FROM user_card_ratings r
 INNER JOIN cards c ON c.id = r.card_id
-WHERE r.rater_id = $1 AND c.rarity IS NOT NULL
+` + cardPrintingLateralJoin + `
+WHERE r.rater_id = $1 AND cp.rarity IS NOT NULL
 ORDER BY 1`
 	out.FilterOptions.Rarities, err = r.queryDistinctSmallints(ctx, raritiesQ, raterID)
 	if err != nil {
@@ -472,11 +473,12 @@ FROM (
 	SELECT c.id
 	FROM user_card_ratings r
 	INNER JOIN cards c ON c.id = r.card_id
+` + cardPrintingLateralJoin + `
 	WHERE r.rater_id = $1
 		AND ($2::smallint IS NULL OR $2 = ANY(c.classes))
 		AND ($3::smallint IS NULL OR $3 = ANY(c.talents))
 		AND ($4::smallint IS NULL OR c.type = $4)
-		AND ($5::smallint IS NULL OR c.rarity = $5)
+		AND ($5::smallint IS NULL OR cp.rarity = $5)
 	GROUP BY c.id
 ) sub`
 	if err := r.pool.QueryRow(ctx, ratedCountQ, raterID, classArg, talentArg, typeArg, rarityArg).Scan(&out.RatedTable.Total); err != nil {

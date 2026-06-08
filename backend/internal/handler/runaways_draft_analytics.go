@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"righteous-gaming/backend/internal/app"
 	"righteous-gaming/backend/internal/domain"
@@ -63,6 +64,57 @@ type runawaysDraftCardStatJSON struct {
 	DecksWithCard        int     `json:"decks_with_card"`
 	PickRate             float64 `json:"pick_rate"`
 	AvgCopiesWhenPresent float64 `json:"avg_copies_when_present"`
+}
+
+type runawaysDraftTimePeriodJSON struct {
+	Label     string  `json:"label"`
+	Key       string  `json:"key"`
+	DeckCount int     `json:"deck_count"`
+	StartAt   *string `json:"start_at,omitempty"`
+	EndAt     *string `json:"end_at,omitempty"`
+}
+
+type runawaysDraftTimelineBucketJSON struct {
+	Label     string `json:"label"`
+	Key       string `json:"key"`
+	DeckCount int    `json:"deck_count"`
+}
+
+type runawaysDraftCardTrendJSON struct {
+	CardID             int     `json:"card_id"`
+	Name               string  `json:"name"`
+	CardIdentifier     *string `json:"card_identifier,omitempty"`
+	ImageURL           *string `json:"image_url,omitempty"`
+	Type               int16   `json:"type"`
+	Rarity             *int16  `json:"rarity,omitempty"`
+	EarlyPickRate      float64 `json:"early_pick_rate"`
+	LatePickRate       float64 `json:"late_pick_rate"`
+	PickRateDelta      float64 `json:"pick_rate_delta"`
+	EarlyDecksWithCard int     `json:"early_decks_with_card"`
+	LateDecksWithCard  int     `json:"late_decks_with_card"`
+	TotalDecksWithCard int     `json:"total_decks_with_card"`
+}
+
+type runawaysDraftCompositionTrendJSON struct {
+	Metric     string   `json:"metric"`
+	Label      string   `json:"label"`
+	EarlyValue *float64 `json:"early_value,omitempty"`
+	LateValue  *float64 `json:"late_value,omitempty"`
+	Delta      *float64 `json:"delta,omitempty"`
+}
+
+type runawaysDraftTimeTrendsJSON struct {
+	Available          bool                              `json:"available"`
+	TimedDeckCount     int                               `json:"timed_deck_count"`
+	UntimedDeckCount   int                               `json:"untimed_deck_count"`
+	SplitAt            *string                           `json:"split_at,omitempty"`
+	Periods            []runawaysDraftTimePeriodJSON     `json:"periods"`
+	Timeline           []runawaysDraftTimelineBucketJSON `json:"timeline"`
+	RisingPicks        []runawaysDraftCardTrendJSON      `json:"rising_picks"`
+	FallingPicks       []runawaysDraftCardTrendJSON      `json:"falling_picks"`
+	CompositionTrends  []runawaysDraftCompositionTrendJSON `json:"composition_trends"`
+	MinDeckAppearances int                               `json:"min_deck_appearances"`
+	UnavailableReason  *string                           `json:"unavailable_reason,omitempty"`
 }
 
 func (h *runawaysDraftHTTP) sessionUser(w http.ResponseWriter, r *http.Request) (*domain.User, bool) {
@@ -366,6 +418,105 @@ func runawaysDraftAnalyticsToJSON(s *repository.RunawaysDraftAnalytics) map[stri
 		"most_picked":              runawaysDraftCardsToJSON(s.MostPicked),
 		"least_picked":             runawaysDraftCardsToJSON(s.LeastPicked),
 		"top_sideboard":            runawaysDraftCardsToJSON(s.TopSideboard),
+		"time_trends":              runawaysDraftTimeTrendsToJSON(s.TimeTrends),
+	}
+}
+
+func runawaysDraftTimeTrendsToJSON(t *repository.RunawaysDraftTimeTrends) runawaysDraftTimeTrendsJSON {
+	if t == nil {
+		return runawaysDraftTimeTrendsJSON{
+			Periods:           []runawaysDraftTimePeriodJSON{},
+			Timeline:          []runawaysDraftTimelineBucketJSON{},
+			RisingPicks:       []runawaysDraftCardTrendJSON{},
+			FallingPicks:      []runawaysDraftCardTrendJSON{},
+			CompositionTrends: []runawaysDraftCompositionTrendJSON{},
+		}
+	}
+	out := runawaysDraftTimeTrendsJSON{
+		Available:          t.Available,
+		TimedDeckCount:     t.TimedDeckCount,
+		UntimedDeckCount:   t.UntimedDeckCount,
+		MinDeckAppearances: t.MinDeckAppearances,
+		Periods:            make([]runawaysDraftTimePeriodJSON, 0, len(t.Periods)),
+		Timeline:           make([]runawaysDraftTimelineBucketJSON, 0, len(t.Timeline)),
+		RisingPicks:        make([]runawaysDraftCardTrendJSON, 0, len(t.RisingPicks)),
+		FallingPicks:       make([]runawaysDraftCardTrendJSON, 0, len(t.FallingPicks)),
+		CompositionTrends:  make([]runawaysDraftCompositionTrendJSON, 0, len(t.CompositionTrends)),
+	}
+	if t.SplitAt != nil {
+		s := t.SplitAt.UTC().Format(time.RFC3339)
+		out.SplitAt = &s
+	}
+	for _, p := range t.Periods {
+		row := runawaysDraftTimePeriodJSON{
+			Label:     p.Label,
+			Key:       p.Key,
+			DeckCount: p.DeckCount,
+		}
+		if p.StartAt != nil {
+			s := p.StartAt.UTC().Format(time.RFC3339)
+			row.StartAt = &s
+		}
+		if p.EndAt != nil {
+			s := p.EndAt.UTC().Format(time.RFC3339)
+			row.EndAt = &s
+		}
+		out.Periods = append(out.Periods, row)
+	}
+	for _, b := range t.Timeline {
+		out.Timeline = append(out.Timeline, runawaysDraftTimelineBucketJSON(b))
+	}
+	for _, c := range t.RisingPicks {
+		out.RisingPicks = append(out.RisingPicks, runawaysDraftCardTrendToJSON(c))
+	}
+	for _, c := range t.FallingPicks {
+		out.FallingPicks = append(out.FallingPicks, runawaysDraftCardTrendToJSON(c))
+	}
+	for _, row := range t.CompositionTrends {
+		label := row.Metric
+		switch row.Metric {
+		case "avg_cost":
+			label = "Avg card cost / deck"
+		case "avg_pitch":
+			label = "Avg pitch / deck"
+		}
+		out.CompositionTrends = append(out.CompositionTrends, runawaysDraftCompositionTrendJSON{
+			Metric:     row.Metric,
+			Label:      label,
+			EarlyValue: row.EarlyValue,
+			LateValue:  row.LateValue,
+			Delta:      row.Delta,
+		})
+	}
+	if !t.Available {
+		var reason string
+		switch {
+		case t.TimedDeckCount < 8:
+			reason = "Need at least 8 decks with Fabrary created dates to compare trends."
+		case len(t.Periods) < 2:
+			reason = "Not enough dated decks in both early and late periods."
+		default:
+			reason = "Need at least 3 decks in each half of the submission timeline."
+		}
+		out.UnavailableReason = &reason
+	}
+	return out
+}
+
+func runawaysDraftCardTrendToJSON(row repository.RunawaysDraftCardTrend) runawaysDraftCardTrendJSON {
+	return runawaysDraftCardTrendJSON{
+		CardID:             row.CardID,
+		Name:               row.Name,
+		CardIdentifier:     row.CardIdentifier,
+		ImageURL:           row.ImageURL,
+		Type:               row.Type,
+		Rarity:             row.Rarity,
+		EarlyPickRate:      row.EarlyPickRate,
+		LatePickRate:       row.LatePickRate,
+		PickRateDelta:      row.PickRateDelta,
+		EarlyDecksWithCard: row.EarlyDecksWithCard,
+		LateDecksWithCard:  row.LateDecksWithCard,
+		TotalDecksWithCard: row.TotalDecksWithCard,
 	}
 }
 

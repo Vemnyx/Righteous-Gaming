@@ -14,7 +14,7 @@ const PREVIEW_WIDTH = 320;
 const PREVIEW_GAP_X = 36;
 const PREVIEW_GAP_Y = 10;
 
-/** @typedef {'distribution' | 'top-picks' | 'bottom-picks' | 'sideboard' | 'decklists'} CategoryTab */
+/** @typedef {'distribution' | 'top-picks' | 'bottom-picks' | 'sideboard' | 'decklists' | 'trends'} CategoryTab */
 
 /** @typedef {{ id: number, name: string, owner_username?: string | null, owner_email?: string | null, mainboard_count: number, fabrary_link?: string | null }} RunawaysDeckRow */
 
@@ -36,6 +36,22 @@ function fmtNum(v, digits = 1) {
 function fmtPct(rate) {
   if (!Number.isFinite(rate)) return "—";
   return `${(rate * 100).toFixed(1)}%`;
+}
+
+/** @param {number} rate */
+function fmtPctPoints(rate) {
+  if (!Number.isFinite(rate)) return "—";
+  const pts = rate * 100;
+  const sign = pts > 0 ? "+" : "";
+  return `${sign}${pts.toFixed(1)} pp`;
+}
+
+/** @param {string | undefined | null} iso */
+function fmtShortDate(iso) {
+  if (iso == null || iso === "") return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
 /** @param {string | undefined | null} errText */
@@ -485,8 +501,131 @@ function SideboardTopTable({ cards, deckCount, isLight, onPreview }) {
   );
 }
 
+/**
+ * @param {{
+ *   title: string,
+ *   cards: unknown[],
+ *   earlyDeckCount: number,
+ *   lateDeckCount: number,
+ *   isLight: boolean,
+ *   onPreview: (preview: { url: string, x: number, y: number } | null) => void,
+ * }} props
+ */
+function CardTrendTable({ title, cards, earlyDeckCount, lateDeckCount, isLight, onPreview }) {
+  const tableHeadBorder = isLight ? "border-white/12" : "border-white/[0.20]";
+  const tableRowBorder = isLight ? "border-white/[0.08]" : "border-white/[0.12]";
+
+  if (!cards.length) {
+    return (
+      <section>
+        <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">{title}</h3>
+        <p className="mt-2 text-[0.82rem] text-[#f4f0fa]/55">No cards match the trend criteria.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section>
+      <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">{title}</h3>
+      <div className="mt-2 overflow-x-auto rounded-xl border border-white/[0.12] bg-black/20">
+        <table className="w-full min-w-[32rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
+          <thead>
+            <tr className={`border-b text-[0.68rem] uppercase tracking-wider text-[#f4f0fa]/55 ${tableHeadBorder}`}>
+              <th className="w-8 px-3 py-2.5 font-semibold sm:px-4">#</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Card</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Early</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Late</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Change</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cards.map((raw, index) => {
+              const c = /** @type {Record<string, unknown>} */ (raw);
+              const name = String(c.name ?? "Card");
+              const img = c.image_url != null ? String(c.image_url) : "";
+              const earlyRate = typeof c.early_pick_rate === "number" ? c.early_pick_rate : Number(c.early_pick_rate);
+              const lateRate = typeof c.late_pick_rate === "number" ? c.late_pick_rate : Number(c.late_pick_rate);
+              const delta = typeof c.pick_rate_delta === "number" ? c.pick_rate_delta : Number(c.pick_rate_delta);
+              const earlyDecks = typeof c.early_decks_with_card === "number" ? c.early_decks_with_card : 0;
+              const lateDecks = typeof c.late_decks_with_card === "number" ? c.late_decks_with_card : 0;
+              const rarity = numOrNull(c.rarity);
+              const deltaClass =
+                Number.isFinite(delta) && delta > 0.001
+                  ? "text-emerald-300/95"
+                  : Number.isFinite(delta) && delta < -0.001
+                    ? "text-rose-300/95"
+                    : "";
+
+              return (
+                <tr key={String(c.card_id)} className={`border-b ${tableRowBorder} last:border-b-0`}>
+                  <td className="px-3 py-2 tabular-nums text-[#f4f0fa]/45 sm:px-4">{index + 1}</td>
+                  <td className="max-w-[16rem] px-3 py-2 sm:px-4">
+                    <div className="min-w-0">
+                      <CardNameWithPreview name={name} imageUrl={img} onPreview={onPreview} />
+                      <p className="m-0 mt-0.5 text-[0.72rem] text-[#f4f0fa]/50">
+                        {rarity != null ? (cardRarityName(rarity) ?? `Rarity ${rarity}`) : "Unknown rarity"}
+                      </p>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 tabular-nums sm:px-4">
+                    {fmtPct(earlyRate)}
+                    <span className="text-[#f4f0fa]/45">
+                      {" "}
+                      ({earlyDecks}/{earlyDeckCount})
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 tabular-nums sm:px-4">
+                    {fmtPct(lateRate)}
+                    <span className="text-[#f4f0fa]/45">
+                      {" "}
+                      ({lateDecks}/{lateDeckCount})
+                    </span>
+                  </td>
+                  <td className={`px-3 py-2 tabular-nums sm:px-4 ${deltaClass}`}>{fmtPctPoints(delta)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * @param {{ buckets: { label: string, key?: string, deck_count: number }[], panelBorder: string }} props
+ */
+function SubmissionTimelineChart({ buckets, panelBorder }) {
+  const max = Math.max(1, ...buckets.map((b) => b.deck_count));
+  return (
+    <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
+      <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Deck submissions over time</h3>
+      <p className="m-0 mt-1 text-[0.78rem] text-[#f4f0fa]/55">By Fabrary deck created date (UTC days).</p>
+      <div className="mt-4 flex h-40 items-end gap-1.5 sm:gap-2">
+        {buckets.map((b) => {
+          const h = Math.round((b.deck_count / max) * 100);
+          return (
+            <div key={b.key ?? b.label} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+              <div className="flex h-32 w-full items-end justify-center rounded-md bg-black/30 px-0.5">
+                <div
+                  className="w-full max-w-[2.5rem] rounded-t-md bg-gradient-to-t from-[#5a2f8f] to-[#9b6fd8]"
+                  style={{ height: `${Math.max(4, h)}%` }}
+                  title={`${b.deck_count} decks`}
+                />
+              </div>
+              <span className="max-w-full truncate text-center text-[0.62rem] text-[#f4f0fa]/55">{b.label}</span>
+              <span className="text-[0.68rem] tabular-nums text-[#f4f0fa]/70">{b.deck_count}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 const CATEGORY_TABS = /** @type {{ id: CategoryTab, label: string }[]} */ ([
   { id: "distribution", label: "Distribution" },
+  { id: "trends", label: "Trends over time" },
   { id: "top-picks", label: "Top picks" },
   { id: "bottom-picks", label: "Bottom picks" },
   { id: "sideboard", label: "Sideboard" },
@@ -1048,6 +1187,42 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
     [analytics],
   );
 
+  const timeTrends = useMemo(() => {
+    const raw = analytics?.time_trends;
+    if (!raw || typeof raw !== "object") return null;
+    return /** @type {Record<string, unknown>} */ (raw);
+  }, [analytics]);
+
+  const trendEarlyDeckCount = useMemo(() => {
+    const periods = Array.isArray(timeTrends?.periods) ? timeTrends.periods : [];
+    const early = periods.find((p) => p && typeof p === "object" && /** @type {Record<string, unknown>} */ (p).key === "early");
+    if (!early || typeof early !== "object") return 0;
+    const n = numOrNull(/** @type {Record<string, unknown>} */ (early).deck_count);
+    return n ?? 0;
+  }, [timeTrends]);
+
+  const trendLateDeckCount = useMemo(() => {
+    const periods = Array.isArray(timeTrends?.periods) ? timeTrends.periods : [];
+    const late = periods.find((p) => p && typeof p === "object" && /** @type {Record<string, unknown>} */ (p).key === "late");
+    if (!late || typeof late !== "object") return 0;
+    const n = numOrNull(/** @type {Record<string, unknown>} */ (late).deck_count);
+    return n ?? 0;
+  }, [timeTrends]);
+
+  const trendTimeline = useMemo(() => {
+    const rows = Array.isArray(timeTrends?.timeline) ? timeTrends.timeline : [];
+    return rows
+      .filter((x) => x && typeof x === "object")
+      .map((x) => {
+        const r = /** @type {Record<string, unknown>} */ (x);
+        return {
+          label: r.label != null ? String(r.label) : "",
+          key: r.key != null ? String(r.key) : String(r.label ?? ""),
+          deck_count: numOrNull(r.deck_count) ?? 0,
+        };
+      });
+  }, [timeTrends]);
+
   const pitchColors = {
     1: "bg-red-500/75",
     2: "bg-yellow-400/80",
@@ -1257,6 +1432,113 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
 
           {categoryTab === "distribution" && deckCount === 0 ? (
             <p className="m-0 text-[0.875rem] text-[#f4f0fa]/65">No deck data for distribution stats.</p>
+          ) : null}
+
+          {categoryTab === "trends" && deckCount > 0 ? (
+            <div className="flex flex-col gap-5">
+              {!timeTrends?.available ? (
+                <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
+                  <p className="m-0 text-[0.875rem] text-[#f4f0fa]/75">
+                    {timeTrends?.unavailable_reason != null
+                      ? String(timeTrends.unavailable_reason)
+                      : "Trend analysis requires dated Fabrary submissions."}
+                  </p>
+                  {timeTrends ? (
+                    <p className="m-0 mt-2 text-[0.78rem] text-[#f4f0fa]/55">
+                      {numOrNull(timeTrends.timed_deck_count) ?? 0} dated decks ·{" "}
+                      {numOrNull(timeTrends.untimed_deck_count) ?? 0} without created date
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <>
+                  <p className="m-0 text-[0.82rem] leading-snug text-[#f4f0fa]/65">
+                    Decks split at the median Fabrary created time
+                    {timeTrends.split_at != null ? ` (${fmtShortDate(String(timeTrends.split_at))})` : ""}. Pick rates
+                    compare the first half of submissions (early) to the second half (late). Cards need at least{" "}
+                    {numOrNull(timeTrends.min_deck_appearances) ?? 4} total appearances across both periods.
+                  </p>
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <StatTile
+                      title="Dated decks"
+                      value={String(numOrNull(timeTrends.timed_deck_count) ?? 0)}
+                      hint={`${numOrNull(timeTrends.untimed_deck_count) ?? 0} without date`}
+                    />
+                    <StatTile title="Early period" value={String(trendEarlyDeckCount)} />
+                    <StatTile title="Late period" value={String(trendLateDeckCount)} />
+                  </div>
+
+                  {trendTimeline.length > 0 ? (
+                    <SubmissionTimelineChart buckets={trendTimeline} panelBorder={panelBorder} />
+                  ) : null}
+
+                  {Array.isArray(timeTrends.composition_trends) && timeTrends.composition_trends.length > 0 ? (
+                    <div className={`rounded-xl border ${panelBorder} bg-black/20 p-4`}>
+                      <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Deck composition shifts</h3>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        {timeTrends.composition_trends.map((raw) => {
+                          if (!raw || typeof raw !== "object") return null;
+                          const row = /** @type {Record<string, unknown>} */ (raw);
+                          const label = row.label != null ? String(row.label) : String(row.metric ?? "Metric");
+                          const early = numOrNull(row.early_value);
+                          const late = numOrNull(row.late_value);
+                          const delta = numOrNull(row.delta);
+                          const deltaClass =
+                            delta != null && delta > 0.001
+                              ? "text-emerald-300/95"
+                              : delta != null && delta < -0.001
+                                ? "text-rose-300/95"
+                                : "text-[#f4f0fa]/70";
+                          return (
+                            <div key={String(row.metric ?? label)} className="rounded-lg border border-white/[0.08] bg-black/25 px-3 py-2.5">
+                              <p className="m-0 text-[0.72rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/50">
+                                {label}
+                              </p>
+                              <p className="m-0 mt-1 text-[1rem] font-semibold tabular-nums text-[#f4f0fa]">
+                                {late != null ? late.toFixed(2) : "—"}
+                                <span className="ml-2 text-[0.75rem] font-normal text-[#f4f0fa]/55">
+                                  early {early != null ? early.toFixed(2) : "—"}
+                                </span>
+                              </p>
+                              {delta != null ? (
+                                <p className={`m-0 mt-0.5 text-[0.78rem] tabular-nums ${deltaClass}`}>
+                                  {delta > 0 ? "+" : ""}
+                                  {delta.toFixed(2)} vs early
+                                </p>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="grid gap-6 xl:grid-cols-2">
+                    <CardTrendTable
+                      title="Rising picks"
+                      cards={Array.isArray(timeTrends.rising_picks) ? timeTrends.rising_picks : []}
+                      earlyDeckCount={trendEarlyDeckCount}
+                      lateDeckCount={trendLateDeckCount}
+                      isLight={isLight}
+                      onPreview={setImagePreview}
+                    />
+                    <CardTrendTable
+                      title="Falling picks"
+                      cards={Array.isArray(timeTrends.falling_picks) ? timeTrends.falling_picks : []}
+                      earlyDeckCount={trendEarlyDeckCount}
+                      lateDeckCount={trendLateDeckCount}
+                      isLight={isLight}
+                      onPreview={setImagePreview}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          ) : null}
+
+          {categoryTab === "trends" && deckCount === 0 ? (
+            <p className="m-0 text-[0.875rem] text-[#f4f0fa]/65">No deck data for trend analysis.</p>
           ) : null}
 
           {categoryTab === "top-picks" && deckCount > 0 ? (
