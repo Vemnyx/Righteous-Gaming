@@ -1,6 +1,9 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { EventsAdmin } from "../components/EventsAdmin";
+import { EventsList } from "../components/EventsList";
+import { EventDetailPage } from "../components/EventDetailPage";
 import { UsersAdminTable } from "../components/UsersAdminTable";
 import { CardsCatalog } from "../components/CardsCatalog";
 import { CardRanker } from "../components/CardRanker";
@@ -50,6 +53,7 @@ const RESOURCE_SUB_LINKS = [
   { segment: "cards", label: "Cards", path: "/resources/cards" },
   { segment: "decks", label: "Decks", path: "/resources/decks" },
   { segment: "recordings", label: "Recordings", path: "/resources/recordings" },
+  { segment: "events", label: "Events", path: "/resources/events" },
   { segment: "card-rater", label: "Card Rater", path: "/resources/card-rater" },
 ];
 
@@ -65,6 +69,7 @@ const ADMIN_SUB_LINKS = [
   { segment: "sets", label: "Sets", path: "/admin/sets" },
   { segment: "announcements", label: "Announcements", path: "/admin/announcements" },
   { segment: "card-rater", label: "Card Rater", path: "/admin/card-rater" },
+  { segment: "events", label: "Events", path: "/admin/events" },
 ];
 
 /**
@@ -78,6 +83,7 @@ const ADMIN_SUB_LINKS = [
  * @param {string | null} [dataCardRaterId] — numeric id for `/data/card-ratings/:id` analytics
  * @param {string | null} [resourcesDeckId] — numeric id for `/resources/decks/:id`
  * @param {string | null} [resourcesRecordingId] — numeric id for `/resources/recordings/:id`
+ * @param {string | null} [resourcesEventId] — numeric id for `/resources/events/:id`
  * @param {string | null} [dataCardRaterCompareBaselineId] — baseline session for `/data/card-ratings/:id/compare/:baselineId`
  * @param {string | null} [resourcesCardRaterCompareBaselineId] — baseline session for `/resources/card-rater/:id/compare/:baselineId`
  */
@@ -94,6 +100,7 @@ function buildDashboardPathname(
   resourcesRecordingId = null,
   dataCardRaterCompareBaselineId = null,
   resourcesCardRaterCompareBaselineId = null,
+  resourcesEventId = null,
 ) {
   if (tabId === SETTINGS_TAB_ID) return "/settings";
   if (tabId === DATA_TAB_ID) {
@@ -129,7 +136,8 @@ function buildDashboardPathname(
       adminChild === "users" ||
       adminChild === "sets" ||
       adminChild === "announcements" ||
-      adminChild === "card-rater"
+      adminChild === "card-rater" ||
+      adminChild === "events"
         ? adminChild
         : DEFAULT_ADMIN_SEGMENT;
     if (seg === "announcements") {
@@ -145,6 +153,7 @@ function buildDashboardPathname(
       resourcesChild === "cards" ||
       resourcesChild === "decks" ||
       resourcesChild === "recordings" ||
+      resourcesChild === "events" ||
       resourcesChild === "card-rater" ||
       resourcesChild === "card-rater-play"
         ? resourcesChild
@@ -199,6 +208,16 @@ function buildDashboardPathname(
       }
       return "/resources/recordings";
     }
+    if (seg === "events") {
+      const rawId = resourcesEventId != null ? String(resourcesEventId).trim() : "";
+      if (rawId !== "") {
+        const eid = parseInt(rawId, 10);
+        if (Number.isFinite(eid) && eid > 0 && String(eid) === rawId) {
+          return `/resources/events/${eid}`;
+        }
+      }
+      return "/resources/events";
+    }
     return `/resources/${seg}`;
   }
   return `/${tabId}`;
@@ -217,6 +236,7 @@ function replaceDashboardUrl(
   resourcesRecordingId = null,
   dataCardRaterCompareBaselineId = null,
   resourcesCardRaterCompareBaselineId = null,
+  resourcesEventId = null,
 ) {
   try {
     const u = new URL(window.location.href);
@@ -233,6 +253,7 @@ function replaceDashboardUrl(
       resourcesRecordingId,
       dataCardRaterCompareBaselineId,
       resourcesCardRaterCompareBaselineId,
+      resourcesEventId,
     );
     u.search = "";
     const next = `${u.pathname}${u.search}${u.hash}`;
@@ -256,6 +277,7 @@ function pushDashboardUrl(
   resourcesRecordingId = null,
   dataCardRaterCompareBaselineId = null,
   resourcesCardRaterCompareBaselineId = null,
+  resourcesEventId = null,
 ) {
   try {
     const u = new URL(window.location.href);
@@ -272,6 +294,7 @@ function pushDashboardUrl(
       resourcesRecordingId,
       dataCardRaterCompareBaselineId,
       resourcesCardRaterCompareBaselineId,
+      resourcesEventId,
     );
     u.search = "";
     const next = `${u.pathname}${u.search}${u.hash}`;
@@ -433,6 +456,40 @@ function parseDashboardPathname(pathname) {
       }
       return { kind: "invalid" };
     }
+    if (b === "events") {
+      if (c === undefined && rest.length > 0) return { kind: "invalid" };
+      if (c === undefined) {
+        return {
+          kind: "ok",
+          tabId: RESOURCES_TAB_ID,
+          resourcesChild: "events",
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
+          resourcesDeckId: null,
+          resourcesRecordingId: null,
+          resourcesEventId: null,
+          adminChild: null,
+          adminAnnouncementForm: null,
+        };
+      }
+      const eid = parseInt(String(c), 10);
+      if (Number.isFinite(eid) && eid > 0 && String(eid) === String(c)) {
+        if (rest.length > 0) return { kind: "invalid" };
+        return {
+          kind: "ok",
+          tabId: RESOURCES_TAB_ID,
+          resourcesChild: "events",
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
+          resourcesDeckId: null,
+          resourcesRecordingId: null,
+          resourcesEventId: String(eid),
+          adminChild: null,
+          adminAnnouncementForm: null,
+        };
+      }
+      return { kind: "invalid" };
+    }
     return { kind: "invalid" };
   }
 
@@ -481,6 +538,18 @@ function parseDashboardPathname(pathname) {
         resourcesCardIdentifier: null,
         resourcesCardRaterId: null,
         adminChild: "card-rater",
+        adminAnnouncementForm: null,
+      };
+    }
+    if (b === "events") {
+      if (c !== undefined || rest.length > 0) return { kind: "invalid" };
+      return {
+        kind: "ok",
+        tabId: ADMIN_TAB_ID,
+        resourcesChild: null,
+        resourcesCardIdentifier: null,
+        resourcesCardRaterId: null,
+        adminChild: "events",
         adminAnnouncementForm: null,
       };
     }
@@ -777,6 +846,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
     resourcesCardRaterCompareBaselineId: parsed.resourcesCardRaterCompareBaselineId ?? null,
     resourcesDeckId: parsed.resourcesDeckId ?? null,
     resourcesRecordingId: parsed.resourcesRecordingId ?? null,
+    resourcesEventId: parsed.resourcesEventId ?? null,
     adminChild,
     adminAnnouncementForm,
     dataChild,
@@ -931,6 +1001,8 @@ export default function Dashboard({ onNavigate }) {
   const [resourcesDeckId, setResourcesDeckId] = useState(/** @type {string | null} */ (null));
   /** Numeric `recordings.id` when URL is `/resources/recordings/:id`. */
   const [resourcesRecordingId, setResourcesRecordingId] = useState(/** @type {string | null} */ (null));
+  /** Numeric `events.id` when URL is `/resources/events/:id`. */
+  const [resourcesEventId, setResourcesEventId] = useState(/** @type {string | null} */ (null));
   /** True while showing CardRanker at `/resources/card-rater` (active session; no id in URL). */
   const [cardRaterPlayAtRoot, setCardRaterPlayAtRoot] = useState(false);
   /** When `activeTab === admin`, which sub-route is shown (`/admin/...`). */
@@ -1056,6 +1128,7 @@ export default function Dashboard({ onNavigate }) {
     setResourcesCardRaterId(null);
     setResourcesDeckId(null);
     setResourcesRecordingId(null);
+    setResourcesEventId(null);
     if (segment === "card-rater") setCardRaterPlayAtRoot(false);
     setAdminChild(null);
     setAdminAnnouncementForm(null);
@@ -1164,6 +1237,30 @@ export default function Dashboard({ onNavigate }) {
     setResourcesChild("recordings");
     setResourcesRecordingId(null);
     pushDashboardUrl(RESOURCES_TAB_ID, "recordings", null, null, null, null, null, null, null, null);
+  }, []);
+
+  const openEventDetail = useCallback((eventId) => {
+    const eid = String(eventId).trim();
+    if (!/^\d+$/.test(eid)) return;
+    setActiveTab(RESOURCES_TAB_ID);
+    setResourcesChild("events");
+    setResourcesEventId(eid);
+    setResourcesCardIdentifier(null);
+    setResourcesCardRaterId(null);
+    setResourcesDeckId(null);
+    setResourcesRecordingId(null);
+    setCardRaterPlayAtRoot(false);
+    setAdminChild(null);
+    setAdminAnnouncementForm(null);
+    setDataChild(null);
+    setDataCardRaterId(null);
+    pushDashboardUrl(RESOURCES_TAB_ID, "events", null, null, null, null, null, null, null, null, null, null, eid);
+  }, []);
+
+  const closeEventDetail = useCallback(() => {
+    setResourcesChild("events");
+    setResourcesEventId(null);
+    pushDashboardUrl(RESOURCES_TAB_ID, "events", null, null, null, null, null, null, null, null, null, null, null);
   }, []);
 
   const openDataCardRaterAnalytics = useCallback((raterId) => {
@@ -1288,6 +1385,7 @@ export default function Dashboard({ onNavigate }) {
         nextTab === RESOURCES_TAB_ID ? resolved.resourcesCardRaterId : null;
       const nextDeckId = nextTab === RESOURCES_TAB_ID ? resolved.resourcesDeckId : null;
       const nextRecordingId = nextTab === RESOURCES_TAB_ID ? resolved.resourcesRecordingId : null;
+      const nextEventId = nextTab === RESOURCES_TAB_ID ? resolved.resourcesEventId : null;
       const nextAdminChild = nextTab === ADMIN_TAB_ID ? resolved.adminChild : null;
       const nextAnnouncementForm =
         nextTab === ADMIN_TAB_ID && nextAdminChild === "announcements"
@@ -1306,6 +1404,7 @@ export default function Dashboard({ onNavigate }) {
       setResourcesCardRaterCompareBaselineId(nextResourcesCompareBaselineId);
       setResourcesDeckId(nextDeckId);
       setResourcesRecordingId(nextRecordingId);
+      setResourcesEventId(nextEventId);
       const cardRaterAtRoot =
         nextTab === RESOURCES_TAB_ID &&
         nextChild === "card-rater" &&
@@ -1329,6 +1428,7 @@ export default function Dashboard({ onNavigate }) {
         nextTab === RESOURCES_TAB_ID ? nextRecordingId : null,
         nextTab === DATA_TAB_ID ? nextDataCompareBaselineId : null,
         nextTab === RESOURCES_TAB_ID ? nextResourcesCompareBaselineId : null,
+        nextTab === RESOURCES_TAB_ID ? nextEventId : null,
       );
       setMobileResourcesOpen(false);
       setMobileAdminOpen(false);
@@ -1815,6 +1915,12 @@ export default function Dashboard({ onNavigate }) {
                   active={activeTab === ADMIN_TAB_ID && adminChild === "card-rater"}
                   onOpenCardRaterAnalytics={openCardRaterAnalytics}
                 />
+              ) : adminChild === "events" ? (
+                <EventsAdmin
+                  isLight={isLight}
+                  active={activeTab === ADMIN_TAB_ID && adminChild === "events"}
+                  onOpenEvent={openEventDetail}
+                />
               ) : (
                 <div
                   className="flex min-h-[min(40vh,18rem)] flex-1 flex-col items-center justify-center px-4 text-center"
@@ -1879,6 +1985,23 @@ export default function Dashboard({ onNavigate }) {
                   isLight={isLight}
                   active={activeTab === RESOURCES_TAB_ID && resourcesChild === "recordings"}
                   onOpenRecording={openRecordingDetail}
+                />
+              ) : resourcesChild === "events" && resourcesEventId ? (
+                <EventDetailPage
+                  isLight={isLight}
+                  eventId={resourcesEventId}
+                  active={
+                    activeTab === RESOURCES_TAB_ID &&
+                    resourcesChild === "events" &&
+                    Boolean(resourcesEventId)
+                  }
+                  onBack={closeEventDetail}
+                />
+              ) : resourcesChild === "events" ? (
+                <EventsList
+                  isLight={isLight}
+                  active={activeTab === RESOURCES_TAB_ID && resourcesChild === "events"}
+                  onOpenEvent={openEventDetail}
                 />
               ) : showCardRankerResources ? (
                 <CardRanker

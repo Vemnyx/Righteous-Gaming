@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"righteous-gaming/backend/internal/app"
+	"righteous-gaming/backend/internal/scrape"
 	"righteous-gaming/backend/internal/service"
 )
 
@@ -19,6 +20,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	dh := &decksHTTP{app: application, svc: userSvc}
 	rdh := &runawaysDraftHTTP{app: application, svc: userSvc}
 	rec := &recordingsHTTP{app: application, svc: userSvc}
+	eh := &eventsHTTP{app: application, svc: userSvc, scrape: scrape.NewClient()}
 
 	mux.HandleFunc("POST /api/users", uh.createUser)
 	mux.HandleFunc("POST /api/complete-registration", uh.completeRegistration)
@@ -84,6 +86,19 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("GET /api/admin/announcements/{id}", ah.adminGet)
 	mux.HandleFunc("PATCH /api/admin/announcements/{id}", ah.adminUpdate)
 	mux.HandleFunc("DELETE /api/admin/announcements/{id}", ah.adminDelete)
+
+	mux.HandleFunc("GET /api/events", eh.listEvents)
+	mux.HandleFunc("GET /api/events/{id}", eh.getEvent)
+	mux.HandleFunc("GET /api/events/{id}/rounds", eh.getEventRounds)
+	mux.HandleFunc("GET /api/events/{id}/pairings", eh.getEventPairings)
+	mux.HandleFunc("GET /api/events/{id}/results", eh.getEventResults)
+	mux.HandleFunc("GET /api/events/{id}/standings", eh.getEventStandings)
+	mux.HandleFunc("GET /api/events/{id}/team-summary", eh.getEventTeamSummary)
+	mux.HandleFunc("GET /api/events/streams/{streamId}/comments", eh.listStreamComments)
+	mux.HandleFunc("POST /api/events/streams/{streamId}/comments", eh.createStreamComment)
+	mux.HandleFunc("POST /api/events/streams/{streamId}/refresh-youtube", eh.refreshStreamYoutube)
+	mux.HandleFunc("GET /api/admin/events", eh.adminListEvents)
+	mux.HandleFunc("POST /api/admin/events", eh.adminCreateEvent)
 
 	return mux
 }

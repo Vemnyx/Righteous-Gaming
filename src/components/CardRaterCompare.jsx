@@ -417,7 +417,7 @@ export function CardRaterCompare({ isLight, active, raterId, baselineRaterId, on
                 <img
                   src={rowPreview.src}
                   alt=""
-                  className="h-[14rem] w-auto max-w-[10rem] rounded-md border border-white/20 bg-[#0d0914] shadow-2xl"
+                  className="h-[18rem] w-auto max-w-[12.5rem] rounded-md border border-white/20 bg-[#0d0914] shadow-2xl"
                 />
               </div>
             ) : null}
