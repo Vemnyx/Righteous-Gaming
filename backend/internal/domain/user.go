@@ -41,9 +41,15 @@ type User struct {
 	Settings  UserSettings `json:"settings"`
 }
 
-// UserMeSettings combines app preferences with profile fields stored on users.
+// UserMeSettings is the response shape for GET /api/me/settings.
 type UserMeSettings struct {
-	Settings  UserSettings `json:"settings"`
-	FirstName *string      `json:"first_name,omitempty"`
-	LastName  *string      `json:"last_name,omitempty"`
+	Settings UserSettings `json:"settings"`
+}
+
+// UserMeProfile is the response shape for GET /api/me/profile.
+type UserMeProfile struct {
+	Email     string  `json:"email"`
+	Username  *string `json:"username,omitempty"`
+	FirstName *string `json:"first_name,omitempty"`
+	LastName  *string `json:"last_name,omitempty"`
 }

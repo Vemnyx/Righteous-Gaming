@@ -238,8 +238,8 @@ RETURNING id, email, username, first_name, last_name, uid, role, created_at`
 	return u, nil
 }
 
-// UpdateUserProfile updates first and last name for a user.
-func (r *Repository) UpdateUserProfile(ctx context.Context, userID int, firstName, lastName *string) (*User, error) {
+// UpdateUserProfile updates username, first name, and last name for a user.
+func (r *Repository) UpdateUserProfile(ctx context.Context, userID int, username, firstName, lastName *string) (*User, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
@@ -248,11 +248,12 @@ func (r *Repository) UpdateUserProfile(ctx context.Context, userID int, firstNam
 	}
 	const q = `
 UPDATE users
-SET first_name = $2,
-    last_name = $3
+SET username = $2,
+    first_name = $3,
+    last_name = $4
 WHERE id = $1
 RETURNING id, email, username, first_name, last_name, COALESCE(uid, ''), role, created_at`
-	row := r.pool.QueryRow(ctx, q, userID, firstName, lastName)
+	row := r.pool.QueryRow(ctx, q, userID, username, firstName, lastName)
 	u, err := scanUserRow(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

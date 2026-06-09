@@ -2,9 +2,12 @@ package scrape
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -84,32 +87,156 @@ type Client struct {
 }
 
 func NewClient() *Client {
+	jar, _ := cookiejar.New(nil)
 	return &Client{
-		httpClient: &http.Client{Timeout: 45 * time.Second},
+		httpClient: &http.Client{
+			Timeout: 45 * time.Second,
+			Jar:     jar,
+		},
 	}
 }
 
+func setFabBrowserHeaders(req *http.Request, accept string, referer string) {
+	if accept == "" {
+		accept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+	}
+	req.Header.Set("User-Agent", fabBrowserUA)
+	req.Header.Set("Accept", accept)
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Cache-Control", "no-cache")
+	req.Header.Set("Pragma", "no-cache")
+	req.Header.Set("Sec-Ch-Ua", `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+	req.Header.Set("Sec-Ch-Ua-Platform", `"macOS"`)
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	if referer != "" {
+		req.Header.Set("Referer", referer)
+		req.Header.Set("Sec-Fetch-Site", "same-origin")
+	}
+}
+
+// FetchHTML retrieves a FabTCG page using browser-like headers and a shared cookie jar.
 func (c *Client) FetchHTML(ctx context.Context, rawURL string) (string, error) {
+	return c.fetchHTML(ctx, rawURL, "", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+}
+
+// FetchHTMLReferer retrieves a FabTCG page with an optional Referer header (helps avoid 403 on subpages).
+func (c *Client) FetchHTMLReferer(ctx context.Context, rawURL, referer string) (string, error) {
+	return c.fetchHTML(ctx, rawURL, referer, "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+}
+
+func (c *Client) fetchHTML(ctx context.Context, rawURL, referer, accept string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", fabBrowserUA)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	setFabBrowserHeaders(req, accept, referer)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if readErr != nil {
+		return "", readErr
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("fetch %s: HTTP %d", rawURL, resp.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	if err != nil {
-		return "", err
-	}
 	return string(body), nil
+}
+
+// FetchEventPageData loads tournament metadata, falling back to the public WordPress JSON API
+// when the HTML page is blocked (HTTP 403 from FabTCG edge rules).
+func (c *Client) FetchEventPageData(ctx context.Context, eventURL string) (EventPageData, error) {
+	if htmlText, err := c.FetchHTML(ctx, eventURL); err == nil {
+		parsed := ParseEventPage(htmlText)
+		if len(parsed.CoverageLinks) > 0 {
+			if parsed.Title == "" {
+				parsed.Title = textFromFirstTag(htmlText, "h1")
+			}
+			return parsed, nil
+		}
+	}
+	return c.fetchEventPageViaWordPress(ctx, eventURL)
+}
+
+func slugFromFabEventURL(rawURL string) string {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	for i := len(parts) - 1; i >= 0; i-- {
+		s := strings.TrimSpace(parts[i])
+		if s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
+type wpTournamentResponse []struct {
+	Title struct {
+		Rendered string `json:"rendered"`
+	} `json:"title"`
+	Content struct {
+		Rendered string `json:"rendered"`
+	} `json:"content"`
+	Link string `json:"link"`
+	Yoast struct {
+		OGImage []struct {
+			URL string `json:"url"`
+		} `json:"og_image"`
+		OGTitle string `json:"og_title"`
+	} `json:"yoast_head_json"`
+}
+
+func (c *Client) fetchEventPageViaWordPress(ctx context.Context, eventURL string) (EventPageData, error) {
+	slug := slugFromFabEventURL(eventURL)
+	if slug == "" {
+		return EventPageData{}, fmt.Errorf("could not determine event slug from URL")
+	}
+	apiURL := "https://fabtcg.com/wp-json/wp/v2/tournament?slug=" + url.QueryEscape(slug)
+	body, err := c.fetchHTML(ctx, apiURL, eventURL, "application/json,text/plain,*/*")
+	if err != nil {
+		return EventPageData{}, fmt.Errorf("fetch wordpress tournament API: %w", err)
+	}
+	var rows wpTournamentResponse
+	if err := json.Unmarshal([]byte(body), &rows); err != nil {
+		return EventPageData{}, fmt.Errorf("parse wordpress tournament API: %w", err)
+	}
+	if len(rows) == 0 {
+		return EventPageData{}, fmt.Errorf("tournament not found for slug %q", slug)
+	}
+	item := rows[0]
+	contentHTML := item.Content.Rendered
+	parsed := ParseEventPage(contentHTML)
+	out := EventPageData{
+		Title:         cleanInlineText(item.Title.Rendered),
+		DateText:      parsed.DateText,
+		Venue:         parsed.Venue,
+		CoverageLinks: parsed.CoverageLinks,
+	}
+	if out.Title == "" {
+		out.Title = parsed.Title
+	}
+	if len(item.Yoast.OGImage) > 0 && strings.TrimSpace(item.Yoast.OGImage[0].URL) != "" {
+		out.ImageURL = strings.TrimSpace(item.Yoast.OGImage[0].URL)
+	} else {
+		out.ImageURL = parsed.ImageURL
+	}
+	if out.ImageURL == "" {
+		out.ImageURL = metaContent(contentHTML, "og:image")
+	}
+	if len(out.CoverageLinks) == 0 {
+		return EventPageData{}, fmt.Errorf("no coverage links found for tournament %q", slug)
+	}
+	return out, nil
 }
 
 func metaContent(htmlText, property string) string {

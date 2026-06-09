@@ -802,7 +802,7 @@ func (h *cardRatingsHTTP) deleteCardRater(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// GET /api/card-raters/{id}/analytics?class=&talent=&type=&rarity=&top_limit=&table_limit=
+// GET /api/card-raters/{id}/analytics?class=&talent=&type=&rarity=&pitch=&top_limit=&table_limit=
 func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -828,7 +828,7 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	var classF, talentF, typeF, rarityF *int16
+	var classF, talentF, typeF, rarityF, pitchF *int16
 	if s := strings.TrimSpace(r.URL.Query().Get("class")); s != "" {
 		v64, err := strconv.ParseInt(s, 10, 16)
 		if err != nil || !domain.CardClass(int16(v64)).Valid() {
@@ -864,6 +864,15 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 		}
 		v := int16(v64)
 		rarityF = &v
+	}
+	if s := strings.TrimSpace(r.URL.Query().Get("pitch")); s != "" {
+		v64, err := strconv.ParseInt(s, 10, 16)
+		if err != nil || v64 < 1 || v64 > 3 {
+			writeFieldError(w, http.StatusBadRequest, "pitch", "invalid pitch (must be 1, 2, or 3)")
+			return
+		}
+		v := int16(v64)
+		pitchF = &v
 	}
 
 	parseOffset := func(key string) (int, bool) {
@@ -952,7 +961,7 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 		TalkedLimit:         talkedLimit,
 	}
 
-	analytics, err := h.app.Repo.CardRaterAnalytics(r.Context(), id, classF, talentF, typeF, rarityF, paging)
+	analytics, err := h.app.Repo.CardRaterAnalytics(r.Context(), id, classF, talentF, typeF, rarityF, pitchF, paging)
 	if err != nil {
 		log.Error("card rater analytics", "error", err, "id", id)
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
@@ -1085,6 +1094,7 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 			"talents":  analytics.FilterOptions.Talents,
 			"types":    analytics.FilterOptions.CardTypes,
 			"rarities": analytics.FilterOptions.Rarities,
+			"pitches":  analytics.FilterOptions.Pitches,
 		},
 		"top_cards": top,
 		"rated_table": map[string]any{

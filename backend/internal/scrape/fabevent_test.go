@@ -1,6 +1,7 @@
 package scrape_test
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -35,5 +36,23 @@ func TestParseCoverageYokohama(t *testing.T) {
 	}
 	if scrape.LatestRound(rounds) < 5 {
 		t.Fatalf("unexpected latest round %d", scrape.LatestRound(rounds))
+	}
+}
+
+func TestFetchEventPageDataYokohama(t *testing.T) {
+	if testing.Short() {
+		t.Skip("network")
+	}
+	ctx := context.Background()
+	c := scrape.NewClient()
+	parsed, err := c.FetchEventPageData(ctx, "https://fabtcg.com/organised-play/2026/pro-tour-yokohama/")
+	if err != nil {
+		t.Fatalf("FetchEventPageData: %v", err)
+	}
+	if parsed.Title == "" {
+		t.Fatal("expected title")
+	}
+	if len(parsed.CoverageLinks) < 3 {
+		t.Fatalf("expected coverage links, got %d", len(parsed.CoverageLinks))
 	}
 }

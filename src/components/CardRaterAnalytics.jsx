@@ -15,6 +15,14 @@ function numOrNull(v) {
   return Number.isFinite(n) ? n : null;
 }
 
+/** @param {number} pitch */
+function pitchColorName(pitch) {
+  if (pitch === 1) return "Red";
+  if (pitch === 2) return "Yellow";
+  if (pitch === 3) return "Blue";
+  return null;
+}
+
 /** @param {unknown} card */
 function cardIdFromRecord(card) {
   if (!card || typeof card !== "object") return null;
@@ -153,6 +161,7 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCompare }) 
   const [filterTalent, setFilterTalent] = useState("");
   const [filterType, setFilterType] = useState("");
   const [filterRarity, setFilterRarity] = useState("");
+  const [filterPitch, setFilterPitch] = useState("");
 
   const [resultsTab, setResultsTab] = useState(/** @type {'top_rated' | 'controversial' | 'talked'} */ ("top_rated"));
   const [tablePage, setTablePage] = useState(
@@ -200,10 +209,12 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCompare }) 
       const t = numOrNull(filterTalent);
       const ty = numOrNull(filterType);
       const r = numOrNull(filterRarity);
+      const p = numOrNull(filterPitch);
       if (c != null) qs.set("class", String(c));
       if (t != null) qs.set("talent", String(t));
       if (ty != null) qs.set("type", String(ty));
       if (r != null) qs.set("rarity", String(r));
+      if (p != null) qs.set("pitch", String(p));
       qs.set("top_limit", "10");
       qs.set("rated_offset", String(tablePage.top_rated * TABLE_PAGE_SIZE));
       qs.set("rated_limit", String(TABLE_PAGE_SIZE));
@@ -223,11 +234,11 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCompare }) 
     } finally {
       setLoading(false);
     }
-  }, [user, idNum, filterClass, filterTalent, filterType, filterRarity, tablePage]);
+  }, [user, idNum, filterClass, filterTalent, filterType, filterRarity, filterPitch, tablePage]);
 
   useEffect(() => {
     setTablePage({ top_rated: 0, controversial: 0, talked: 0 });
-  }, [filterClass, filterTalent, filterType, filterRarity]);
+  }, [filterClass, filterTalent, filterType, filterRarity, filterPitch]);
 
   useEffect(() => {
     if (resultsTab !== "top_rated") setRatedRowPreview(null);
@@ -597,8 +608,8 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCompare }) 
         <div className={panel}>
           <p className={`m-0 ${labelMuted}`}>Session insights</p>
           <p className="mt-1 text-[0.8rem] text-[#f4f0fa]/60">
-            Top Rated respects class, talent, and type filters. Most Controversial and Most Talked About reflect the
-            whole session.
+            Top Rated respects class, talent, type, rarity, and color filters. Most Controversial and Most Talked About
+            reflect the whole session.
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Results sections">
@@ -702,6 +713,28 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCompare }) 
                       return (
                         <option key={id} value={String(id)}>
                           {name}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </label>
+                <label className="flex min-w-[10rem] flex-col gap-1">
+                  <span className={labelMuted}>Color</span>
+                  <select
+                    className={selectCls}
+                    value={filterPitch}
+                    onChange={(e) => setFilterPitch(e.target.value)}
+                    disabled={loading}
+                  >
+                    <option value="">All colors</option>
+                    {(Array.isArray(parsed.fo.pitches) ? parsed.fo.pitches : []).map((x) => {
+                      const id = typeof x === "number" ? x : Number(x);
+                      if (!Number.isFinite(id)) return null;
+                      const color = pitchColorName(id);
+                      const label = color ? `${color} (${id})` : `Pitch ${id}`;
+                      return (
+                        <option key={id} value={String(id)}>
+                          {label}
                         </option>
                       );
                     })}

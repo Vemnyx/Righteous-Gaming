@@ -17,6 +17,7 @@ const AuthContext = createContext({
   configured: false,
   signOut: async () => {},
   updateSessionProfileSettings: () => {},
+  updateSessionProfile: () => {},
 });
 
 export function AuthProvider({ children }) {
@@ -94,9 +95,19 @@ export function AuthProvider({ children }) {
             : {}),
         },
       };
+      next.settings = userSettingsFromProfile(next);
+      writeSessionProfile(next);
+      return next;
+    });
+  }, []);
+
+  const updateSessionProfile = useCallback((/** @type {Partial<import("./sessionProfile").UserProfilePatch>} */ patch) => {
+    setSessionProfile((prev) => {
+      if (!prev) return prev;
+      const next = { ...prev };
+      if (patch.username !== undefined) next.username = patch.username;
       if (patch.first_name !== undefined) next.first_name = patch.first_name;
       if (patch.last_name !== undefined) next.last_name = patch.last_name;
-      next.settings = userSettingsFromProfile(next);
       writeSessionProfile(next);
       return next;
     });
@@ -111,8 +122,9 @@ export function AuthProvider({ children }) {
       configured,
       signOut,
       updateSessionProfileSettings,
+      updateSessionProfile,
     }),
-    [user, sessionProfile, sessionProfileLoading, loading, configured, signOut, updateSessionProfileSettings]
+    [user, sessionProfile, sessionProfileLoading, loading, configured, signOut, updateSessionProfileSettings, updateSessionProfile]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

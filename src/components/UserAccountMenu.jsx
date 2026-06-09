@@ -3,9 +3,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const HOVER_CLOSE_DELAY_MS = 220;
 
 /**
- * @param {{ isLight: boolean, label: string, onSettings: () => void, onSignOut: () => void }} props
+ * @param {{ isLight: boolean, label: string, onProfile: () => void, onSettings: () => void, onSignOut: () => void }} props
  */
-export function UserAccountMenu({ isLight, label, onSettings, onSignOut }) {
+export function UserAccountMenu({ isLight, label, onProfile, onSettings, onSignOut }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const closeTimerRef = useRef(/** @type {number | null} */ (null));
@@ -43,6 +43,12 @@ export function UserAccountMenu({ isLight, label, onSettings, onSignOut }) {
   const itemCls = isLight
     ? "block w-full px-4 py-2.5 text-left text-[0.875rem] font-semibold text-white transition-colors hover:bg-white/10"
     : "block w-full px-4 py-2.5 text-left text-[0.875rem] font-semibold text-white transition-colors hover:bg-white/[0.08] hover:text-[rgba(232,197,71,0.95)]";
+
+  const goProfile = useCallback(() => {
+    clearCloseTimer();
+    setOpen(false);
+    onProfile();
+  }, [onProfile, clearCloseTimer]);
 
   const goSettings = useCallback(() => {
     clearCloseTimer();
@@ -94,6 +100,9 @@ export function UserAccountMenu({ isLight, label, onSettings, onSignOut }) {
         }`}
       >
         <div role="menu" className={menuPanelCls}>
+          <button type="button" role="menuitem" className={itemCls} onClick={goProfile}>
+            Profile
+          </button>
           <button type="button" role="menuitem" className={itemCls} onClick={goSettings}>
             Settings
           </button>

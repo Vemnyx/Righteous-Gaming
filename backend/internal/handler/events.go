@@ -204,15 +204,10 @@ func (h *eventsHTTP) adminCreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	htmlText, err := h.scrape.FetchHTML(r.Context(), eventURL)
+	parsed, err := h.scrape.FetchEventPageData(r.Context(), eventURL)
 	if err != nil {
 		log.Error("crawl event page", "url", eventURL, "error", err)
 		http.Error(w, "failed to fetch event page: "+err.Error(), http.StatusBadGateway)
-		return
-	}
-	parsed := scrape.ParseEventPage(htmlText)
-	if len(parsed.CoverageLinks) == 0 {
-		http.Error(w, "no coverage links found on event page", http.StatusBadRequest)
 		return
 	}
 	if int(body.DayCount) > len(parsed.CoverageLinks) {
@@ -255,10 +250,8 @@ func (h *eventsHTTP) adminCreateEvent(w http.ResponseWriter, r *http.Request) {
 			label = &link.Label
 		}
 		var yt *string
-		if covHTML, err := h.scrape.FetchHTML(r.Context(), link.URL); err == nil {
+		if covHTML, err := h.scrape.FetchHTMLReferer(r.Context(), link.URL, eventURL); err == nil {
 			if u := scrape.FindYouTubeWatchURL(covHTML); u != "" {
-				yt = &u
-			} else if u := scrape.FindYouTubeWatchURL(htmlText); u != "" {
 				yt = &u
 			}
 		}
@@ -331,7 +324,7 @@ func (h *eventsHTTP) getEventRounds(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	htmlText, err := h.scrape.FetchHTML(r.Context(), s.URL)
+	htmlText, err := h.scrape.FetchHTMLReferer(r.Context(), s.URL, "https://fabtcg.com/")
 	if err != nil {
 		http.Error(w, "failed to fetch coverage page", http.StatusBadGateway)
 		return
@@ -368,7 +361,8 @@ func (h *eventsHTTP) getEventPairings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	url := scrape.PairingsPageURL(s.CoverageSlug, round)
-	htmlText, err := h.scrape.FetchHTML(r.Context(), url)
+	covReferer := scrape.CoveragePageURL(s.CoverageSlug)
+	htmlText, err := h.scrape.FetchHTMLReferer(r.Context(), url, covReferer)
 	if err != nil {
 		http.Error(w, "failed to fetch pairings", http.StatusBadGateway)
 		return
@@ -399,7 +393,8 @@ func (h *eventsHTTP) getEventResults(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	url := scrape.ResultsPageURL(s.CoverageSlug, round)
-	htmlText, err := h.scrape.FetchHTML(r.Context(), url)
+	covReferer := scrape.CoveragePageURL(s.CoverageSlug)
+	htmlText, err := h.scrape.FetchHTMLReferer(r.Context(), url, covReferer)
 	if err != nil {
 		http.Error(w, "failed to fetch results", http.StatusBadGateway)
 		return
@@ -430,7 +425,8 @@ func (h *eventsHTTP) getEventStandings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	url := scrape.StandingsPageURL(s.CoverageSlug, round)
-	htmlText, err := h.scrape.FetchHTML(r.Context(), url)
+	covReferer := scrape.CoveragePageURL(s.CoverageSlug)
+	htmlText, err := h.scrape.FetchHTMLReferer(r.Context(), url, covReferer)
 	if err != nil {
 		http.Error(w, "failed to fetch standings", http.StatusBadGateway)
 		return
@@ -488,7 +484,8 @@ func (h *eventsHTTP) getEventTeamSummary(w http.ResponseWriter, r *http.Request)
 		if s.Label != nil {
 			label = *s.Label
 		}
-		covHTML, err := h.scrape.FetchHTML(r.Context(), s.URL)
+		covReferer := scrape.CoveragePageURL(s.CoverageSlug)
+		covHTML, err := h.scrape.FetchHTMLReferer(r.Context(), s.URL, "https://fabtcg.com/")
 		if err != nil {
 			continue
 		}
@@ -498,7 +495,7 @@ func (h *eventsHTTP) getEventTeamSummary(w http.ResponseWriter, r *http.Request)
 			continue
 		}
 
-		if stHTML, err := h.scrape.FetchHTML(r.Context(), scrape.StandingsPageURL(s.CoverageSlug, latest)); err == nil {
+		if stHTML, err := h.scrape.FetchHTMLReferer(r.Context(), scrape.StandingsPageURL(s.CoverageSlug, latest), covReferer); err == nil {
 			for _, row := range scrape.ParseStandings(stHTML) {
 				for _, u := range users {
 					if scrape.NameMatches(u.FirstName, u.LastName, row.Player) {
@@ -512,7 +509,7 @@ func (h *eventsHTTP) getEventTeamSummary(w http.ResponseWriter, r *http.Request)
 				}
 			}
 		}
-		if pHTML, err := h.scrape.FetchHTML(r.Context(), scrape.PairingsPageURL(s.CoverageSlug, latest)); err == nil {
+		if pHTML, err := h.scrape.FetchHTMLReferer(r.Context(), scrape.PairingsPageURL(s.CoverageSlug, latest), covReferer); err == nil {
 			for _, row := range scrape.ParsePairings(pHTML) {
 				for _, u := range users {
 					if scrape.NameMatches(u.FirstName, u.LastName, row.Player1) || scrape.NameMatches(u.FirstName, u.LastName, row.Player2) {
@@ -532,7 +529,7 @@ func (h *eventsHTTP) getEventTeamSummary(w http.ResponseWriter, r *http.Request)
 				}
 			}
 		}
-		if rHTML, err := h.scrape.FetchHTML(r.Context(), scrape.ResultsPageURL(s.CoverageSlug, latest)); err == nil {
+		if rHTML, err := h.scrape.FetchHTMLReferer(r.Context(), scrape.ResultsPageURL(s.CoverageSlug, latest), covReferer); err == nil {
 			for _, row := range scrape.ParseResults(rHTML) {
 				for _, u := range users {
 					inMatch := scrape.NameMatches(u.FirstName, u.LastName, row.Player1) || scrape.NameMatches(u.FirstName, u.LastName, row.Player2)
@@ -580,14 +577,14 @@ func (h *eventsHTTP) refreshStreamYoutube(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var yt *string
-	if covHTML, err := h.scrape.FetchHTML(r.Context(), s.URL); err == nil {
+	if covHTML, err := h.scrape.FetchHTMLReferer(r.Context(), s.URL, "https://fabtcg.com/"); err == nil {
 		if u := scrape.FindYouTubeWatchURL(covHTML); u != "" {
 			yt = &u
 		}
 	}
 	if yt == nil {
 		if e, err := h.app.Repo.GetEventByID(r.Context(), s.EventID); err == nil {
-			if evHTML, err := h.scrape.FetchHTML(r.Context(), e.EventURL); err == nil {
+			if evHTML, err := h.scrape.FetchHTMLReferer(r.Context(), e.EventURL, "https://fabtcg.com/"); err == nil {
 				if u := scrape.FindYouTubeWatchURL(evHTML); u != "" {
 					yt = &u
 				}

@@ -67,14 +67,26 @@ func (s *UserService) UserForIDToken(ctx context.Context, idToken string) (*doma
 	return u, nil
 }
 
-// UserSettingsForIDToken returns settings and profile fields for the authenticated user.
+// UserSettingsForIDToken returns app settings for the authenticated user.
 func (s *UserService) UserSettingsForIDToken(ctx context.Context, idToken string) (domain.UserMeSettings, error) {
 	u, err := s.UserForIDToken(ctx, idToken)
 	if err != nil {
 		return domain.UserMeSettings{}, err
 	}
 	return domain.UserMeSettings{
-		Settings:  u.Settings,
+		Settings: u.Settings,
+	}, nil
+}
+
+// UserProfileForIDToken returns profile fields for the authenticated user.
+func (s *UserService) UserProfileForIDToken(ctx context.Context, idToken string) (domain.UserMeProfile, error) {
+	u, err := s.UserForIDToken(ctx, idToken)
+	if err != nil {
+		return domain.UserMeProfile{}, err
+	}
+	return domain.UserMeProfile{
+		Email:     u.Email,
+		Username:  u.Username,
 		FirstName: u.FirstName,
 		LastName:  u.LastName,
 	}, nil
@@ -83,17 +95,22 @@ func (s *UserService) UserSettingsForIDToken(ctx context.Context, idToken string
 // UserMeSettingsPatch is a partial update for /api/me/settings.
 type UserMeSettingsPatch struct {
 	CardRaterQuickSubmit *bool
-	FirstName            *string
-	LastName             *string
 }
 
-// UpdateUserSettingsForIDToken verifies the token and upserts settings/profile for the authenticated user.
+// UserProfilePatch is a partial update for /api/me/profile.
+type UserProfilePatch struct {
+	Username  *string
+	FirstName *string
+	LastName  *string
+}
+
+// UpdateUserSettingsForIDToken verifies the token and upserts settings for the authenticated user.
 func (s *UserService) UpdateUserSettingsForIDToken(ctx context.Context, idToken string, patch UserMeSettingsPatch) (domain.UserMeSettings, error) {
 	idToken = strings.TrimSpace(idToken)
 	if idToken == "" {
 		return domain.UserMeSettings{}, fmt.Errorf("%w: id token required", ErrValidation)
 	}
-	if patch.CardRaterQuickSubmit == nil && patch.FirstName == nil && patch.LastName == nil {
+	if patch.CardRaterQuickSubmit == nil {
 		return domain.UserMeSettings{}, fmt.Errorf("%w: no settings fields to update", ErrValidation)
 	}
 	tok, err := s.fb.VerifyIDToken(ctx, idToken)
@@ -108,52 +125,96 @@ func (s *UserService) UpdateUserSettingsForIDToken(ctx context.Context, idToken 
 		return domain.UserMeSettings{}, fmt.Errorf("service: user by uid: %w", err)
 	}
 
-	settings := domain.UserSettings{CardRaterQuickSubmit: false}
-	if patch.CardRaterQuickSubmit != nil {
-		updated, err := s.repo.UpsertUserSettings(ctx, row.ID, *patch.CardRaterQuickSubmit)
-		if err != nil {
-			return domain.UserMeSettings{}, fmt.Errorf("service: upsert user settings: %w", err)
-		}
-		settings.CardRaterQuickSubmit = updated.CardRaterQuickSubmit
-	} else {
-		existing, err := s.repo.GetUserSettings(ctx, row.ID)
-		if err != nil {
-			return domain.UserMeSettings{}, fmt.Errorf("service: get user settings: %w", err)
-		}
-		settings.CardRaterQuickSubmit = existing.CardRaterQuickSubmit
-	}
-
-	firstName := row.FirstName
-	lastName := row.LastName
-	if patch.FirstName != nil || patch.LastName != nil {
-		if patch.FirstName != nil {
-			trimmed := strings.TrimSpace(*patch.FirstName)
-			if trimmed == "" {
-				firstName = nil
-			} else {
-				firstName = &trimmed
-			}
-		}
-		if patch.LastName != nil {
-			trimmed := strings.TrimSpace(*patch.LastName)
-			if trimmed == "" {
-				lastName = nil
-			} else {
-				lastName = &trimmed
-			}
-		}
-		updated, err := s.repo.UpdateUserProfile(ctx, row.ID, firstName, lastName)
-		if err != nil {
-			return domain.UserMeSettings{}, fmt.Errorf("service: update user profile: %w", err)
-		}
-		firstName = updated.FirstName
-		lastName = updated.LastName
+	updated, err := s.repo.UpsertUserSettings(ctx, row.ID, *patch.CardRaterQuickSubmit)
+	if err != nil {
+		return domain.UserMeSettings{}, fmt.Errorf("service: upsert user settings: %w", err)
 	}
 
 	return domain.UserMeSettings{
-		Settings:  settings,
-		FirstName: firstName,
-		LastName:  lastName,
+		Settings: domain.UserSettings{CardRaterQuickSubmit: updated.CardRaterQuickSubmit},
+	}, nil
+}
+
+// UpdateUserProfileForIDToken verifies the token and updates profile fields for the authenticated user.
+func (s *UserService) UpdateUserProfileForIDToken(ctx context.Context, idToken string, patch UserProfilePatch) (domain.UserMeProfile, error) {
+	idToken = strings.TrimSpace(idToken)
+	if idToken == "" {
+		return domain.UserMeProfile{}, fmt.Errorf("%w: id token required", ErrValidation)
+	}
+	if patch.Username == nil && patch.FirstName == nil && patch.LastName == nil {
+		return domain.UserMeProfile{}, fmt.Errorf("%w: no profile fields to update", ErrValidation)
+	}
+	tok, err := s.fb.VerifyIDToken(ctx, idToken)
+	if err != nil {
+		return domain.UserMeProfile{}, fmt.Errorf("%w: %v", ErrUnauthenticated, err)
+	}
+	row, err := s.repo.UserByUID(ctx, tok.UID)
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			return domain.UserMeProfile{}, fmt.Errorf("%w", ErrUserNotFound)
+		}
+		return domain.UserMeProfile{}, fmt.Errorf("service: user by uid: %w", err)
+	}
+
+	username := row.Username
+	firstName := row.FirstName
+	lastName := row.LastName
+
+	if patch.Username != nil {
+		trimmed := strings.TrimSpace(*patch.Username)
+		if trimmed == "" {
+			username = nil
+		} else {
+			username = &trimmed
+		}
+	}
+	if patch.FirstName != nil {
+		trimmed := strings.TrimSpace(*patch.FirstName)
+		if trimmed == "" {
+			firstName = nil
+		} else {
+			firstName = &trimmed
+		}
+	}
+	if patch.LastName != nil {
+		trimmed := strings.TrimSpace(*patch.LastName)
+		if trimmed == "" {
+			lastName = nil
+		} else {
+			lastName = &trimmed
+		}
+	}
+
+	if username != nil {
+		candidates, err := s.repo.UsersByEmailOrUsername(ctx, row.Email, username)
+		if err != nil {
+			return domain.UserMeProfile{}, fmt.Errorf("service: lookup username conflicts: %w", err)
+		}
+		for _, candidate := range candidates {
+			if candidate.Username != nil && candidate.ID != row.ID &&
+				strings.EqualFold(strings.TrimSpace(*candidate.Username), *username) {
+				return domain.UserMeProfile{}, fmt.Errorf("%w: username is not available", ErrUsernameNotAvailable)
+			}
+		}
+	}
+
+	updated, err := s.repo.UpdateUserProfile(ctx, row.ID, username, firstName, lastName)
+	if err != nil {
+		return domain.UserMeProfile{}, fmt.Errorf("service: update user profile: %w", err)
+	}
+
+	if username != nil && strings.TrimSpace(row.UID) != "" {
+		params := (&firebaseauth.UserToUpdate{}).DisplayName(*username)
+		if _, err := s.fb.UpdateUser(ctx, row.UID, params); err != nil {
+			return domain.UserMeProfile{}, fmt.Errorf("service: firebase update display name: %w", err)
+		}
+	}
+
+	return domain.UserMeProfile{
+		Email:     updated.Email,
+		Username:  updated.Username,
+		FirstName: updated.FirstName,
+		LastName:  updated.LastName,
 	}, nil
 }
 

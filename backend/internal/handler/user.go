@@ -269,15 +269,17 @@ func (h *userHTTP) sessionMe(w http.ResponseWriter, r *http.Request) {
 }
 
 type patchUserSettingsRequest struct {
-	CardRaterQuickSubmit *bool   `json:"card_rater_quick_submit"`
-	FirstName            *string `json:"first_name"`
-	LastName             *string `json:"last_name"`
+	CardRaterQuickSubmit *bool `json:"card_rater_quick_submit"`
 }
 
 type userSettingsResponse struct {
-	Settings  domain.UserSettings `json:"settings"`
-	FirstName *string             `json:"first_name,omitempty"`
-	LastName  *string             `json:"last_name,omitempty"`
+	Settings domain.UserSettings `json:"settings"`
+}
+
+type patchUserProfileRequest struct {
+	Username  *string `json:"username"`
+	FirstName *string `json:"first_name"`
+	LastName  *string `json:"last_name"`
 }
 
 func (h *userHTTP) getMySettings(w http.ResponseWriter, r *http.Request) {
@@ -311,9 +313,7 @@ func (h *userHTTP) getMySettings(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(userSettingsResponse{
-		Settings:  settings.Settings,
-		FirstName: settings.FirstName,
-		LastName:  settings.LastName,
+		Settings: settings.Settings,
 	})
 }
 
@@ -333,14 +333,12 @@ func (h *userHTTP) saveMySettings(w http.ResponseWriter, r *http.Request) {
 		writeMessageError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	if body.CardRaterQuickSubmit == nil && body.FirstName == nil && body.LastName == nil {
+	if body.CardRaterQuickSubmit == nil {
 		writeMessageError(w, http.StatusBadRequest, "no settings fields to update")
 		return
 	}
 	settings, err := h.svc.UpdateUserSettingsForIDToken(r.Context(), idToken, service.UserMeSettingsPatch{
 		CardRaterQuickSubmit: body.CardRaterQuickSubmit,
-		FirstName:            body.FirstName,
-		LastName:             body.LastName,
 	})
 	if err != nil {
 		if errors.Is(err, service.ErrValidation) {
@@ -362,10 +360,92 @@ func (h *userHTTP) saveMySettings(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(userSettingsResponse{
-		Settings:  settings.Settings,
-		FirstName: settings.FirstName,
-		LastName:  settings.LastName,
+		Settings: settings.Settings,
 	})
+}
+
+func (h *userHTTP) getMyProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	idToken := bearerIDToken(r.Header.Get("Authorization"))
+	if idToken == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	profile, err := h.svc.UserProfileForIDToken(r.Context(), idToken)
+	if err != nil {
+		if errors.Is(err, service.ErrValidation) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, service.ErrUnauthenticated) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if errors.Is(err, service.ErrUserNotFound) {
+			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
+		log.Error("failed to load user profile", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(profile)
+}
+
+func (h *userHTTP) saveMyProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch && r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	idToken := bearerIDToken(r.Header.Get("Authorization"))
+	if idToken == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var body patchUserProfileRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeMessageError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if body.Username == nil && body.FirstName == nil && body.LastName == nil {
+		writeMessageError(w, http.StatusBadRequest, "no profile fields to update")
+		return
+	}
+	profile, err := h.svc.UpdateUserProfileForIDToken(r.Context(), idToken, service.UserProfilePatch{
+		Username:  body.Username,
+		FirstName: body.FirstName,
+		LastName:  body.LastName,
+	})
+	if err != nil {
+		if errors.Is(err, service.ErrValidation) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, service.ErrUsernameNotAvailable) {
+			writeFieldError(w, http.StatusConflict, "username", "Username is not available.")
+			return
+		}
+		if errors.Is(err, service.ErrUnauthenticated) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if errors.Is(err, service.ErrUserNotFound) {
+			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
+		log.Error("failed to update user profile", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(profile)
 }
 
 func (h *userHTTP) registrationByCode(w http.ResponseWriter, r *http.Request) {
