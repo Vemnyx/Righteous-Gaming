@@ -32,9 +32,12 @@ var (
 	rePlayerText     = regexp.MustCompile(`(?is)<div\s+class=["']player-text["'][^>]*>(.*?)</div>`)
 	reWinnerPill     = regexp.MustCompile(`(?is)<span\s+class=["']winner-pill["'][^>]*>([^<]+)</span>`)
 	reStandingRow    = regexp.MustCompile(`(?is)<tr>\s*<td\s+class=["']rank["'][^>]*>\s*(\d+)\s*</td>.*?<span\s+class=["']player-name["'][^>]*>([^<]+)</span>.*?<span\s+class=["']hero-name["'][^>]*>([^<]+)</span>.*?<td\s+class=["']wins["'][^>]*>\s*(\d+)\s*</td>`)
+	reWPTournamentAPI = regexp.MustCompile(`(?i)href=["'](https://fabtcg\.com/api/wp/v2/tournament/\d+)["']`)
 	reWhitespace     = regexp.MustCompile(`\s+`)
 	reStripTags      = regexp.MustCompile(`(?s)<[^>]+>`)
 )
+
+const fabHomeURL = "https://fabtcg.com/"
 
 type CoverageLink struct {
 	URL   string
@@ -108,15 +111,30 @@ func setFabBrowserHeaders(req *http.Request, accept string, referer string) {
 	req.Header.Set("Sec-Ch-Ua", `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`)
 	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
 	req.Header.Set("Sec-Ch-Ua-Platform", `"macOS"`)
-	req.Header.Set("Sec-Fetch-Dest", "document")
-	req.Header.Set("Sec-Fetch-Mode", "navigate")
-	req.Header.Set("Sec-Fetch-Site", "none")
-	req.Header.Set("Sec-Fetch-User", "?1")
-	req.Header.Set("Upgrade-Insecure-Requests", "1")
-	if referer != "" {
-		req.Header.Set("Referer", referer)
-		req.Header.Set("Sec-Fetch-Site", "same-origin")
+	if strings.Contains(accept, "application/json") {
+		req.Header.Set("Sec-Fetch-Dest", "empty")
+		req.Header.Set("Sec-Fetch-Mode", "cors")
+		if referer != "" {
+			req.Header.Set("Referer", referer)
+			req.Header.Set("Sec-Fetch-Site", "same-origin")
+		} else {
+			req.Header.Set("Sec-Fetch-Site", "none")
+		}
+	} else {
+		req.Header.Set("Sec-Fetch-Dest", "document")
+		req.Header.Set("Sec-Fetch-Mode", "navigate")
+		req.Header.Set("Sec-Fetch-Site", "none")
+		req.Header.Set("Sec-Fetch-User", "?1")
+		req.Header.Set("Upgrade-Insecure-Requests", "1")
+		if referer != "" {
+			req.Header.Set("Referer", referer)
+			req.Header.Set("Sec-Fetch-Site", "same-origin")
+		}
 	}
+}
+
+func (c *Client) warmFabSession(ctx context.Context) {
+	_, _ = c.fetchHTML(ctx, fabHomeURL, "", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
 }
 
 // FetchHTML retrieves a FabTCG page using browser-like headers and a shared cookie jar.
@@ -153,7 +171,9 @@ func (c *Client) fetchHTML(ctx context.Context, rawURL, referer, accept string) 
 // FetchEventPageData loads tournament metadata, falling back to the public WordPress JSON API
 // when the HTML page is blocked (HTTP 403 from FabTCG edge rules).
 func (c *Client) FetchEventPageData(ctx context.Context, eventURL string) (EventPageData, error) {
-	if htmlText, err := c.FetchHTML(ctx, eventURL); err == nil {
+	c.warmFabSession(ctx)
+
+	if htmlText, err := c.FetchHTMLReferer(ctx, eventURL, fabHomeURL); err == nil {
 		parsed := ParseEventPage(htmlText)
 		if len(parsed.CoverageLinks) > 0 {
 			if parsed.Title == "" {
@@ -161,8 +181,20 @@ func (c *Client) FetchEventPageData(ctx context.Context, eventURL string) (Event
 			}
 			return parsed, nil
 		}
+		if apiURL := wpTournamentAPIURLFromHTML(htmlText); apiURL != "" {
+			if out, err := c.fetchEventPageFromTournamentAPI(ctx, apiURL, eventURL); err == nil {
+				return out, nil
+			}
+		}
 	}
 	return c.fetchEventPageViaWordPress(ctx, eventURL)
+}
+
+func wpTournamentAPIURLFromHTML(htmlText string) string {
+	if m := reWPTournamentAPI.FindStringSubmatch(htmlText); len(m) > 1 {
+		return strings.TrimSpace(m[1])
+	}
+	return ""
 }
 
 func slugFromFabEventURL(rawURL string) string {
@@ -180,7 +212,7 @@ func slugFromFabEventURL(rawURL string) string {
 	return ""
 }
 
-type wpTournamentResponse []struct {
+type wpTournamentItem struct {
 	Title struct {
 		Rendered string `json:"rendered"`
 	} `json:"title"`
@@ -196,24 +228,53 @@ type wpTournamentResponse []struct {
 	} `json:"yoast_head_json"`
 }
 
+func parseWPTournamentBody(body []byte) (wpTournamentItem, error) {
+	var rows []wpTournamentItem
+	if err := json.Unmarshal(body, &rows); err == nil && len(rows) > 0 {
+		return rows[0], nil
+	}
+	var single wpTournamentItem
+	if err := json.Unmarshal(body, &single); err != nil {
+		return wpTournamentItem{}, fmt.Errorf("parse wordpress tournament API: %w", err)
+	}
+	if strings.TrimSpace(single.Content.Rendered) == "" && strings.TrimSpace(single.Title.Rendered) == "" {
+		return wpTournamentItem{}, fmt.Errorf("empty tournament API response")
+	}
+	return single, nil
+}
+
 func (c *Client) fetchEventPageViaWordPress(ctx context.Context, eventURL string) (EventPageData, error) {
 	slug := slugFromFabEventURL(eventURL)
 	if slug == "" {
 		return EventPageData{}, fmt.Errorf("could not determine event slug from URL")
 	}
-	apiURL := "https://fabtcg.com/wp-json/wp/v2/tournament?slug=" + url.QueryEscape(slug)
-	body, err := c.fetchHTML(ctx, apiURL, eventURL, "application/json,text/plain,*/*")
+	apiURLs := []string{
+		"https://fabtcg.com/api/wp/v2/tournament?slug=" + url.QueryEscape(slug),
+		"https://fabtcg.com/wp-json/wp/v2/tournament?slug=" + url.QueryEscape(slug),
+	}
+	var lastErr error
+	for _, apiURL := range apiURLs {
+		out, err := c.fetchEventPageFromTournamentAPI(ctx, apiURL, eventURL)
+		if err == nil {
+			return out, nil
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("tournament not found for slug %q", slug)
+	}
+	return EventPageData{}, fmt.Errorf("fetch wordpress tournament API: %w", lastErr)
+}
+
+func (c *Client) fetchEventPageFromTournamentAPI(ctx context.Context, apiURL, referer string) (EventPageData, error) {
+	body, err := c.fetchHTML(ctx, apiURL, referer, "application/json")
 	if err != nil {
-		return EventPageData{}, fmt.Errorf("fetch wordpress tournament API: %w", err)
+		return EventPageData{}, err
 	}
-	var rows wpTournamentResponse
-	if err := json.Unmarshal([]byte(body), &rows); err != nil {
-		return EventPageData{}, fmt.Errorf("parse wordpress tournament API: %w", err)
+	item, err := parseWPTournamentBody([]byte(body))
+	if err != nil {
+		return EventPageData{}, err
 	}
-	if len(rows) == 0 {
-		return EventPageData{}, fmt.Errorf("tournament not found for slug %q", slug)
-	}
-	item := rows[0]
 	contentHTML := item.Content.Rendered
 	parsed := ParseEventPage(contentHTML)
 	out := EventPageData{
@@ -234,7 +295,7 @@ func (c *Client) fetchEventPageViaWordPress(ctx context.Context, eventURL string
 		out.ImageURL = metaContent(contentHTML, "og:image")
 	}
 	if len(out.CoverageLinks) == 0 {
-		return EventPageData{}, fmt.Errorf("no coverage links found for tournament %q", slug)
+		return EventPageData{}, fmt.Errorf("no coverage links found in tournament API response")
 	}
 	return out, nil
 }
