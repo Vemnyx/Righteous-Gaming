@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 
 	"golang.org/x/net/html"
 )
@@ -85,18 +83,8 @@ type ResultRow struct {
 	WinnerName string
 }
 
-type Client struct {
-	httpClient *http.Client
-}
-
-func NewClient() *Client {
-	jar, _ := cookiejar.New(nil)
-	return &Client{
-		httpClient: &http.Client{
-			Timeout: 45 * time.Second,
-			Jar:     jar,
-		},
-	}
+func (c *Client) warmFabSession(ctx context.Context) {
+	_, _ = c.fetchHTML(ctx, fabHomeURL, "", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
 }
 
 func setFabBrowserHeaders(req *http.Request, accept string, referer string) {
@@ -133,10 +121,6 @@ func setFabBrowserHeaders(req *http.Request, accept string, referer string) {
 	}
 }
 
-func (c *Client) warmFabSession(ctx context.Context) {
-	_, _ = c.fetchHTML(ctx, fabHomeURL, "", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
-}
-
 // FetchHTML retrieves a FabTCG page using browser-like headers and a shared cookie jar.
 func (c *Client) FetchHTML(ctx context.Context, rawURL string) (string, error) {
 	return c.fetchHTML(ctx, rawURL, "", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
@@ -153,7 +137,11 @@ func (c *Client) fetchHTML(ctx context.Context, rawURL, referer, accept string) 
 		return "", err
 	}
 	setFabBrowserHeaders(req, accept, referer)
-	resp, err := c.httpClient.Do(req)
+	httpClient, err := c.ensureClient(ctx)
+	if err != nil {
+		return "", err
+	}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -298,6 +286,19 @@ func (c *Client) fetchEventPageFromTournamentAPI(ctx context.Context, apiURL, re
 		return EventPageData{}, fmt.Errorf("no coverage links found in tournament API response")
 	}
 	return out, nil
+}
+
+// EventPageDataFromHTML parses tournament metadata from saved FabTCG page HTML
+// (for admin paste fallback when server-side fetch is blocked).
+func EventPageDataFromHTML(htmlText string) EventPageData {
+	parsed := ParseEventPage(htmlText)
+	if parsed.Title == "" {
+		parsed.Title = textFromFirstTag(htmlText, "h1")
+	}
+	if parsed.ImageURL == "" {
+		parsed.ImageURL = metaContent(htmlText, "og:image")
+	}
+	return parsed
 }
 
 func metaContent(htmlText, property string) string {

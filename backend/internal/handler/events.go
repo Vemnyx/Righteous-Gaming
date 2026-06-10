@@ -181,8 +181,9 @@ func (h *eventsHTTP) adminListEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 type createEventRequest struct {
-	EventURL string `json:"event_url"`
-	DayCount int16  `json:"day_count"`
+	EventURL string  `json:"event_url"`
+	DayCount int16   `json:"day_count"`
+	PageHTML *string `json:"page_html,omitempty"`
 }
 
 func (h *eventsHTTP) adminCreateEvent(w http.ResponseWriter, r *http.Request) {
@@ -204,11 +205,21 @@ func (h *eventsHTTP) adminCreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	parsed, err := h.scrape.FetchEventPageData(r.Context(), eventURL)
-	if err != nil {
-		log.Error("crawl event page", "url", eventURL, "error", err)
-		http.Error(w, "failed to fetch event page: "+err.Error(), http.StatusBadGateway)
-		return
+	var parsed scrape.EventPageData
+	if body.PageHTML != nil && strings.TrimSpace(*body.PageHTML) != "" {
+		parsed = scrape.EventPageDataFromHTML(strings.TrimSpace(*body.PageHTML))
+		if len(parsed.CoverageLinks) == 0 {
+			http.Error(w, "page_html did not contain coverage links", http.StatusBadRequest)
+			return
+		}
+	} else {
+		var err error
+		parsed, err = h.scrape.FetchEventPageData(r.Context(), eventURL)
+		if err != nil {
+			log.Error("crawl event page", "url", eventURL, "error", err)
+			http.Error(w, "failed to fetch event page: "+err.Error(), http.StatusBadGateway)
+			return
+		}
 	}
 	if int(body.DayCount) > len(parsed.CoverageLinks) {
 		http.Error(w, "event page has fewer coverage days than requested", http.StatusBadRequest)
