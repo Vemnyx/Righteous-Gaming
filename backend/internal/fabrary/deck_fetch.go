@@ -20,6 +20,8 @@ const (
 	appSyncGraphQLEndpoint = "https://42xrd23ihbd47fjvsrt27ufpfe.appsync-api.us-east-2.amazonaws.com/graphql"
 	appSyncRegion          = "us-east-2"
 	guestIdentityPoolID    = "us-east-2:e50f3ed7-32ed-4b22-a05e-10b3e7e03fe0"
+	// Fabrary's AppSync WAF blocks requests without a browser User-Agent.
+	appSyncUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
 // DeckCard is one card line from a Fabrary deck list.
@@ -239,6 +241,7 @@ func postAppSyncGraphQL(ctx context.Context, body []byte) ([]byte, error) {
 		return nil, fmt.Errorf("fabrary: build graphql request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", appSyncUserAgent)
 
 	signer := v4.NewSigner()
 	sum := sha256.Sum256(body)
