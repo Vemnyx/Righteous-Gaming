@@ -9,6 +9,38 @@ import (
 	"righteous-gaming/backend/internal/scrape"
 )
 
+func TestCleanHeroNameStripsMarkupNoise(t *testing.T) {
+	cases := map[string]string{
+		">Fai, Rising Rebellion": "Fai, Rising Rebellion",
+		"\\>Bravo, Showstopper":  "Bravo, Showstopper",
+		"<i>Fai</i>":             "Fai",
+		"  >  Ira  ":             "Ira",
+	}
+	for in, want := range cases {
+		if got := scrape.CleanHeroName(in); got != want {
+			t.Fatalf("CleanHeroName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestParsePairingsHeroNames(t *testing.T) {
+	html := `<tr class="match-row">
+		<td class="table-number"><span>1</span></td>
+		<td><div class="player-text"><strong>Alice</strong><br>Fai, Rising Rebellion</div></td>
+		<td><div class="player-text"><strong>Bob</strong><br>>Ira, Scarlet Revenger</div></td>
+	</tr>`
+	rows := scrape.ParsePairings(html)
+	if len(rows) != 1 {
+		t.Fatalf("rows: %d", len(rows))
+	}
+	if rows[0].Hero1 != "Fai, Rising Rebellion" {
+		t.Fatalf("hero1: %q", rows[0].Hero1)
+	}
+	if rows[0].Hero2 != "Ira, Scarlet Revenger" {
+		t.Fatalf("hero2: %q", rows[0].Hero2)
+	}
+}
+
 func TestParseEventPageMemphisDates(t *testing.T) {
 	html := `<div class="quick-details">
 		<strong>Date:</strong> January 31 – February 2nd, 2025

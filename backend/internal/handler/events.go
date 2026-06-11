@@ -458,9 +458,12 @@ type teamMatchJSON struct {
 	Round           int     `json:"round"`
 	Kind            string  `json:"kind"`
 	Detail          string  `json:"detail"`
-	HeroID          *int    `json:"hero_id,omitempty"`
-	HeroName        *string `json:"hero_name,omitempty"`
-	HeroArtImageURL *string `json:"hero_art_image_url,omitempty"`
+	HeroID                  *int    `json:"hero_id,omitempty"`
+	HeroName                *string `json:"hero_name,omitempty"`
+	HeroArtImageURL         *string `json:"hero_art_image_url,omitempty"`
+	OpponentHeroID          *int    `json:"opponent_hero_id,omitempty"`
+	OpponentHeroName        *string `json:"opponent_hero_name,omitempty"`
+	OpponentHeroArtImageURL *string `json:"opponent_hero_art_image_url,omitempty"`
 }
 
 func (h *eventsHTTP) getEventTeamSummary(w http.ResponseWriter, r *http.Request) {
@@ -498,6 +501,8 @@ func (h *eventsHTTP) getEventTeamSummary(w http.ResponseWriter, r *http.Request)
 			StreamLabel: label, Round: row.RoundNumber, Kind: row.Kind,
 			Detail: eventusers.FormatDetail(row.Kind, row.Payload),
 			HeroID: row.HeroID, HeroName: row.HeroName, HeroArtImageURL: row.HeroArtImageURL,
+			OpponentHeroID: row.OpponentHeroID, OpponentHeroName: row.OpponentHeroName,
+			OpponentHeroArtImageURL: row.OpponentHeroArtImageURL,
 		})
 	}
 

@@ -65,6 +65,10 @@ func (m *HeroMatcher) Match(fabHeroName string) *int {
 	if m == nil {
 		return nil
 	}
+	fabHeroName = strings.TrimSpace(fabHeroName)
+	if fabHeroName == "" {
+		return nil
+	}
 	full := normalizeHeroName(fabHeroName)
 	if full == "" {
 		return nil

@@ -38,6 +38,10 @@ type standingRow struct {
 	Wins   int    `json:"wins"`
 }
 
+func cleanHero(s string) string {
+	return scrape.CleanHeroName(s)
+}
+
 // IndexRound scans synced round JSON and stores rows for users whose names match players.
 func IndexRound(ctx context.Context, repo *repository.Repository, round repository.EventRound) error {
 	users, err := repo.ListUsersWithNames(ctx)
@@ -57,16 +61,21 @@ func IndexRound(ctx context.Context, repo *repository.Repository, round reposito
 	var pairings []pairingRow
 	_ = json.Unmarshal(round.Pairings, &pairings)
 	for _, row := range pairings {
+		hero1 := cleanHero(row.Hero1)
+		hero2 := cleanHero(row.Hero2)
 		for _, u := range users {
 			side := 0
-			hero := ""
+			playerHero := ""
+			opponentHero := ""
 			switch {
 			case scrape.NameMatches(u.FirstName, u.LastName, row.Player1):
 				side = 1
-				hero = row.Hero1
+				playerHero = hero1
+				opponentHero = hero2
 			case scrape.NameMatches(u.FirstName, u.LastName, row.Player2):
 				side = 2
-				hero = row.Hero2
+				playerHero = hero2
+				opponentHero = hero1
 			default:
 				continue
 			}
@@ -77,17 +86,17 @@ func IndexRound(ctx context.Context, repo *repository.Repository, round reposito
 			payload, err := json.Marshal(map[string]any{
 				"table":       row.Table,
 				"opponent":    opp,
-				"hero":        hero,
+				"hero":        playerHero,
 				"player_side": side,
 				"player1":     row.Player1,
 				"player2":     row.Player2,
-				"hero1":       row.Hero1,
-				"hero2":       row.Hero2,
+				"hero1":       hero1,
+				"hero2":       hero2,
 			})
 			if err != nil {
 				return err
 			}
-			if err := upsertUserRow(ctx, repo, heroes, round, u.ID, KindPairing, payload, hero); err != nil {
+			if err := upsertUserRow(ctx, repo, heroes, round, u.ID, KindPairing, payload, playerHero, opponentHero); err != nil {
 				return err
 			}
 		}
@@ -96,15 +105,19 @@ func IndexRound(ctx context.Context, repo *repository.Repository, round reposito
 	var results []resultRow
 	_ = json.Unmarshal(round.Results, &results)
 	for _, row := range results {
+		hero1 := cleanHero(row.Hero1)
+		hero2 := cleanHero(row.Hero2)
 		for _, u := range users {
 			inMatch := scrape.NameMatches(u.FirstName, u.LastName, row.Player1) ||
 				scrape.NameMatches(u.FirstName, u.LastName, row.Player2)
 			if !inMatch {
 				continue
 			}
-			hero := row.Hero1
+			playerHero := hero1
+			opponentHero := hero2
 			if scrape.NameMatches(u.FirstName, u.LastName, row.Player2) {
-				hero = row.Hero2
+				playerHero = hero2
+				opponentHero = hero1
 			}
 			outcome := "loss"
 			if scrape.NameMatches(u.FirstName, u.LastName, row.WinnerName) {
@@ -116,16 +129,16 @@ func IndexRound(ctx context.Context, repo *repository.Repository, round reposito
 				"outcome":     outcome,
 				"winner_side": row.WinnerSide,
 				"winner_name": row.WinnerName,
-				"hero":        hero,
+				"hero":        playerHero,
 				"player1":     row.Player1,
 				"player2":     row.Player2,
-				"hero1":       row.Hero1,
-				"hero2":       row.Hero2,
+				"hero1":       hero1,
+				"hero2":       hero2,
 			})
 			if err != nil {
 				return err
 			}
-			if err := upsertUserRow(ctx, repo, heroes, round, u.ID, KindResult, payload, hero); err != nil {
+			if err := upsertUserRow(ctx, repo, heroes, round, u.ID, KindResult, payload, playerHero, opponentHero); err != nil {
 				return err
 			}
 		}
@@ -134,6 +147,7 @@ func IndexRound(ctx context.Context, repo *repository.Repository, round reposito
 	var standings []standingRow
 	_ = json.Unmarshal(round.Standings, &standings)
 	for _, row := range standings {
+		hero := cleanHero(row.Hero)
 		for _, u := range users {
 			if !scrape.NameMatches(u.FirstName, u.LastName, row.Player) {
 				continue
@@ -141,13 +155,13 @@ func IndexRound(ctx context.Context, repo *repository.Repository, round reposito
 			payload, err := json.Marshal(map[string]any{
 				"rank":   row.Rank,
 				"player": row.Player,
-				"hero":   row.Hero,
+				"hero":   hero,
 				"wins":   row.Wins,
 			})
 			if err != nil {
 				return err
 			}
-			if err := upsertUserRow(ctx, repo, heroes, round, u.ID, KindStanding, payload, row.Hero); err != nil {
+			if err := upsertUserRow(ctx, repo, heroes, round, u.ID, KindStanding, payload, hero, ""); err != nil {
 				return err
 			}
 		}
@@ -164,10 +178,16 @@ func upsertUserRow(
 	userID int,
 	kind string,
 	payload json.RawMessage,
-	heroName string,
+	playerHeroName string,
+	opponentHeroName string,
 ) error {
+	var opponentHeroID *int
+	if opponentHeroName != "" {
+		opponentHeroID = heroes.Match(opponentHeroName)
+	}
 	return repo.UpsertEventDataUser(ctx, repository.UpsertEventDataUserParams{
 		EventDataID: round.EventDataID, EventRoundID: round.ID, UserID: userID,
-		RoundNumber: round.RoundNumber, Kind: kind, Payload: payload, HeroID: heroes.Match(heroName),
+		RoundNumber: round.RoundNumber, Kind: kind, Payload: payload,
+		HeroID: heroes.Match(playerHeroName), OpponentHeroID: opponentHeroID,
 	})
 }

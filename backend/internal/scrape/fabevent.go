@@ -32,6 +32,8 @@ var (
 	rePlayerText     = regexp.MustCompile(`(?is)<div\s+class=["']player-text["'][^>]*>(.*?)</div>`)
 	reWinnerPill     = regexp.MustCompile(`(?is)<span\s+class=["']winner-pill["'][^>]*>([^<]+)</span>`)
 	reStandingRow    = regexp.MustCompile(`(?is)<tr>\s*<td\s+class=["']rank["'][^>]*>\s*(\d+)\s*</td>.*?<span\s+class=["']player-name["'][^>]*>([^<]+)</span>.*?<span\s+class=["']hero-name["'][^>]*>([^<]+)</span>.*?<td\s+class=["']wins["'][^>]*>\s*(\d+)\s*</td>`)
+	reBrSplit        = regexp.MustCompile(`(?i)<br\s*/?>`)
+	reHeroNoise      = regexp.MustCompile(`[<>\\]+`)
 	reWPTournamentAPI = regexp.MustCompile(`(?i)href=["'](https://fabtcg\.com/api/wp/v2/tournament/\d+)["']`)
 	reWhitespace     = regexp.MustCompile(`\s+`)
 	reStripTags      = regexp.MustCompile(`(?s)<[^>]+>`)
@@ -442,7 +444,7 @@ func ParseStandings(htmlText string) []StandingRow {
 		out = append(out, StandingRow{
 			Rank:   atoi(m[1]),
 			Player: cleanInlineText(m[2]),
-			Hero:   cleanInlineText(m[3]),
+			Hero:   CleanHeroName(m[3]),
 			Wins:   atoi(m[4]),
 		})
 	}
@@ -523,15 +525,23 @@ func NameMatches(first, last, player string) bool {
 func parsePlayerTextBlock(raw string) (player, hero string) {
 	raw = regexp.MustCompile(`(?is)<strong[^>]*>(.*?)</strong>`).ReplaceAllString(raw, "$1")
 	raw = regexp.MustCompile(`(?is)<i[^>]*class=["'][^"']*flag[^"']*["'][^>]*></i>`).ReplaceAllString(raw, "")
-	parts := strings.Split(raw, "<br")
+	parts := reBrSplit.Split(raw, 2)
 	if len(parts) == 0 {
 		return cleanInlineText(raw), ""
 	}
 	player = cleanInlineText(stripTags(parts[0]))
 	if len(parts) > 1 {
-		hero = cleanInlineText(stripTags(parts[1]))
+		hero = CleanHeroName(parts[1])
 	}
 	return player, hero
+}
+
+// CleanHeroName normalizes FabTCG hero labels scraped from coverage HTML.
+func CleanHeroName(s string) string {
+	s = cleanInlineText(s)
+	s = reHeroNoise.ReplaceAllString(s, "")
+	s = strings.Trim(s, ".,;:- ")
+	return reWhitespace.ReplaceAllString(strings.TrimSpace(s), " ")
 }
 
 func stripTags(s string) string {
