@@ -22,6 +22,7 @@ type recordingsHTTP struct {
 type recordingHeroJSON struct {
 	ID          int     `json:"id"`
 	Name        string  `json:"name"`
+	Young       bool    `json:"young"`
 	ArtImageURL *string `json:"art_image_url,omitempty"`
 	Formats     []int16 `json:"formats,omitempty"`
 }
@@ -206,13 +207,13 @@ func (h *recordingsHTTP) getRecordingsMeta(w http.ResponseWriter, r *http.Reques
 	outHeroes := make([]recordingHeroJSON, 0, len(heroes))
 	for _, row := range heroes {
 		outHeroes = append(outHeroes, recordingHeroJSON{
-			ID: row.ID, Name: row.Name, ArtImageURL: row.ArtImageURL, Formats: row.Formats,
+			ID: row.ID, Name: row.Name, Young: row.Young, ArtImageURL: row.ArtImageURL, Formats: row.Formats,
 		})
 	}
 	outFilterHeroes := make([]recordingHeroJSON, 0, len(filterHeroes))
 	for _, row := range filterHeroes {
 		outFilterHeroes = append(outFilterHeroes, recordingHeroJSON{
-			ID: row.ID, Name: row.Name, ArtImageURL: row.ArtImageURL, Formats: row.Formats,
+			ID: row.ID, Name: row.Name, Young: row.Young, ArtImageURL: row.ArtImageURL, Formats: row.Formats,
 		})
 	}
 	outUploaders := make([]recordingUploaderJSON, 0)

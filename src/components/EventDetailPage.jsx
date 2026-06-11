@@ -1,24 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { cardFormatName } from "../constants/cardFormat";
+import { cardFormatName, formatUsesYoungHeroes } from "../constants/cardFormat";
 import { youtubeEmbedSrc, youtubeVideoIdFromInput } from "../utils/youtube";
 
 /** @typedef {"team" | "overall" | "streams"} MainTab */
 /** @typedef {"pairings" | "results" | "standings"} CoverageTab */
-/** @typedef {{ id: number, name: string, art_image_url?: string | null }} HeroOption */
+/** @typedef {{ id: number, name: string, young?: boolean, art_image_url?: string | null }} HeroOption */
 
 /** @param {object} d */
 function segmentLabel(d) {
   return d.label || d.event_type_name || `Segment ${d.id}`;
 }
 
-const MATCH_ROW_H = "h-[6.65rem] min-h-[6.65rem]";
-const heroArtFadeToRight =
-  "[mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)]";
-const heroArtFadeToLeft =
-  "[mask-image:linear-gradient(to_left,black_0%,black_82%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_82%,transparent_100%)]";
-const heroArtFadeDeck =
+const MATCH_ROW_MIN_H = "min-h-[6.75rem]";
+/** Same fade treatment as deck list hero art — keeps crops sharp at fixed width. */
+const heroArtFadeLeft =
   "[mask-image:linear-gradient(to_right,black_0%,black_70%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_70%,transparent_100%)]";
+const heroArtFadeRight =
+  "[mask-image:linear-gradient(to_left,black_0%,black_70%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_70%,transparent_100%)]";
 
 function TabSpinner() {
   return (
@@ -53,23 +52,50 @@ function heroBaseKey(s) {
 }
 
 /**
+ * @param {HeroOption} candidate
+ * @param {HeroOption} current
+ * @param {boolean | undefined} preferYoung
+ */
+function heroArtShouldPrefer(candidate, current, preferYoung) {
+  if (preferYoung === undefined) {
+    if (!candidate.young && current.young) return true;
+    return false;
+  }
+  if (preferYoung) {
+    return !!candidate.young && !current.young;
+  }
+  return !candidate.young && !!current.young;
+}
+
+/**
+ * Resolves hero art for FabTCG coverage labels. When the event format is known,
+ * prefers young or adult heroes to match backend event indexing.
+ *
  * @param {string | null | undefined} heroName
  * @param {HeroOption[]} heroes
+ * @param {number | null | undefined} formatId
  */
-function heroArtForName(heroName, heroes) {
+function heroArtForName(heroName, heroes, formatId) {
   const full = normalizeHeroKey(heroName);
   if (!full || heroes.length === 0) return null;
   const base = heroBaseKey(heroName);
-  let best = null;
+  const preferYoung = formatUsesYoungHeroes(formatId);
+
   for (const h of heroes) {
-    const hFull = normalizeHeroKey(h.name);
-    const hBase = heroBaseKey(h.name);
-    if (hFull === full || hBase === base) {
-      if (h.art_image_url) return h.art_image_url;
-      best = best ?? h.art_image_url ?? null;
+    if (normalizeHeroKey(h.name) === full) {
+      return h.art_image_url ?? null;
     }
   }
-  return best;
+
+  /** @type {HeroOption | null} */
+  let best = null;
+  for (const h of heroes) {
+    if (heroBaseKey(h.name) !== base) continue;
+    if (!best || heroArtShouldPrefer(h, best, preferYoung)) {
+      best = h;
+    }
+  }
+  return best?.art_image_url ?? null;
 }
 
 /** @param {string | null | undefined} player @param {string} query */
@@ -141,10 +167,7 @@ function orientMatchRowForTeam(row, members) {
   };
 }
 
-const matchRowGridCols =
-  "grid-cols-[minmax(0,1fr)_minmax(3.25rem,4.5rem)_minmax(0,1fr)]";
-
-const nameShadow = "drop-shadow-[0_1px_4px_rgba(0,0,0,0.92)]";
+const matchHeroArtWidth = "w-[7.25rem] shrink-0 sm:w-[8.25rem]";
 
 /**
  * @param {object} row
@@ -165,21 +188,31 @@ function matchRowWinnerSide(row) {
 }
 
 /**
- * @param {{ side: "left" | "right", src?: string | null, name?: string | null }} props
+ * Fixed-width hero art panel (matches deck list cropping, not full-bleed stretch).
+ * @param {{ side: "left" | "right", src?: string | null, name?: string | null, isWinner?: boolean }} props
  */
-function MatchRowHeroArt({ side, src, name }) {
-  const label = name != null && String(name).trim() !== "" ? String(name).trim() : "Hero";
+function MatchHeroArtPanel({ side, src, name, isWinner = false }) {
   const isLeft = side === "left";
-  const objectCls = isLeft ? "object-left object-top" : "object-right object-top";
-  const fadeCls = isLeft ? heroArtFadeToRight : heroArtFadeToLeft;
+  const label = name != null && String(name).trim() !== "" ? String(name).trim() : "Hero";
+  const fadeCls = isLeft ? heroArtFadeLeft : heroArtFadeRight;
+  const objectCls = isLeft ? "object-left" : "object-right";
   const placeholderGradient = isLeft
     ? "bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent"
     : "bg-gradient-to-l from-purple-900/35 via-purple-800/15 to-transparent";
+  const winnerCls = isWinner ? "ring-2 ring-inset ring-amber-400/75 bg-amber-500/[0.06]" : "";
 
   return (
-    <div className="absolute inset-0 overflow-hidden" aria-hidden>
+    <div
+      className={`relative self-stretch overflow-hidden ${matchHeroArtWidth} ${winnerCls}`}
+      aria-hidden={!src}
+    >
       {src ? (
-        <img src={src} alt="" className={`h-full w-full object-cover ${objectCls} ${fadeCls}`} draggable={false} />
+        <img
+          src={src}
+          alt=""
+          className={`h-full w-full object-cover ${objectCls} ${fadeCls}`}
+          draggable={false}
+        />
       ) : (
         <div className={`h-full w-full ${placeholderGradient} ${fadeCls}`} title={label} />
       )}
@@ -188,152 +221,202 @@ function MatchRowHeroArt({ side, src, name }) {
 }
 
 /**
+ * Diagonal matchup text: player 1 top-left, table center, player 2 bottom-right.
  * @param {{
- *   side: "left" | "right",
- *   player: string,
- *   hero?: string | null,
- *   heroArt?: string | null,
- *   isWinner?: boolean,
+ *   player1: string,
+ *   hero1?: string | null,
+ *   player2: string,
+ *   hero2?: string | null,
+ *   table?: number | null,
+ *   winner?: 1 | 2 | null,
  * }} props
  */
-function MatchRowPlayerColumn({ side, player, hero, heroArt, isWinner = false }) {
-  const isLeft = side === "left";
-  const alignCls = isLeft ? "items-end text-right pr-2 sm:pr-3" : "items-start text-left pl-2 sm:pl-3";
-  const posCls = isLeft ? "right-0" : "left-0";
-  const winnerCls = isWinner
-    ? "z-[2] shadow-[inset_0_0_28px_rgba(251,191,36,0.18)] ring-2 ring-inset ring-amber-400/80 bg-amber-500/[0.07]"
-    : "";
+function MatchRowDiagonalCenter({ player1, hero1, player2, hero2, table, winner = null }) {
+  const playerNameCls = (isWinner) =>
+    `m-0 max-w-full truncate text-[0.85rem] font-semibold leading-tight ${
+      isWinner ? "text-amber-50" : "text-[#f4f0fa]"
+    }`;
+  const heroNameCls = (isWinner) =>
+    `m-0 max-w-full truncate text-[0.72rem] leading-tight ${
+      isWinner ? "text-amber-100/85" : "text-[#f4f0fa]/68"
+    }`;
 
   return (
-    <div
-      className={`relative min-w-0 ${MATCH_ROW_H} ${winnerCls}`}
-      aria-label={isWinner ? `Winner: ${player}` : undefined}
-    >
-      <MatchRowHeroArt side={side} src={heroArt} name={hero} />
+    <div className={`relative min-w-0 flex-1 ${MATCH_ROW_MIN_H} px-2 py-2.5 sm:px-3`}>
       <div
-        className={`absolute inset-y-0 ${posCls} z-[1] flex w-[min(100%,13.5rem)] flex-col justify-center gap-0.5 ${alignCls}`}
+        className={`absolute left-2 top-2.5 max-w-[min(46%,11rem)] text-left sm:left-3 ${
+          winner === 1 ? "rounded-md px-1.5 py-1 shadow-[inset_0_0_20px_rgba(251,191,36,0.12)] ring-1 ring-amber-400/55" : ""
+        }`}
+        aria-label={winner === 1 ? `Winner: ${player1}` : undefined}
       >
-        <p
-          className={`m-0 max-w-full truncate text-[0.85rem] font-semibold leading-tight ${nameShadow} ${
-            isWinner ? "text-amber-50" : "text-[#f4f0fa]"
-          }`}
-        >
-          {player}
-        </p>
-        {hero ? (
-          <p
-            className={`m-0 max-w-full truncate text-[0.72rem] leading-tight ${nameShadow} ${
-              isWinner ? "text-amber-100/85" : "text-[#f4f0fa]/68"
-            }`}
-          >
-            {hero}
-          </p>
+        <p className={playerNameCls(winner === 1)}>{player1}</p>
+        {hero1 ? <p className={heroNameCls(winner === 1)}>{hero1}</p> : null}
+        {winner === 1 ? (
+          <span className="mt-0.5 inline-block rounded-full bg-amber-400/90 px-1.5 py-0.5 text-[0.58rem] font-bold uppercase tracking-wide text-amber-950">
+            Win
+          </span>
         ) : null}
       </div>
-      {isWinner ? (
-        <span
-          className={`pointer-events-none absolute top-2 z-[3] rounded-full bg-amber-400/90 px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide text-amber-950 ${isLeft ? "right-2" : "left-2"}`}
-          aria-hidden
-        >
-          Win
-        </span>
+
+      {table != null && table > 0 ? (
+        <p className="pointer-events-none absolute left-1/2 top-1/2 m-0 -translate-x-1/2 -translate-y-1/2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/42">
+          T{table}
+        </p>
       ) : null}
+
+      <div
+        className={`absolute bottom-2.5 right-2 max-w-[min(46%,11rem)] text-right sm:right-3 ${
+          winner === 2 ? "rounded-md px-1.5 py-1 shadow-[inset_0_0_20px_rgba(251,191,36,0.12)] ring-1 ring-amber-400/55" : ""
+        }`}
+        aria-label={winner === 2 ? `Winner: ${player2}` : undefined}
+      >
+        <p className={playerNameCls(winner === 2)}>{player2}</p>
+        {hero2 ? <p className={heroNameCls(winner === 2)}>{hero2}</p> : null}
+        {winner === 2 ? (
+          <span className="mt-0.5 inline-block rounded-full bg-amber-400/90 px-1.5 py-0.5 text-[0.58rem] font-bold uppercase tracking-wide text-amber-950">
+            Win
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }
 
 /**
- * @param {{ isLight: boolean, rowChrome: string, heroes: HeroOption[], row: object }} props
+ * @param {{ isLight: boolean, rowChrome: string, heroes: HeroOption[], formatId?: number | null, row: object }} props
  */
-function PairingMatchRow({ isLight, rowChrome, heroes, row }) {
+function PairingMatchRow({ isLight, rowChrome, heroes, formatId, row }) {
   const border = isLight ? "border-white/[0.12] bg-black/25" : rowChrome;
 
   return (
-    <div
-      className={`grid w-full ${matchRowGridCols} items-stretch overflow-hidden rounded-xl border ${MATCH_ROW_H} ${border}`}
-    >
-      <MatchRowPlayerColumn
-        side="left"
-        player={row.player1}
-        hero={row.hero1}
-        heroArt={heroArtForName(row.hero1, heroes)}
+    <div className={`flex w-full items-stretch overflow-hidden rounded-xl border ${MATCH_ROW_MIN_H} ${border}`}>
+      <MatchHeroArtPanel side="left" src={heroArtForName(row.hero1, heroes, formatId)} name={row.hero1} />
+      <MatchRowDiagonalCenter
+        player1={row.player1}
+        hero1={row.hero1}
+        player2={row.player2}
+        hero2={row.hero2}
+        table={row.table}
       />
-      <div
-        className={`relative z-[1] flex ${MATCH_ROW_H} flex-col items-center justify-center gap-0.5 border-x border-white/[0.06] px-1 text-center`}
-      >
-        <p className="m-0 text-[0.65rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/40">vs</p>
-        <p className="m-0 text-[0.7rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/45">
-          T{row.table}
-        </p>
-      </div>
-      <MatchRowPlayerColumn
-        side="right"
-        player={row.player2}
-        hero={row.hero2}
-        heroArt={heroArtForName(row.hero2, heroes)}
-      />
+      <MatchHeroArtPanel side="right" src={heroArtForName(row.hero2, heroes, formatId)} name={row.hero2} />
     </div>
   );
 }
 
 /**
- * @param {{ isLight: boolean, rowChrome: string, heroes: HeroOption[], row: object }} props
+ * @param {{ isLight: boolean, rowChrome: string, heroes: HeroOption[], formatId?: number | null, row: object }} props
  */
-function ResultMatchRow({ isLight, rowChrome, heroes, row }) {
+function ResultMatchRow({ isLight, rowChrome, heroes, formatId, row }) {
   const border = isLight ? "border-white/[0.12] bg-black/25" : rowChrome;
   const winner = matchRowWinnerSide(row);
 
   return (
-    <div
-      className={`grid w-full ${matchRowGridCols} items-stretch overflow-hidden rounded-xl border ${MATCH_ROW_H} ${border}`}
-    >
-      <MatchRowPlayerColumn
+    <div className={`flex w-full items-stretch overflow-hidden rounded-xl border ${MATCH_ROW_MIN_H} ${border}`}>
+      <MatchHeroArtPanel
         side="left"
-        player={row.player1}
-        hero={row.hero1}
-        heroArt={heroArtForName(row.hero1, heroes)}
+        src={heroArtForName(row.hero1, heroes, formatId)}
+        name={row.hero1}
         isWinner={winner === 1}
       />
-      <div className={`relative z-[1] ${MATCH_ROW_H} border-x border-white/[0.06]`} aria-hidden />
-      <MatchRowPlayerColumn
+      <MatchRowDiagonalCenter
+        player1={row.player1}
+        hero1={row.hero1}
+        player2={row.player2}
+        hero2={row.hero2}
+        winner={winner}
+      />
+      <MatchHeroArtPanel
         side="right"
-        player={row.player2}
-        hero={row.hero2}
-        heroArt={heroArtForName(row.hero2, heroes)}
+        src={heroArtForName(row.hero2, heroes, formatId)}
+        name={row.hero2}
         isWinner={winner === 2}
       />
     </div>
   );
 }
 
+/** @param {unknown} raw */
+function parseStandingsPayload(raw) {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 /**
- * @param {{ isLight: boolean, rowChrome: string, heroes: HeroOption[], row: object }} props
+ * @param {number | null | undefined} currentRank
+ * @param {Map<string, number>} prevRankByPlayer
+ * @param {string} player
+ * @returns {number | null} positive = climbed, negative = dropped
  */
-function StandingMatchRow({ isLight, rowChrome, heroes, row }) {
-  const heroArt = heroArtForName(row.hero, heroes);
+function standingRankDelta(currentRank, prevRankByPlayer, player) {
+  const key = normalizeHeroKey(player);
+  if (!key) return null;
+  const prev = prevRankByPlayer.get(key);
+  const cur = Number(currentRank);
+  if (prev == null || !Number.isFinite(cur) || !Number.isFinite(prev)) return null;
+  return prev - cur;
+}
+
+/**
+ * @param {{
+ *   isLight: boolean,
+ *   rowChrome: string,
+ *   heroes: HeroOption[],
+ *   formatId?: number | null,
+ *   row: object,
+ *   rankDelta?: number | null,
+ * }} props
+ */
+function StandingGridCard({ isLight, rowChrome, heroes, formatId, row, rankDelta = null }) {
+  const heroArt = heroArtForName(row.hero, heroes, formatId);
   const border = isLight ? "border-white/[0.12] bg-black/25" : rowChrome;
 
   return (
-    <div
-      className={`relative grid min-h-[6.75rem] w-full grid-cols-1 overflow-hidden rounded-xl border text-right ${border}`}
-    >
-      <div className="pointer-events-none absolute inset-y-0 left-0 w-[58%] sm:w-[54%]" aria-hidden>
+    <div className={`relative min-h-[5.25rem] overflow-hidden rounded-lg border ${border}`}>
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-[42%]" aria-hidden>
         {heroArt ? (
           <img
             src={heroArt}
             alt=""
-            className={`h-full w-full object-cover object-left object-top ${heroArtFadeDeck}`}
+            className={`h-full w-full object-cover object-left ${heroArtFadeLeft}`}
             draggable={false}
           />
         ) : (
-          <div className={`h-full w-full bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent ${heroArtFadeDeck}`} />
+          <div
+            className={`h-full w-full bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent ${heroArtFadeLeft}`}
+          />
         )}
       </div>
-      <div className="relative z-[1] col-start-1 row-start-1 flex min-h-[6.75rem] flex-col items-end justify-center gap-0.5 self-stretch py-3.5 pl-[52%] pr-4 sm:pl-[48%]">
-        <p className="m-0 text-[0.7rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/45">Rank {row.rank}</p>
-        <p className="m-0 max-w-full truncate text-[0.95rem] font-semibold text-[#f4f0fa]">{row.player}</p>
-        <p className="m-0 max-w-full truncate text-[0.8125rem] text-[#f4f0fa]/72">{row.hero || "—"}</p>
-        <p className="m-0 max-w-full truncate text-[0.75rem] text-[#f4f0fa]/55">{row.wins} wins</p>
+      <div className="relative z-[1] flex min-h-[5.25rem] flex-col justify-center gap-0.5 py-2 pl-[44%] pr-2">
+        <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
+          <span className="text-[0.62rem] font-bold uppercase tracking-wide text-[#f4f0fa]/45">
+            #{row.rank}
+          </span>
+          {rankDelta != null && rankDelta !== 0 ? (
+            <span
+              className={`text-[0.62rem] font-semibold tabular-nums ${
+                rankDelta > 0 ? "text-emerald-400" : "text-red-400"
+              }`}
+              title={rankDelta > 0 ? `Up ${rankDelta} from last round` : `Down ${Math.abs(rankDelta)} from last round`}
+            >
+              {rankDelta > 0 ? `+${rankDelta}` : rankDelta}
+            </span>
+          ) : null}
+        </div>
+        <p className="m-0 max-w-full truncate text-[0.78rem] font-semibold leading-tight text-[#f4f0fa]">
+          {row.player}
+        </p>
+        <p className="m-0 max-w-full truncate text-[0.68rem] leading-tight text-[#f4f0fa]/68">
+          {row.hero || "—"}
+        </p>
+        <p className="m-0 text-[0.62rem] text-[#f4f0fa]/50">{row.wins}W</p>
       </div>
     </div>
   );
@@ -366,6 +449,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
   const [results, setResults] = useState(/** @type {object[]} */ ([]));
   const [resultsLoading, setResultsLoading] = useState(false);
   const [standings, setStandings] = useState(/** @type {object[]} */ ([]));
+  const [prevStandings, setPrevStandings] = useState(/** @type {object[]} */ ([]));
   const [standingsLoading, setStandingsLoading] = useState(false);
 
   const [teamMatches, setTeamMatches] = useState(/** @type {object[]} */ ([]));
@@ -450,6 +534,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
               .map((h) => ({
                 id: h.id,
                 name: String(h.name ?? "").trim() || `Hero ${h.id}`,
+                young: h.young === true,
                 art_image_url:
                   h.art_image_url != null && String(h.art_image_url).trim() !== ""
                     ? String(h.art_image_url).trim()
@@ -530,34 +615,60 @@ export function EventDetailPage({ isLight, active, eventId }) {
       setLoading(true);
       try {
         const token = await user.getIdToken();
-        const params = new URLSearchParams({
-          event_data_id: String(activeData.id),
-          round: String(round),
-        });
-        const res = await fetch(`/api/events/${eventId}/${kind}?${params}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
-        const data = await res.json();
-        const raw = data[kind];
-        if (Array.isArray(raw)) {
-          setData(raw);
-        } else if (typeof raw === "string") {
-          try {
-            setData(JSON.parse(raw));
-          } catch {
+        const headers = { Authorization: `Bearer ${token}` };
+
+        const fetchRoundPayload = async (endpoint, roundNum) => {
+          const params = new URLSearchParams({
+            event_data_id: String(activeData.id),
+            round: String(roundNum),
+          });
+          const res = await fetch(`/api/events/${eventId}/${endpoint}?${params}`, { headers });
+          if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
+          const data = await res.json();
+          return data[endpoint];
+        };
+
+        if (kind === "standings") {
+          let prevRound = null;
+          for (const r of rounds) {
+            const n = r.round_number;
+            if (typeof n !== "number" || n >= round) continue;
+            if (prevRound === null || n > prevRound) prevRound = n;
+          }
+
+          const [currentRaw, prevRaw] = await Promise.all([
+            fetchRoundPayload("standings", round),
+            prevRound != null ? fetchRoundPayload("standings", prevRound) : Promise.resolve(null),
+          ]);
+          setStandings(parseStandingsPayload(currentRaw));
+          setPrevStandings(prevRound != null ? parseStandingsPayload(prevRaw) : []);
+        } else {
+          setPrevStandings([]);
+          const raw = await fetchRoundPayload(kind, round);
+          if (Array.isArray(raw)) {
+            setData(raw);
+          } else if (typeof raw === "string") {
+            try {
+              setData(JSON.parse(raw));
+            } catch {
+              setData([]);
+            }
+          } else {
             setData([]);
           }
+        }
+      } catch {
+        if (kind === "standings") {
+          setStandings([]);
+          setPrevStandings([]);
         } else {
           setData([]);
         }
-      } catch {
-        setData([]);
       } finally {
         setLoading(false);
       }
     },
-    [user, activeData, round, eventId],
+    [user, activeData, round, eventId, rounds],
   );
 
   useEffect(() => {
@@ -727,6 +838,17 @@ export function EventDetailPage({ isLight, active, eventId }) {
     return rows.filter((row) => playerMatchesNameFilter(row.player, nameFilter));
   }, [mainTab, standings, teamMembers, nameFilter]);
 
+  const prevRankByPlayer = useMemo(() => {
+    /** @type {Map<string, number>} */
+    const map = new Map();
+    for (const row of prevStandings) {
+      const key = normalizeHeroKey(row.player);
+      const rank = Number(row.rank);
+      if (key && Number.isFinite(rank)) map.set(key, rank);
+    }
+    return map;
+  }, [prevStandings]);
+
   const nameFilterActive = nameFilter.trim().length > 0;
 
   const coverageLoading =
@@ -735,24 +857,6 @@ export function EventDetailPage({ isLight, active, eventId }) {
   const rowChrome = isLight
     ? "border-white/[0.12] bg-black/25"
     : "border-white/[0.20] bg-black/20 ring-1 ring-white/[0.05]";
-
-  const segmentTabBtn = (idx, label) => {
-    const on = dataIdx === idx;
-    return (
-      <button
-        type="button"
-        key={idx}
-        className={`rounded-md px-3.5 py-1.5 text-[0.8125rem] font-semibold transition ${
-          on
-            ? "bg-amber-500/20 text-amber-100 shadow-sm"
-            : "text-[#f4f0fa]/60 hover:bg-white/[0.05] hover:text-[#f4f0fa]/90"
-        }`}
-        onClick={() => setDataIdx(idx)}
-      >
-        {label}
-      </button>
-    );
-  };
 
   if (metaLoading) {
     return <TabSpinner />;
@@ -767,48 +871,57 @@ export function EventDetailPage({ isLight, active, eventId }) {
 
   return (
     <div className="flex w-full flex-1 flex-col gap-5">
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.875rem]">
-        <h2 className="m-0 text-base font-semibold tracking-tight text-[#f4f0fa] sm:text-lg">{event.title}</h2>
-        {event.date_text ? (
-          <>
-            <span className="text-[#f4f0fa]/35" aria-hidden>
-              ·
-            </span>
-            <span className="text-[#f4f0fa]/70">{event.date_text}</span>
-          </>
-        ) : null}
-        {activeData?.format_name || (activeData?.format != null && cardFormatName(activeData.format)) ? (
-          <>
-            <span className="text-[#f4f0fa]/35" aria-hidden>
-              ·
-            </span>
-            <span className="text-[#f4f0fa]/70">
-              {activeData.format_name || cardFormatName(activeData.format)}
-            </span>
-          </>
-        ) : null}
-        <span className="text-[#f4f0fa]/35" aria-hidden>
-          ·
-        </span>
-        <a
-          href={event.event_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="shrink-0 text-purple-200/90 underline hover:text-purple-100"
-        >
-          FabTCG event page
-        </a>
-      </div>
-
-      {eventData.length > 0 ? (
-        <div
-          className="inline-flex max-w-full flex-wrap gap-0.5 rounded-lg border border-white/[0.1] bg-black/20 p-1"
-          role="tablist"
-          aria-label="Event segment"
-        >
-          {eventData.map((d, idx) => segmentTabBtn(idx, segmentLabel(d)))}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.875rem]">
+          <h2 className="m-0 text-base font-semibold tracking-tight text-[#f4f0fa] sm:text-lg">{event.title}</h2>
+          {event.date_text ? (
+            <>
+              <span className="text-[#f4f0fa]/35" aria-hidden>
+                ·
+              </span>
+              <span className="text-[#f4f0fa]/70">{event.date_text}</span>
+            </>
+          ) : null}
+          {activeData?.format_name || (activeData?.format != null && cardFormatName(activeData.format)) ? (
+            <>
+              <span className="text-[#f4f0fa]/35" aria-hidden>
+                ·
+              </span>
+              <span className="text-[#f4f0fa]/70">
+                {activeData.format_name || cardFormatName(activeData.format)}
+              </span>
+            </>
+          ) : null}
+          <span className="text-[#f4f0fa]/35" aria-hidden>
+            ·
+          </span>
+          <a
+            href={event.event_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 text-purple-200/90 underline hover:text-purple-100"
+          >
+            FabTCG event page
+          </a>
         </div>
-      ) : null}
+        {eventData.length > 1 ? (
+          <label className="flex shrink-0 items-center gap-2 text-[0.8125rem] text-[#f4f0fa]/70">
+            <span className="hidden font-medium sm:inline">Segment</span>
+            <select
+              className="max-w-[min(100vw-2rem,14rem)] rounded-md border border-white/15 bg-black/25 px-2.5 py-1.5 text-[0.8125rem] font-semibold text-[#f4f0fa] outline-none focus:border-purple-400/45"
+              value={dataIdx}
+              aria-label="Event segment"
+              onChange={(e) => setDataIdx(Number(e.target.value))}
+            >
+              {eventData.map((d, idx) => (
+                <option key={d.id ?? idx} value={idx}>
+                  {segmentLabel(d)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+      </div>
 
       <nav className="flex gap-6 border-b border-white/[0.1]" aria-label="Event view">
         {mainTabBtn("team", "Team")}
@@ -865,7 +978,14 @@ export function EventDetailPage({ isLight, active, eventId }) {
           {!roundsLoading && !coverageLoading && coverageTab === "pairings" ? (
             <div className="flex flex-col gap-2.5">
               {filteredPairings.map((row, idx) => (
-                <PairingMatchRow key={idx} isLight={isLight} rowChrome={rowChrome} heroes={heroes} row={row} />
+                <PairingMatchRow
+                  key={idx}
+                  isLight={isLight}
+                  rowChrome={rowChrome}
+                  heroes={heroes}
+                  formatId={activeData.format}
+                  row={row}
+                />
               ))}
               {filteredPairings.length === 0 ? (
                 <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">
@@ -878,7 +998,14 @@ export function EventDetailPage({ isLight, active, eventId }) {
           {!roundsLoading && !coverageLoading && coverageTab === "results" ? (
             <div className="flex flex-col gap-2.5">
               {filteredResults.map((row, idx) => (
-                <ResultMatchRow key={idx} isLight={isLight} rowChrome={rowChrome} heroes={heroes} row={row} />
+                <ResultMatchRow
+                  key={idx}
+                  isLight={isLight}
+                  rowChrome={rowChrome}
+                  heroes={heroes}
+                  formatId={activeData.format}
+                  row={row}
+                />
               ))}
               {filteredResults.length === 0 ? (
                 <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">
@@ -889,12 +1016,20 @@ export function EventDetailPage({ isLight, active, eventId }) {
           ) : null}
 
           {!roundsLoading && !coverageLoading && coverageTab === "standings" ? (
-            <div className="flex flex-col gap-2.5">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {filteredStandings.map((row, idx) => (
-                <StandingMatchRow key={idx} isLight={isLight} rowChrome={rowChrome} heroes={heroes} row={row} />
+                <StandingGridCard
+                  key={`${normalizeHeroKey(row.player)}-${row.rank}-${idx}`}
+                  isLight={isLight}
+                  rowChrome={rowChrome}
+                  heroes={heroes}
+                  formatId={activeData.format}
+                  row={row}
+                  rankDelta={standingRankDelta(row.rank, prevRankByPlayer, row.player)}
+                />
               ))}
               {filteredStandings.length === 0 ? (
-                <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">
+                <p className="col-span-full m-0 text-[0.85rem] text-[#f4f0fa]/60">
                   {nameFilterActive ? "No standings match that name." : "No standings for this round."}
                 </p>
               ) : null}
