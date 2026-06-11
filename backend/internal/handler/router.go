@@ -96,6 +96,7 @@ func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient 
 	mux.HandleFunc("GET /api/events/{id}/pairings", eh.getEventPairings)
 	mux.HandleFunc("GET /api/events/{id}/results", eh.getEventResults)
 	mux.HandleFunc("GET /api/events/{id}/standings", eh.getEventStandings)
+	mux.HandleFunc("GET /api/events/{id}/meta", eh.getEventMeta)
 	mux.HandleFunc("GET /api/events/{id}/team-summary", eh.getEventTeamSummary)
 	mux.HandleFunc("GET /api/events/data/{dataId}/comments", eh.listEventDataComments)
 	mux.HandleFunc("POST /api/events/data/{dataId}/comments", eh.createEventDataComment)

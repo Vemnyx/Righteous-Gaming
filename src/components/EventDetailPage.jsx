@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { EventTeamSnapshot } from "./EventTeamSnapshot";
+import { EventMetaTab } from "./EventMetaTab";
 import { cardFormatName, formatUsesYoungHeroes } from "../constants/cardFormat";
 import { buildTeamSnapshot } from "../utils/eventTeamSnapshot";
+import { parseEventMetaSnapshot } from "../utils/eventMeta";
 import { youtubeEmbedSrc, youtubeVideoIdFromInput } from "../utils/youtube";
 
-/** @typedef {"team" | "overall" | "streams"} MainTab */
+/** @typedef {"team" | "overall" | "meta" | "streams"} MainTab */
 /** @typedef {"snapshot" | "pairings" | "results" | "standings"} CoverageTab */
 /** @typedef {{ id: number, name: string, young?: boolean, art_image_url?: string | null }} HeroOption */
 
@@ -486,8 +488,15 @@ export function EventDetailPage({ isLight, active, eventId }) {
   const [streamUrlError, setStreamUrlError] = useState(/** @type {string | null} */ (null));
   const [nameFilter, setNameFilter] = useState("");
 
+  const [eventMetaSnapshot, setEventMetaSnapshot] = useState(
+    /** @type {import("../utils/eventMeta.js").EventMetaSnapshot | null} */ (null),
+  );
+  const [eventMetaLoading, setEventMetaLoading] = useState(false);
+  const [metaRound, setMetaRound] = useState(1);
+
   const activeData = eventData[dataIdx] ?? null;
   const showCoverage = mainTab === "team" || mainTab === "overall";
+  const showMeta = mainTab === "meta";
 
   const mainTabBtn = (id, label) => {
     const on = mainTab === id;
@@ -616,6 +625,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
       if (list.length > 0) {
         const max = list.reduce((m, r) => (r.round_number > m ? r.round_number : m), list[0].round_number ?? 1);
         setRound(max);
+        setMetaRound(max);
       }
     } catch {
       setRounds([]);
@@ -625,9 +635,36 @@ export function EventDetailPage({ isLight, active, eventId }) {
   }, [user, activeData, eventId]);
 
   useEffect(() => {
-    if (!active || !activeData || !showCoverage) return;
+    if (!active || !activeData || (!showCoverage && !showMeta)) return;
     void loadRounds();
-  }, [active, activeData, showCoverage, loadRounds]);
+  }, [active, activeData, showCoverage, showMeta, loadRounds]);
+
+  const loadEventMeta = useCallback(async () => {
+    if (!user || !activeData || !metaRound) return;
+    setEventMetaLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const params = new URLSearchParams({
+        event_data_id: String(activeData.id),
+        through_round: String(metaRound),
+      });
+      const res = await fetch(`/api/events/${eventId}/meta?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
+      const data = await res.json();
+      setEventMetaSnapshot(parseEventMetaSnapshot(data));
+    } catch {
+      setEventMetaSnapshot(null);
+    } finally {
+      setEventMetaLoading(false);
+    }
+  }, [user, activeData, metaRound, eventId]);
+
+  useEffect(() => {
+    if (!active || !showMeta || !activeData || roundsLoading) return;
+    void loadEventMeta();
+  }, [active, showMeta, activeData, metaRound, roundsLoading, loadEventMeta]);
 
   const fetchCoverageTab = useCallback(
     async (kind) => {
@@ -966,6 +1003,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
       <nav className="flex gap-6 border-b border-white/[0.1]" aria-label="Event view">
         {mainTabBtn("team", "Team")}
         {mainTabBtn("overall", "Overall")}
+        {mainTabBtn("meta", "Meta")}
         {mainTabBtn("streams", "Streams")}
       </nav>
 
@@ -1094,6 +1132,18 @@ export function EventDetailPage({ isLight, active, eventId }) {
             </div>
           ) : null}
         </>
+      ) : null}
+
+      {showMeta && activeData ? (
+        <EventMetaTab
+          snapshot={eventMetaSnapshot}
+          rounds={rounds}
+          metaRound={metaRound}
+          onMetaRoundChange={setMetaRound}
+          loading={eventMetaLoading || roundsLoading}
+          isLight={isLight}
+          rowChrome={rowChrome}
+        />
       ) : null}
 
       {mainTab === "streams" && activeData ? (

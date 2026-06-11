@@ -12,6 +12,7 @@ import (
 	"righteous-gaming/backend/internal/app"
 	"righteous-gaming/backend/internal/domain"
 	evt "righteous-gaming/backend/internal/events"
+	"righteous-gaming/backend/internal/eventmeta"
 	"righteous-gaming/backend/internal/eventsync"
 	"righteous-gaming/backend/internal/eventusers"
 	"righteous-gaming/backend/internal/repository"
@@ -480,6 +481,76 @@ func (h *eventsHTTP) getEventResults(w http.ResponseWriter, r *http.Request) {
 
 func (h *eventsHTTP) getEventStandings(w http.ResponseWriter, r *http.Request) {
 	h.getEventRoundData(w, r, "standings")
+}
+
+func parseThroughRoundQuery(r *http.Request, maxRound int) int {
+	raw := strings.TrimSpace(r.URL.Query().Get("through_round"))
+	if raw == "" {
+		return maxRound
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return maxRound
+	}
+	if maxRound > 0 && n > maxRound {
+		return maxRound
+	}
+	return n
+}
+
+func (h *eventsHTTP) getEventMeta(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireUser(w, r); !ok {
+		return
+	}
+	eventID, ok := parseEventID(r)
+	if !ok {
+		http.Error(w, "invalid event id", http.StatusBadRequest)
+		return
+	}
+	ed, ok := h.loadEventDataForEvent(w, r, eventID)
+	if !ok {
+		return
+	}
+
+	ctx := r.Context()
+	rounds, err := h.app.Repo.ListEventRoundsByEventDataID(ctx, ed.ID)
+	if err != nil {
+		log.Error("event meta list rounds", "event_data_id", ed.ID, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	maxRound := 0
+	for _, rr := range rounds {
+		if rr.RoundNumber > maxRound {
+			maxRound = rr.RoundNumber
+		}
+	}
+	throughRound := parseThroughRoundQuery(r, maxRound)
+
+	heroRows, err := h.app.Repo.ListHeroesForMatch(ctx)
+	if err != nil {
+		log.Error("event meta heroes for match", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	matcher := eventusers.NewHeroMatcher(heroRows, ed.Format)
+
+	displayRows, err := h.app.Repo.ListHeroDisplayRows(ctx)
+	if err != nil {
+		log.Error("event meta hero display", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	catalog := make(map[int]eventmeta.HeroCatalog, len(displayRows))
+	for _, row := range displayRows {
+		catalog[row.ID] = eventmeta.HeroCatalog{Name: row.Name, ArtImageURL: row.ArtImageURL}
+	}
+
+	snap := eventmeta.Build(rounds, throughRound, ed.Format, catalog, matcher)
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(snap)
 }
 
 type teamMatchJSON struct {

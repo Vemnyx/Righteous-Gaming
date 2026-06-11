@@ -123,6 +123,37 @@ type HeroMatchRow struct {
 	Young bool
 }
 
+// HeroDisplayRow is used for event meta charts (name + art).
+type HeroDisplayRow struct {
+	ID          int
+	Name        string
+	ArtImageURL *string
+}
+
+// ListHeroDisplayRows returns hero id, name, and art for meta UI.
+func (r *Repository) ListHeroDisplayRows(ctx context.Context) ([]HeroDisplayRow, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	rows, err := r.pool.Query(ctx, `
+SELECT id, name, art_image_url
+FROM heroes
+ORDER BY id ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list hero display rows: %w", err)
+	}
+	defer rows.Close()
+	var out []HeroDisplayRow
+	for rows.Next() {
+		var h HeroDisplayRow
+		if err := rows.Scan(&h.ID, &h.Name, &h.ArtImageURL); err != nil {
+			return nil, fmt.Errorf("repository: scan hero display row: %w", err)
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
 // ListHeroesForMatch returns all heroes for event coverage name resolution.
 func (r *Repository) ListHeroesForMatch(ctx context.Context) ([]HeroMatchRow, error) {
 	if r.pool == nil {
