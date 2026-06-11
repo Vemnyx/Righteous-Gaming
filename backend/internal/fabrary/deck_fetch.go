@@ -1,6 +1,7 @@
 package fabrary
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -14,6 +15,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentity"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
+
+	"righteous-gaming/backend/internal/scrape"
 )
 
 const (
@@ -236,12 +239,15 @@ func postAppSyncGraphQL(ctx context.Context, body []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, appSyncGraphQLEndpoint, strings.NewReader(string(body)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, appSyncGraphQLEndpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("fabrary: build graphql request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", appSyncUserAgent)
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Origin", "https://fabrary.net")
+	req.Header.Set("Referer", "https://fabrary.net/")
 
 	signer := v4.NewSigner()
 	sum := sha256.Sum256(body)
@@ -250,7 +256,10 @@ func postAppSyncGraphQL(ctx context.Context, body []byte) ([]byte, error) {
 		return nil, fmt.Errorf("fabrary: sign graphql request: %w", err)
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client, err := scrape.OutboundHTTPClient(ctx, 30*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("fabrary: http client: %w", err)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("fabrary: graphql request: %w", err)

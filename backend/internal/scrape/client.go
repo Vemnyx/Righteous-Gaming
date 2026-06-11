@@ -153,3 +153,20 @@ func (c *Client) ensureClient(ctx context.Context) (*http.Client, error) {
 	c.inited = true
 	return c.httpClient, c.initErr
 }
+
+// OutboundHTTPClient returns an HTTP client using the residential proxy from
+// FABTCG_PROXY_* / FABTCG_HTTP_PROXY / HTTPS_PROXY (same config as FabTCG scraping).
+func OutboundHTTPClient(ctx context.Context, timeout time.Duration) (*http.Client, error) {
+	proxyURL, err := resolveProxyURL(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+	client, err := buildHTTPClient(proxyURL)
+	if err != nil {
+		return nil, err
+	}
+	if timeout > 0 {
+		client.Timeout = timeout
+	}
+	return client, nil
+}

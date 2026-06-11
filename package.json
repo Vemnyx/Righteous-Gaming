@@ -10,7 +10,9 @@
     "build:logo": "node scripts/build-horizontal-logo.mjs"
   },
   "dependencies": {
+    "@aws-crypto/sha256-js": "^5.2.0",
     "@radix-ui/react-tabs": "^1.1.13",
+    "@smithy/signature-v4": "^5.4.6",
     "@tailwindcss/vite": "^4.2.4",
     "@tiptap/extension-image": "^3.23.1",
     "@tiptap/extension-link": "^3.23.1",
