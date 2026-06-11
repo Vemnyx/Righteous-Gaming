@@ -300,8 +300,8 @@ export function CardRanker({ isLight, active }) {
     : "mb-4 flex min-h-[11rem] flex-1 flex-col gap-2 rounded-lg border border-white/[0.16] bg-black/45 px-3 py-3 text-[0.9rem] text-[#f4f0fa] shadow-sm";
 
   const cardJumpSelectCls = isLight
-    ? "mb-5 w-full max-w-md rounded-lg border border-white/[0.24] bg-[#4a4658]/95 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55 sm:mb-6"
-    : "mb-5 w-full max-w-md rounded-lg border border-white/[0.22] bg-black/50 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55 sm:mb-6";
+    ? "rg-select mb-5 w-full max-w-md rounded-lg border border-white/[0.24] bg-[#4a4658]/95 py-2 pl-3 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55 sm:mb-6"
+    : "rg-select mb-5 w-full max-w-md rounded-lg border border-white/[0.22] bg-black/50 py-2 pl-3 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55 sm:mb-6";
 
   const btnPrimary =
     "rounded-lg border border-white/[0.28] bg-violet-600/90 px-4 py-2.5 text-[0.875rem] font-semibold text-white shadow-md transition-colors hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-45";

@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 
+/** @param {object} ev */
+function isEventUpcoming(ev) {
+  const raw = ev.start_date ?? ev.end_date;
+  if (!raw) return false;
+  const start = new Date(raw);
+  return !Number.isNaN(start.getTime()) && start.getTime() > Date.now();
+}
+
 /**
  * @param {{ isLight: boolean, active: boolean, onOpenEvent: (id: number) => void }} props
  */
@@ -36,6 +44,9 @@ export function EventsList({ isLight, active, onOpenEvent }) {
   const cardCls = isLight
     ? "rounded-xl border border-white/[0.14] bg-black/25 p-4 shadow-sm transition hover:border-white/25 hover:bg-black/30"
     : "rounded-xl border border-white/[0.12] bg-black/35 p-4 shadow-sm transition hover:border-white/20";
+  const cardUpcomingCls = isLight
+    ? "border-white/[0.1] bg-black/20 opacity-60 saturate-[0.65]"
+    : "border-white/[0.08] bg-black/25 opacity-55 saturate-[0.6]";
 
   return (
     <div className="flex w-full flex-1 flex-col gap-4 px-1 py-2 sm:px-2">
@@ -46,25 +57,49 @@ export function EventsList({ isLight, active, onOpenEvent }) {
       {loading ? <p className="text-[#f4f0fa]/65">Loading events…</p> : null}
       {!loading && rows.length === 0 ? <p className="text-[#f4f0fa]/65">No events yet.</p> : null}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {rows.map((ev) => (
-          <button
-            key={ev.id}
-            type="button"
-            className={`${cardCls} cursor-pointer text-left`}
-            onClick={() => onOpenEvent(ev.id)}
-          >
-            {ev.image_url ? (
-              <img src={ev.image_url} alt="" className="mb-3 aspect-video w-full rounded-lg object-cover" loading="lazy" />
-            ) : (
-              <div className="mb-3 flex aspect-video w-full items-center justify-center rounded-lg bg-black/40 text-[0.8rem] text-[#f4f0fa]/45">
-                No image
-              </div>
-            )}
-            <h3 className="m-0 text-[1rem] font-semibold text-[#f4f0fa]">{ev.title || `Event #${ev.id}`}</h3>
-            {ev.date_text ? <p className="m-0 mt-1 text-[0.82rem] text-[#f4f0fa]/65">{ev.date_text}</p> : null}
-            {ev.venue ? <p className="m-0 mt-0.5 line-clamp-2 text-[0.78rem] text-[#f4f0fa]/50">{ev.venue}</p> : null}
-          </button>
-        ))}
+        {rows.map((ev) => {
+          const upcoming = isEventUpcoming(ev);
+          return (
+            <button
+              key={ev.id}
+              type="button"
+              disabled={upcoming}
+              aria-disabled={upcoming}
+              className={`${cardCls} relative text-left ${
+                upcoming ? `${cardUpcomingCls} cursor-not-allowed` : "cursor-pointer"
+              }`}
+              onClick={() => {
+                if (!upcoming) onOpenEvent(ev.id);
+              }}
+            >
+              {upcoming ? (
+                <span
+                  className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-black/20"
+                  aria-hidden
+                >
+                  <span className="rounded-md border border-white/20 bg-black/55 px-3.5 py-1.5 text-[0.75rem] font-semibold uppercase tracking-[0.14em] text-[#f4f0fa]/90 shadow-sm">
+                    Upcoming
+                  </span>
+                </span>
+              ) : null}
+              {ev.image_url ? (
+                <img
+                  src={ev.image_url}
+                  alt=""
+                  className="mb-3 aspect-video w-full rounded-lg object-cover"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="mb-3 flex aspect-video w-full items-center justify-center rounded-lg bg-black/40 text-[0.8rem] text-[#f4f0fa]/45">
+                  No image
+                </div>
+              )}
+              <h3 className="m-0 text-[1rem] font-semibold text-[#f4f0fa]">{ev.title || `Event #${ev.id}`}</h3>
+              {ev.date_text ? <p className="m-0 mt-1 text-[0.82rem] text-[#f4f0fa]/65">{ev.date_text}</p> : null}
+              {ev.venue ? <p className="m-0 mt-0.5 line-clamp-2 text-[0.78rem] text-[#f4f0fa]/50">{ev.venue}</p> : null}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

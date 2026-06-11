@@ -1233,8 +1233,8 @@ export function RunawaysDraftsAnalytics({ isLight, active }) {
 
   const panelBorder = isLight ? "border-white/[0.14]" : "border-white/[0.2]";
   const selectCls = isLight
-    ? "rounded-lg border border-white/[0.22] bg-black/30 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55"
-    : "rounded-lg border border-white/[0.22] bg-black/40 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55";
+    ? "rg-select rounded-lg border border-white/[0.22] bg-black/30 py-2 pl-3 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55"
+    : "rg-select rounded-lg border border-white/[0.22] bg-black/40 py-2 pl-3 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55";
 
   const loadMeta = useCallback(async () => {
     if (!user) return;

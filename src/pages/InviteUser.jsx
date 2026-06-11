@@ -31,7 +31,8 @@ const labelClass =
 const inputClass =
   "w-full rounded-lg border border-transparent bg-[#332d3c] px-3 py-2.5 text-base text-[#f4f0fa] outline-none placeholder:text-[#8a7fa0] focus-visible:ring-2 focus-visible:ring-purple-500/55 focus-visible:ring-offset-2 focus-visible:ring-offset-[#423b4e] disabled:opacity-65";
 
-const selectClass = `${inputClass} cursor-pointer`;
+const selectClass =
+  "rg-select w-full cursor-pointer rounded-lg border border-transparent bg-[#332d3c] py-2.5 pl-3 text-base text-[#f4f0fa] outline-none placeholder:text-[#8a7fa0] focus-visible:ring-2 focus-visible:ring-purple-500/55 focus-visible:ring-offset-2 focus-visible:ring-offset-[#423b4e] disabled:opacity-65";
 
 const primaryBtn =
   "mt-6 w-full cursor-pointer rounded-lg border border-white/[0.18] bg-gradient-to-br from-[#8b5abf] to-[#5c2f91] px-4 py-3 text-[0.9rem] font-semibold text-white shadow-[0_4px_20px_rgba(90,47,143,0.35)] hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/60 disabled:cursor-not-allowed disabled:opacity-55";

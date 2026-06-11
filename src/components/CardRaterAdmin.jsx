@@ -336,8 +336,8 @@ export function CardRaterAdmin({ isLight, active, onOpenCardRaterAnalytics }) {
     : "border border-white/[0.2] bg-[rgba(12,6,22,0.96)] shadow-[0_24px_80px_rgba(0,0,0,0.5)]";
 
   const selectCls = isLight
-    ? "w-full rounded-lg border border-white/[0.22] bg-black/30 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55"
-    : "w-full rounded-lg border border-white/[0.22] bg-black/40 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55";
+    ? "rg-select w-full rounded-lg border border-white/[0.22] bg-black/30 py-2 pl-3 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55"
+    : "rg-select w-full rounded-lg border border-white/[0.22] bg-black/40 py-2 pl-3 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55";
 
   const inputCls = isLight
     ? "w-full rounded-lg border border-white/[0.22] bg-black/30 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/55"

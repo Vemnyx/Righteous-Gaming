@@ -604,8 +604,8 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
     ? "w-full rounded-lg border border-white/[0.22] bg-black/30 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/55"
     : "w-full rounded-lg border border-white/[0.22] bg-black/40 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/35 focus:border-purple-400/55";
   const selectCls = isLight
-    ? "w-full rounded-lg border border-white/[0.22] bg-black/30 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55"
-    : "w-full rounded-lg border border-white/[0.22] bg-black/40 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55";
+    ? "rg-select w-full rounded-lg border border-white/[0.22] bg-black/30 py-2 pl-3 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55"
+    : "rg-select w-full rounded-lg border border-white/[0.22] bg-black/40 py-2 pl-3 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55";
 
   const totalPages = Math.max(1, Math.ceil(Math.max(0, total) / PAGE_SIZE));
   const safePageIndex = Math.min(Math.max(0, pageIndex), totalPages - 1);

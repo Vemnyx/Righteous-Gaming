@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { EventTeamSnapshot } from "./EventTeamSnapshot";
 import { cardFormatName, formatUsesYoungHeroes } from "../constants/cardFormat";
+import { buildTeamSnapshot } from "../utils/eventTeamSnapshot";
 import { youtubeEmbedSrc, youtubeVideoIdFromInput } from "../utils/youtube";
 
 /** @typedef {"team" | "overall" | "streams"} MainTab */
-/** @typedef {"pairings" | "results" | "standings"} CoverageTab */
+/** @typedef {"snapshot" | "pairings" | "results" | "standings"} CoverageTab */
 /** @typedef {{ id: number, name: string, young?: boolean, art_image_url?: string | null }} HeroOption */
 
 /** @param {object} d */
@@ -12,12 +14,10 @@ function segmentLabel(d) {
   return d.label || d.event_type_name || `Segment ${d.id}`;
 }
 
-const MATCH_ROW_MIN_H = "min-h-[6.75rem]";
-/** Same fade treatment as deck list hero art — keeps crops sharp at fixed width. */
+const MATCH_ROW_MIN_H = "min-h-[5.5rem]";
+/** Soft edge fade for standings/deck-style panels only. */
 const heroArtFadeLeft =
-  "[mask-image:linear-gradient(to_right,black_0%,black_70%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_70%,transparent_100%)]";
-const heroArtFadeRight =
-  "[mask-image:linear-gradient(to_left,black_0%,black_70%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_70%,transparent_100%)]";
+  "[mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)]";
 
 function TabSpinner() {
   return (
@@ -167,7 +167,7 @@ function orientMatchRowForTeam(row, members) {
   };
 }
 
-const matchHeroArtWidth = "w-[7.25rem] shrink-0 sm:w-[8.25rem]";
+const matchHeroArtWidth = "w-[5.5rem] shrink-0 sm:w-[6.25rem]";
 
 /**
  * @param {object} row
@@ -191,30 +191,24 @@ function matchRowWinnerSide(row) {
  * Fixed-width hero art panel (matches deck list cropping, not full-bleed stretch).
  * @param {{ side: "left" | "right", src?: string | null, name?: string | null, isWinner?: boolean }} props
  */
-function MatchHeroArtPanel({ side, src, name, isWinner = false }) {
-  const isLeft = side === "left";
+function MatchHeroArtPanel({ src, name, isWinner = false }) {
   const label = name != null && String(name).trim() !== "" ? String(name).trim() : "Hero";
-  const fadeCls = isLeft ? heroArtFadeLeft : heroArtFadeRight;
-  const objectCls = isLeft ? "object-left" : "object-right";
-  const placeholderGradient = isLeft
-    ? "bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent"
-    : "bg-gradient-to-l from-purple-900/35 via-purple-800/15 to-transparent";
   const winnerCls = isWinner ? "ring-2 ring-inset ring-amber-400/75 bg-amber-500/[0.06]" : "";
 
   return (
     <div
-      className={`relative self-stretch overflow-hidden ${matchHeroArtWidth} ${winnerCls}`}
+      className={`relative flex shrink-0 items-center justify-center self-stretch overflow-hidden bg-black/15 ${matchHeroArtWidth} ${winnerCls}`}
       aria-hidden={!src}
     >
       {src ? (
         <img
           src={src}
           alt=""
-          className={`h-full w-full object-cover ${objectCls} ${fadeCls}`}
+          className="h-full w-full object-contain object-center"
           draggable={false}
         />
       ) : (
-        <div className={`h-full w-full ${placeholderGradient} ${fadeCls}`} title={label} />
+        <div className="h-full w-full bg-gradient-to-b from-purple-900/25 to-transparent" title={label} />
       )}
     </div>
   );
@@ -242,9 +236,9 @@ function MatchRowDiagonalCenter({ player1, hero1, player2, hero2, table, winner 
     }`;
 
   return (
-    <div className={`relative min-w-0 flex-1 ${MATCH_ROW_MIN_H} px-2 py-2.5 sm:px-3`}>
+    <div className={`relative mx-auto min-w-0 max-w-[11.5rem] flex-1 ${MATCH_ROW_MIN_H} px-1`}>
       <div
-        className={`absolute left-2 top-2.5 max-w-[min(46%,11rem)] text-left sm:left-3 ${
+        className={`absolute left-0 top-[18%] max-w-[88%] -translate-y-0 text-left ${
           winner === 1 ? "rounded-md px-1.5 py-1 shadow-[inset_0_0_20px_rgba(251,191,36,0.12)] ring-1 ring-amber-400/55" : ""
         }`}
         aria-label={winner === 1 ? `Winner: ${player1}` : undefined}
@@ -259,13 +253,13 @@ function MatchRowDiagonalCenter({ player1, hero1, player2, hero2, table, winner 
       </div>
 
       {table != null && table > 0 ? (
-        <p className="pointer-events-none absolute left-1/2 top-1/2 m-0 -translate-x-1/2 -translate-y-1/2 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/42">
-          T{table}
+        <p className="pointer-events-none absolute left-1/2 top-1/2 m-0 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap text-[0.68rem] font-semibold text-[#f4f0fa]/48">
+          Table {table}
         </p>
       ) : null}
 
       <div
-        className={`absolute bottom-2.5 right-2 max-w-[min(46%,11rem)] text-right sm:right-3 ${
+        className={`absolute bottom-[18%] right-0 max-w-[88%] translate-y-0 text-right ${
           winner === 2 ? "rounded-md px-1.5 py-1 shadow-[inset_0_0_20px_rgba(251,191,36,0.12)] ring-1 ring-amber-400/55" : ""
         }`}
         aria-label={winner === 2 ? `Winner: ${player2}` : undefined}
@@ -379,22 +373,23 @@ function StandingGridCard({ isLight, rowChrome, heroes, formatId, row, rankDelta
   const border = isLight ? "border-white/[0.12] bg-black/25" : rowChrome;
 
   return (
-    <div className={`relative min-h-[5.25rem] overflow-hidden rounded-lg border ${border}`}>
-      <div className="pointer-events-none absolute inset-y-0 left-0 w-[42%]" aria-hidden>
+    <div className={`relative min-h-[5.75rem] overflow-hidden rounded-lg border ${border}`}>
+      <div
+        className="pointer-events-none absolute inset-y-0 left-0 flex w-[38%] items-center justify-center bg-black/15"
+        aria-hidden
+      >
         {heroArt ? (
           <img
             src={heroArt}
             alt=""
-            className={`h-full w-full object-cover object-left ${heroArtFadeLeft}`}
+            className="h-full w-full object-contain object-center"
             draggable={false}
           />
         ) : (
-          <div
-            className={`h-full w-full bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent ${heroArtFadeLeft}`}
-          />
+          <div className={`h-full w-full bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent ${heroArtFadeLeft}`} />
         )}
       </div>
-      <div className="relative z-[1] flex min-h-[5.25rem] flex-col justify-center gap-0.5 py-2 pl-[44%] pr-2">
+      <div className="relative z-[1] flex min-h-[5.75rem] flex-col justify-center gap-0.5 py-2.5 pl-[40%] pr-3">
         <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
           <span className="text-[0.62rem] font-bold uppercase tracking-wide text-[#f4f0fa]/45">
             #{row.rank}
@@ -437,7 +432,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
   const [metaError, setMetaError] = useState(/** @type {string | null} */ (null));
 
   const [mainTab, setMainTab] = useState(/** @type {MainTab} */ ("team"));
-  const [coverageTab, setCoverageTab] = useState(/** @type {CoverageTab} */ ("pairings"));
+  const [coverageTab, setCoverageTab] = useState(/** @type {CoverageTab} */ ("snapshot"));
   const [dataIdx, setDataIdx] = useState(0);
   const [streamTabIdx, setStreamTabIdx] = useState(0);
   const [round, setRound] = useState(1);
@@ -480,7 +475,10 @@ export function EventDetailPage({ isLight, active, eventId }) {
             ? "border-purple-400/80 text-[#f4f0fa]"
             : "border-transparent text-[#f4f0fa]/50 hover:border-white/20 hover:text-[#f4f0fa]/80"
         }`}
-        onClick={() => setMainTab(id)}
+        onClick={() => {
+          setMainTab(id);
+          if (id === "team") setCoverageTab("snapshot");
+        }}
       >
         {label}
       </button>
@@ -523,7 +521,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
         setDataIdx(0);
         setStreamTabIdx(0);
         setMainTab("team");
-        setCoverageTab("pairings");
+        setCoverageTab("snapshot");
 
         if (metaRes.ok) {
           const meta = await metaRes.json();
@@ -673,8 +671,15 @@ export function EventDetailPage({ isLight, active, eventId }) {
 
   useEffect(() => {
     if (!active || !showCoverage || !activeData || roundsLoading) return;
+    if (coverageTab === "snapshot") return;
     void fetchCoverageTab(coverageTab);
   }, [active, showCoverage, coverageTab, activeData, round, roundsLoading, fetchCoverageTab]);
+
+  useEffect(() => {
+    if (mainTab === "overall" && coverageTab === "snapshot") {
+      setCoverageTab("pairings");
+    }
+  }, [mainTab, coverageTab]);
 
   const loadComments = useCallback(async () => {
     if (!user || !activeData) return;
@@ -702,7 +707,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
   useEffect(() => {
     setStreamTabIdx(0);
     setMainTab("team");
-    setCoverageTab("pairings");
+    setCoverageTab("snapshot");
     setNameFilter("");
   }, [dataIdx]);
 
@@ -838,6 +843,13 @@ export function EventDetailPage({ isLight, active, eventId }) {
     return rows.filter((row) => playerMatchesNameFilter(row.player, nameFilter));
   }, [mainTab, standings, teamMembers, nameFilter]);
 
+  const teamSnapshot = useMemo(() => {
+    if (!activeData || teamMembers.length === 0) {
+      return { chartSeries: [], chartRounds: [], rankings: [], maxWins: 1 };
+    }
+    return buildTeamSnapshot(segmentTeamMatches, teamMembers, round);
+  }, [activeData, segmentTeamMatches, teamMembers, round]);
+
   const prevRankByPlayer = useMemo(() => {
     /** @type {Map<string, number>} */
     const map = new Map();
@@ -852,7 +864,13 @@ export function EventDetailPage({ isLight, active, eventId }) {
   const nameFilterActive = nameFilter.trim().length > 0;
 
   const coverageLoading =
-    coverageTab === "pairings" ? pairingsLoading : coverageTab === "results" ? resultsLoading : standingsLoading;
+    coverageTab === "snapshot"
+      ? teamLoading
+      : coverageTab === "pairings"
+        ? pairingsLoading
+        : coverageTab === "results"
+          ? resultsLoading
+          : standingsLoading;
 
   const rowChrome = isLight
     ? "border-white/[0.12] bg-black/25"
@@ -905,21 +923,18 @@ export function EventDetailPage({ isLight, active, eventId }) {
           </a>
         </div>
         {eventData.length > 1 ? (
-          <label className="flex shrink-0 items-center gap-2 text-[0.8125rem] text-[#f4f0fa]/70">
-            <span className="hidden font-medium sm:inline">Segment</span>
-            <select
-              className="max-w-[min(100vw-2rem,14rem)] rounded-md border border-white/15 bg-black/25 px-2.5 py-1.5 text-[0.8125rem] font-semibold text-[#f4f0fa] outline-none focus:border-purple-400/45"
-              value={dataIdx}
-              aria-label="Event segment"
-              onChange={(e) => setDataIdx(Number(e.target.value))}
-            >
-              {eventData.map((d, idx) => (
-                <option key={d.id ?? idx} value={idx}>
-                  {segmentLabel(d)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <select
+            className="rg-select max-w-[min(100vw-2rem,18rem)] min-w-[11rem] shrink-0 rounded-md border border-white/15 bg-black/25 py-2 pl-3 text-[0.875rem] font-semibold text-[#f4f0fa] outline-none focus:border-purple-400/45"
+            value={dataIdx}
+            aria-label="Event segment"
+            onChange={(e) => setDataIdx(Number(e.target.value))}
+          >
+            {eventData.map((d, idx) => (
+              <option key={d.id ?? idx} value={idx}>
+                {segmentLabel(d)}
+              </option>
+            ))}
+          </select>
         ) : null}
       </div>
 
@@ -933,6 +948,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
         <>
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div className="inline-flex flex-wrap gap-0.5 rounded-lg bg-black/15 p-0.5" role="tablist">
+              {mainTab === "team" ? coverageTabBtn("snapshot", "Snapshot") : null}
               {coverageTabBtn("pairings", "Pairings")}
               {coverageTabBtn("results", "Results")}
               {coverageTabBtn("standings", "Standings")}
@@ -944,7 +960,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
                 <label className="flex items-center gap-2 text-[0.8125rem] text-[#f4f0fa]/70">
                   Round
                   <select
-                    className="rounded-md border border-white/15 bg-black/25 px-2 py-1.5 text-[0.8125rem] text-[#f4f0fa]"
+                    className="rg-select rounded-md border border-white/15 bg-black/25 py-1.5 pl-2.5 text-[0.8125rem] text-[#f4f0fa] outline-none focus:border-purple-400/45"
                     value={round}
                     onChange={(e) => setRound(Number(e.target.value))}
                   >
@@ -956,18 +972,23 @@ export function EventDetailPage({ isLight, active, eventId }) {
                   </select>
                 </label>
               )}
-              <input
-                type="search"
-                value={nameFilter}
-                onChange={(e) => setNameFilter(e.target.value)}
-                placeholder="Search players…"
-                aria-label="Search players"
-                className="w-full min-w-[10rem] max-w-xs rounded-md border border-white/15 bg-black/25 px-3 py-1.5 text-[0.8125rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/45 sm:w-48"
-              />
+              {coverageTab !== "snapshot" ? (
+                <input
+                  type="search"
+                  value={nameFilter}
+                  onChange={(e) => setNameFilter(e.target.value)}
+                  placeholder="Search players…"
+                  aria-label="Search players"
+                  className="w-full min-w-[10rem] max-w-xs rounded-md border border-white/15 bg-black/25 px-3 py-1.5 text-[0.8125rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/45 sm:w-48"
+                />
+              ) : null}
             </div>
           </div>
 
-          {mainTab === "team" && !teamLoading && teamMembers.length === 0 ? (
+          {mainTab === "team" &&
+          !teamLoading &&
+          teamMembers.length === 0 &&
+          coverageTab !== "snapshot" ? (
             <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">
               No Righteous players matched in {segmentLabel(activeData)} yet.
             </p>
@@ -975,8 +996,20 @@ export function EventDetailPage({ isLight, active, eventId }) {
 
           {roundsLoading || coverageLoading ? <TabSpinner /> : null}
 
+          {!roundsLoading && !coverageLoading && mainTab === "team" && coverageTab === "snapshot" ? (
+            <EventTeamSnapshot
+              chartSeries={teamSnapshot.chartSeries}
+              chartRounds={teamSnapshot.chartRounds}
+              rankings={teamSnapshot.rankings}
+              maxWins={teamSnapshot.maxWins}
+              isLight={isLight}
+              rowChrome={rowChrome}
+              currentRound={round}
+            />
+          ) : null}
+
           {!roundsLoading && !coverageLoading && coverageTab === "pairings" ? (
-            <div className="flex flex-col gap-2.5">
+            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
               {filteredPairings.map((row, idx) => (
                 <PairingMatchRow
                   key={idx}
@@ -988,7 +1021,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
                 />
               ))}
               {filteredPairings.length === 0 ? (
-                <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">
+                <p className="col-span-full m-0 text-[0.85rem] text-[#f4f0fa]/60">
                   {nameFilterActive ? "No pairings match that name." : "No pairings for this round."}
                 </p>
               ) : null}
@@ -996,7 +1029,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
           ) : null}
 
           {!roundsLoading && !coverageLoading && coverageTab === "results" ? (
-            <div className="flex flex-col gap-2.5">
+            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
               {filteredResults.map((row, idx) => (
                 <ResultMatchRow
                   key={idx}
@@ -1008,7 +1041,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
                 />
               ))}
               {filteredResults.length === 0 ? (
-                <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">
+                <p className="col-span-full m-0 text-[0.85rem] text-[#f4f0fa]/60">
                   {nameFilterActive ? "No results match that name." : "No results for this round."}
                 </p>
               ) : null}
@@ -1016,7 +1049,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
           ) : null}
 
           {!roundsLoading && !coverageLoading && coverageTab === "standings" ? (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
               {filteredStandings.map((row, idx) => (
                 <StandingGridCard
                   key={`${normalizeHeroKey(row.player)}-${row.rank}-${idx}`}

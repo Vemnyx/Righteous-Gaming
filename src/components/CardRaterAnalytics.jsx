@@ -469,7 +469,7 @@ export function CardRaterAnalytics({ isLight, active, raterId, onOpenCompare }) 
 
   const labelMuted = "text-[0.72rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/50";
   const selectCls =
-    "min-h-10 w-full max-w-[14rem] rounded-lg border border-white/[0.18] bg-black/35 px-3 py-2 text-[0.8125rem] text-[#f4f0fa] outline-none focus-visible:ring-2 focus-visible:ring-purple-500/55";
+    "rg-select min-h-10 w-full max-w-[14rem] rounded-lg border border-white/[0.18] bg-black/35 py-2 pl-3 text-[0.8125rem] text-[#f4f0fa] outline-none focus-visible:ring-2 focus-visible:ring-purple-500/55";
 
   const tabBtn = (tab) =>
     resultsTab === tab

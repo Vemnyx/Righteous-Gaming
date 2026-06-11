@@ -84,4 +84,16 @@
       radial-gradient(ellipse 115% 88% at 50% 4%, rgb(106 74 154 / 0.16) 0%, transparent 52%);
     background-repeat: no-repeat;
   }
+
+  /* Native select chevron with inset from the right edge (use pl-* for left padding, not px-*). */
+  .rg-select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    padding-right: 2.25rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath stroke='%23f4f0fae6' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.625rem center;
+    background-size: 0.875rem;
+  }
 }

@@ -217,6 +217,9 @@ export function CardRatingsList({ isLight, active, onViewResults }) {
   const inputCls = isLight
     ? "rounded-lg border border-white/20 bg-black/25 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-white/35"
     : "rounded-lg border border-white/25 bg-black/30 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-white/40";
+  const selectCls = isLight
+    ? "rg-select rounded-lg border border-white/20 bg-black/25 py-2 pl-3 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-white/35"
+    : "rg-select rounded-lg border border-white/25 bg-black/30 py-2 pl-3 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-white/40";
 
   return (
     <div className="flex w-full flex-1 flex-col gap-4 px-1 py-2 sm:px-2">
@@ -354,7 +357,7 @@ export function CardRatingsList({ isLight, active, onViewResults }) {
                         <p className="m-0 text-[0.875rem] text-[#f4f0fa]/70">You have not rated any cards yet.</p>
                       ) : (
                         <select
-                          className={inputCls}
+                          className={selectCls}
                           value={exportSetId}
                           disabled={exportSubmitting}
                           onChange={(e) => setExportSetId(e.target.value)}

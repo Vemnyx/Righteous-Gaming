@@ -425,6 +425,9 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
   const fieldCls = isLight
     ? "min-w-0 rounded-lg border border-white/[0.24] bg-black/25 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/45 focus:border-purple-400/55"
     : "min-w-0 rounded-lg border border-white/[0.22] bg-black/30 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/55";
+  const fieldSelectCls = isLight
+    ? "rg-select min-w-0 rounded-lg border border-white/[0.24] bg-black/25 py-2 pl-3 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55"
+    : "rg-select min-w-0 rounded-lg border border-white/[0.22] bg-black/30 py-2 pl-3 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55";
 
   const hasActiveFilters =
     searchQuery.trim() !== "" ||
@@ -533,7 +536,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
               <label className="flex min-w-[10rem] flex-1 items-center gap-2 sm:flex-none">
                 <span className="sr-only">Filter by set</span>
                 <select
-                  className={`${fieldCls} w-full sm:min-w-[12rem]`}
+                  className={`${fieldSelectCls} w-full sm:min-w-[12rem]`}
                   value={setFilter}
                   onChange={(e) => setSetFilter(e.target.value)}
                 >
@@ -832,7 +835,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                       Type
                     </span>
                     <select
-                      className={fieldCls}
+                      className={fieldSelectCls}
                       value={draftAdvancedFilters.type}
                       onChange={(e) =>
                         setDraftAdvancedFilters((f) => ({ ...f, type: e.target.value }))
@@ -853,7 +856,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                         Format
                       </span>
                       <select
-                        className={fieldCls}
+                        className={fieldSelectCls}
                         value={draftAdvancedFilters.format ?? ""}
                         onChange={(e) =>
                           setDraftAdvancedFilters((f) => ({ ...f, format: e.target.value }))
@@ -873,7 +876,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                         Rarity
                       </span>
                       <select
-                        className={fieldCls}
+                        className={fieldSelectCls}
                         value={draftAdvancedFilters.rarity}
                         onChange={(e) =>
                           setDraftAdvancedFilters((f) => ({ ...f, rarity: e.target.value }))
@@ -895,7 +898,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                         Class
                       </span>
                       <select
-                        className={fieldCls}
+                        className={fieldSelectCls}
                         value={draftAdvancedFilters.cardClass}
                         onChange={(e) =>
                           setDraftAdvancedFilters((f) => ({ ...f, cardClass: e.target.value }))
@@ -915,7 +918,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                         Talent
                       </span>
                       <select
-                        className={fieldCls}
+                        className={fieldSelectCls}
                         value={draftAdvancedFilters.talent ?? ""}
                         onChange={(e) =>
                           setDraftAdvancedFilters((f) => ({ ...f, talent: e.target.value }))
@@ -936,7 +939,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                       Pitch
                     </span>
                     <select
-                      className={fieldCls}
+                      className={fieldSelectCls}
                       value={draftAdvancedFilters.pitch}
                       onChange={(e) =>
                         setDraftAdvancedFilters((f) => ({ ...f, pitch: e.target.value }))
@@ -955,7 +958,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                         Power
                       </span>
                       <select
-                        className={fieldCls}
+                        className={fieldSelectCls}
                         value={draftAdvancedFilters.power ?? ""}
                         onChange={(e) =>
                           setDraftAdvancedFilters((f) => ({ ...f, power: e.target.value }))
@@ -975,7 +978,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                         Block
                       </span>
                       <select
-                        className={fieldCls}
+                        className={fieldSelectCls}
                         value={draftAdvancedFilters.block ?? ""}
                         onChange={(e) =>
                           setDraftAdvancedFilters((f) => ({ ...f, block: e.target.value }))
@@ -996,7 +999,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                       Keywords
                     </legend>
                     <select
-                      className={fieldCls}
+                      className={fieldSelectCls}
                       value={keywordToAdd}
                       onChange={(e) => {
                         const v = e.target.value;
