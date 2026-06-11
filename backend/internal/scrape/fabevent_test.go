@@ -23,6 +23,57 @@ func TestCleanHeroNameStripsMarkupNoise(t *testing.T) {
 	}
 }
 
+func TestValidPlayerName(t *testing.T) {
+	cases := map[string]bool{
+		"Alice Smith": true,
+		"N/A":         false,
+		"n/a":         false,
+		"NA":          false,
+		"TBD":         false,
+		"-":           false,
+		"":            false,
+		"   ":         false,
+	}
+	for in, want := range cases {
+		if got := scrape.ValidPlayerName(in); got != want {
+			t.Fatalf("ValidPlayerName(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
+func TestParseResultsSkipsNAPlayers(t *testing.T) {
+	html := `<tr class="match-row">
+		<td><div class="player-text"><strong>N/A</strong><br>Fai, Rising Rebellion</div></td>
+		<td><div class="player-text"><strong>Bob</strong><br>Ira, Scarlet Revenger</div></td>
+		<td><span class="winner-pill">Player 2</span></td>
+	</tr>
+	<tr class="match-row">
+		<td><div class="player-text"><strong>Alice</strong><br>Fai, Rising Rebellion</div></td>
+		<td><div class="player-text"><strong>Cara</strong><br>Ira, Scarlet Revenger</div></td>
+		<td><span class="winner-pill">Player 1</span></td>
+	</tr>`
+	rows := scrape.ParseResults(html)
+	if len(rows) != 1 {
+		t.Fatalf("rows: %d, want 1", len(rows))
+	}
+	if rows[0].Player1 != "Alice" || rows[0].Player2 != "Cara" {
+		t.Fatalf("players: %q vs %q", rows[0].Player1, rows[0].Player2)
+	}
+}
+
+func TestParseEventPageMetadataWithoutCoverage(t *testing.T) {
+	html := `<meta property="og:title" content="Pro Tour Osaka - Flesh and Blood TCG"/>
+	<meta property="og:image" content="https://example.com/banner.jpg"/>
+	<div class="quick-details"><strong>Date:</strong> June 20-22, 2026</div>`
+	parsed := scrape.ParseEventPage(html)
+	if parsed.Title == "" {
+		t.Fatal("expected title")
+	}
+	if len(parsed.CoverageLinks) != 0 {
+		t.Fatalf("expected no coverage links, got %d", len(parsed.CoverageLinks))
+	}
+}
+
 func TestParsePairingsHeroNames(t *testing.T) {
 	html := `<tr class="match-row">
 		<td class="table-number"><span>1</span></td>

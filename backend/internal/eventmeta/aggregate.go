@@ -14,12 +14,14 @@ import (
 type HeroCatalog struct {
 	Name          string
 	ArtImageURL   *string
+	CardImageURL  *string
 }
 
 type HeroRef struct {
 	ID            int     `json:"hero_id"`
 	Name          string  `json:"name"`
 	ArtImageURL   *string `json:"art_image_url,omitempty"`
+	CardImageURL  *string `json:"card_image_url,omitempty"`
 }
 
 type MetaShareEntry struct {
@@ -45,10 +47,11 @@ type HeroWinRate struct {
 
 type Snapshot struct {
 	Overall        OverallMetaShare `json:"overall"`
-	ThroughRound   int            `json:"through_round"`
-	HeroWinRates   []HeroWinRate  `json:"hero_win_rates"`
-	MatchupHeroes  []HeroRef      `json:"matchup_heroes"`
-	MatchupMatrix  [][]*float64   `json:"matchup_matrix"`
+	FromRound      int              `json:"from_round"`
+	ThroughRound   int              `json:"through_round"`
+	HeroWinRates   []HeroWinRate    `json:"hero_win_rates"`
+	MatchupHeroes  []HeroRef        `json:"matchup_heroes"`
+	MatchupMatrix  [][]*float64     `json:"matchup_matrix"`
 }
 
 type standingRow struct {
@@ -80,21 +83,29 @@ type recordKey struct {
 // Build aggregates event meta from synced round JSON.
 func Build(
 	rounds []repository.EventRound,
+	fromRound int,
 	throughRound int,
 	format *int16,
 	catalog map[int]HeroCatalog,
 	matcher *eventusers.HeroMatcher,
 ) Snapshot {
+	if fromRound <= 0 {
+		fromRound = 1
+	}
 	if throughRound <= 0 {
 		throughRound = maxRoundNumber(rounds)
 	}
-	overall := buildOverallMetaShare(rounds, matcher, catalog)
-	winRates, directed := buildWinRatesAndMatchups(rounds, throughRound, matcher, catalog)
+	if fromRound > throughRound {
+		fromRound = throughRound
+	}
+	overall := buildOverallMetaShare(rounds, fromRound, throughRound, matcher, catalog)
+	winRates, directed := buildWinRatesAndMatchups(rounds, fromRound, throughRound, matcher, catalog)
 
 	matchupHeroes, matrix := buildMatchupMatrix(directed, catalog)
 
 	return Snapshot{
 		Overall:       overall,
+		FromRound:     fromRound,
 		ThroughRound:  throughRound,
 		HeroWinRates:  winRates,
 		MatchupHeroes: matchupHeroes,
@@ -114,6 +125,8 @@ func maxRoundNumber(rounds []repository.EventRound) int {
 
 func buildOverallMetaShare(
 	rounds []repository.EventRound,
+	fromRound int,
+	throughRound int,
 	matcher *eventusers.HeroMatcher,
 	catalog map[int]HeroCatalog,
 ) OverallMetaShare {
@@ -133,11 +146,14 @@ func buildOverallMetaShare(
 		key   fieldKey
 	}
 	playerLatest := map[string]playerEntry{}
-	maxRound := 0
+	sourceRound := 0
 
 	for _, rr := range sorted {
-		if rr.RoundNumber > maxRound {
-			maxRound = rr.RoundNumber
+		if rr.RoundNumber < fromRound || rr.RoundNumber > throughRound {
+			continue
+		}
+		if rr.RoundNumber > sourceRound {
+			sourceRound = rr.RoundNumber
 		}
 		var rows []standingRow
 		_ = json.Unmarshal(rr.Standings, &rows)
@@ -157,9 +173,9 @@ func buildOverallMetaShare(
 		}
 	}
 
-	out.SourceRound = maxRound
+	out.SourceRound = sourceRound
 	for _, rr := range sorted {
-		if rr.RoundNumber == maxRound {
+		if rr.RoundNumber == sourceRound {
 			out.SourceRoundLabel = rr.RoundLabel
 			break
 		}
@@ -201,6 +217,7 @@ func buildOverallMetaShare(
 
 func buildWinRatesAndMatchups(
 	rounds []repository.EventRound,
+	fromRound int,
 	throughRound int,
 	matcher *eventusers.HeroMatcher,
 	catalog map[int]HeroCatalog,
@@ -210,12 +227,15 @@ func buildWinRatesAndMatchups(
 	directed := map[directedPair]int{}
 
 	for _, rr := range rounds {
-		if rr.RoundNumber > throughRound {
+		if rr.RoundNumber < fromRound || rr.RoundNumber > throughRound {
 			continue
 		}
 		var rows []resultRow
 		_ = json.Unmarshal(rr.Results, &rows)
 		for _, row := range rows {
+			if !scrape.ValidMatchPlayers(row.Player1, row.Player2) {
+				continue
+			}
 			winner, loser := resultWinnerKeys(row, matcher, catalog)
 			if winner.name == "" || loser.name == "" {
 				continue
@@ -374,6 +394,7 @@ func heroRef(k fieldKey, catalog map[int]HeroCatalog) HeroRef {
 				ref.Name = cat.Name
 			}
 			ref.ArtImageURL = cat.ArtImageURL
+			ref.CardImageURL = cat.CardImageURL
 		}
 	}
 	return ref

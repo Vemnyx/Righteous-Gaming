@@ -2,6 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { EventTeamSnapshot } from "./EventTeamSnapshot";
 import { EventMetaTab } from "./EventMetaTab";
+import {
+  defaultMetaDay,
+  metaDayRounds,
+  metaEffectiveFromRound,
+  metaEffectiveThroughRound,
+  metaMaxRoundNumber,
+  showMetaDaySplit,
+} from "../utils/eventMetaDay.js";
 import { EventPlayerHistoryModal, parsePlayerHistory } from "./EventPlayerHistoryModal";
 import { PlayerNameButton } from "./PlayerNameButton";
 import { cardFormatName, formatUsesYoungHeroes } from "../constants/cardFormat";
@@ -27,7 +35,9 @@ const heroArtFadeToLeft =
 const heroArtFadeLeft =
   "[mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)]";
 const matchRowsWrapCls = "mx-auto flex w-full max-w-[58rem] flex-col gap-2.5";
-const matchHeroArtEdgeWidth = "w-[9.5rem] sm:w-[11rem]";
+const matchHeroArtEdgeWidth = "w-[13rem] sm:w-[15rem]";
+const matchHeroArtTextInsetLeft = "pl-[13rem] sm:pl-[15rem]";
+const matchHeroArtTextInsetRight = "pr-[13rem] sm:pr-[15rem]";
 
 function TabSpinner() {
   return (
@@ -115,6 +125,18 @@ function playerMatchesNameFilter(player, query) {
   return normalizeHeroKey(player).includes(q);
 }
 
+/** @param {string | undefined | null} name */
+function isValidResultPlayer(name) {
+  const n = normalizeHeroKey(name);
+  if (!n) return false;
+  return n !== "n/a" && n !== "na" && n !== "tbd" && n !== "-";
+}
+
+/** @param {{ player1?: string, player2?: string }} row */
+function isValidResultRow(row) {
+  return isValidResultPlayer(row.player1) && isValidResultPlayer(row.player2);
+}
+
 /** @param {string} player @param {{ first_name: string, last_name: string }[]} members */
 function playerOnTeam(player, members) {
   const p = normalizeHeroKey(player);
@@ -186,18 +208,19 @@ function MatchHeroArtStrip({ align, src, name, isWinner = false }) {
   const winnerCls = isWinner ? "ring-2 ring-inset ring-amber-400/75" : "";
   const fadeCls = align === "left" ? heroArtFadeToRight : heroArtFadeToLeft;
   const objectCls = align === "left" ? "object-left" : "object-right";
-  const edgeCls = align === "left" ? "left-0" : "right-0";
+  const edgeCls = align === "left" ? "left-0 justify-start" : "right-0 justify-end";
+  const cornerCls = align === "left" ? "rounded-l-xl" : "rounded-r-xl";
 
   return (
     <div
-      className={`absolute inset-y-0 z-0 overflow-hidden bg-black/15 ${matchHeroArtEdgeWidth} ${edgeCls} ${winnerCls}`}
+      className={`absolute inset-y-0 z-0 flex overflow-hidden ${matchHeroArtEdgeWidth} ${edgeCls} ${cornerCls} ${winnerCls}`}
       aria-hidden={!src}
     >
       {src ? (
         <img
           src={src}
           alt=""
-          className={`h-full w-full object-contain ${objectCls} ${fadeCls}`}
+          className={`h-full w-auto max-w-full shrink-0 object-contain ${objectCls} ${fadeCls}`}
           draggable={false}
         />
       ) : (
@@ -279,7 +302,7 @@ function MatchRowContent({ player1, hero1, player2, hero2, hero1Art, hero2Art, t
       <MatchHeroArtStrip align="left" src={hero1Art} name={hero1} isWinner={winner === 1} />
       <MatchHeroArtStrip align="right" src={hero2Art} name={hero2} isWinner={winner === 2} />
 
-      <div className="relative z-[1] flex min-w-0 flex-1 pl-[9.5rem] sm:pl-[11rem]">
+      <div className={`relative z-[1] flex min-w-0 flex-1 ${matchHeroArtTextInsetLeft}`}>
         <MatchPlayerTextBlock
           align="left"
           player={player1}
@@ -290,10 +313,10 @@ function MatchRowContent({ player1, hero1, player2, hero2, hero1Art, hero2Art, t
       </div>
       <div className="relative z-[1] flex shrink-0 flex-col items-center justify-center px-2 sm:px-3">
         {table != null && table > 0 ? (
-          <p className="m-0 whitespace-nowrap text-[0.68rem] font-semibold text-[#f4f0fa]/48">Table {table}</p>
+          <p className="m-0 whitespace-nowrap text-[0.875rem] font-semibold text-[#f4f0fa]/55">Table {table}</p>
         ) : null}
       </div>
-      <div className="relative z-[1] flex min-w-0 flex-1 pr-[9.5rem] sm:pr-[11rem]">
+      <div className={`relative z-[1] flex min-w-0 flex-1 ${matchHeroArtTextInsetRight}`}>
         <MatchPlayerTextBlock
           align="right"
           player={player2}
@@ -511,6 +534,8 @@ export function EventDetailPage({ isLight, active, eventId }) {
   );
   const [eventMetaLoading, setEventMetaLoading] = useState(false);
   const [metaRound, setMetaRound] = useState(1);
+  const [metaDay, setMetaDay] = useState(/** @type {import("../utils/eventMetaDay.js").MetaDay} */ ("day1"));
+  const [metaSubTab, setMetaSubTab] = useState(/** @type {"share" | "round-stats" | "matchups"} */ ("share"));
 
   const [historyPlayer, setHistoryPlayer] = useState(/** @type {string | null} */ (null));
   const [playerHistory, setPlayerHistory] = useState(
@@ -611,6 +636,36 @@ export function EventDetailPage({ isLight, active, eventId }) {
   }, [active, user, eventId]);
 
   useEffect(() => {
+    if (!active || !user || eventData.length > 0) return undefined;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/events/${eventId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const next = Array.isArray(data.event_data) ? data.event_data : [];
+        if (next.length === 0 || cancelled) return;
+        setEvent(data.event ?? null);
+        setEventData(next);
+        setDataIdx(0);
+        setStreamTabIdx(0);
+      } catch {
+        /* ignore background poll errors */
+      }
+    };
+    const timer = setInterval(() => {
+      void poll();
+    }, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [active, user, eventId, eventData.length]);
+
+  useEffect(() => {
     if (!active || !user || !event) return undefined;
     let cancelled = false;
     (async () => {
@@ -650,7 +705,14 @@ export function EventDetailPage({ isLight, active, eventId }) {
       if (list.length > 0) {
         const max = list.reduce((m, r) => (r.round_number > m ? r.round_number : m), list[0].round_number ?? 1);
         setRound(max);
-        setMetaRound(max);
+        const day = defaultMetaDay(max);
+        setMetaDay(day);
+        const dayList = metaDayRounds(day, list);
+        const metaMax =
+          dayList.length > 0
+            ? dayList.reduce((m, r) => (r.round_number > m ? r.round_number : m), dayList[0].round_number ?? 1)
+            : max;
+        setMetaRound(metaMax);
       }
     } catch {
       setRounds([]);
@@ -669,10 +731,15 @@ export function EventDetailPage({ isLight, active, eventId }) {
     setEventMetaLoading(true);
     try {
       const token = await user.getIdToken();
+      const throughRound = metaEffectiveThroughRound(metaDay, metaSubTab, metaRound, rounds);
+      const fromRound = metaEffectiveFromRound(metaDay, rounds);
       const params = new URLSearchParams({
         event_data_id: String(activeData.id),
-        through_round: String(metaRound),
+        through_round: String(throughRound),
       });
+      if (showMetaDaySplit(rounds)) {
+        params.set("from_round", String(fromRound));
+      }
       const res = await fetch(`/api/events/${eventId}/meta?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -684,12 +751,29 @@ export function EventDetailPage({ isLight, active, eventId }) {
     } finally {
       setEventMetaLoading(false);
     }
-  }, [user, activeData, metaRound, eventId]);
+  }, [user, activeData, metaRound, metaDay, metaSubTab, rounds, eventId]);
 
   useEffect(() => {
     if (!active || !showMeta || !activeData || roundsLoading) return;
     void loadEventMeta();
-  }, [active, showMeta, activeData, metaRound, roundsLoading, loadEventMeta]);
+  }, [active, showMeta, activeData, metaRound, metaDay, metaSubTab, roundsLoading, loadEventMeta]);
+
+  const metaDaySplitActive = showMetaDaySplit(rounds);
+  const metaRoundOptions = useMemo(() => metaDayRounds(metaDay, rounds), [metaDay, rounds]);
+
+  const onMetaDayChange = useCallback(
+    (day) => {
+      setMetaDay(day);
+      const dayList = metaDayRounds(day, rounds);
+      if (dayList.length === 0) return;
+      const maxInDay = dayList.reduce(
+        (m, r) => (r.round_number > m ? r.round_number : m),
+        dayList[0].round_number ?? 1,
+      );
+      setMetaRound(maxInDay);
+    },
+    [rounds],
+  );
 
   const openPlayerHistory = useCallback((name) => {
     const label = String(name ?? "").trim();
@@ -950,7 +1034,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
   }, [mainTab, pairings, teamMembers, nameFilter]);
 
   const filteredResults = useMemo(() => {
-    let rows = results;
+    let rows = results.filter(isValidResultRow);
     if (mainTab === "team") {
       if (teamMembers.length === 0) return [];
       rows = rows
@@ -1077,7 +1161,22 @@ export function EventDetailPage({ isLight, active, eventId }) {
         {mainTabBtn("streams", "Streams")}
       </nav>
 
-      {showCoverage && activeData ? (
+      {eventData.length === 0 ? (
+        <div
+          className={`rounded-xl border px-6 py-10 text-center ${
+            isLight ? "border-white/[0.12] bg-black/25" : rowChrome
+          }`}
+        >
+          <p className="m-0 text-[0.9375rem] font-medium text-[#f4f0fa]">Coverage coming soon</p>
+          <p className="mx-auto mt-2 max-w-md text-[0.85rem] leading-relaxed text-[#f4f0fa]/60">
+            FabTCG hasn&apos;t published coverage links for this event yet. Pairings, results, and standings will
+            appear here automatically once they&apos;re available.
+          </p>
+          <p className="m-0 mt-3 text-[0.75rem] text-[#f4f0fa]/45">Checking for updates every minute…</p>
+        </div>
+      ) : null}
+
+      {eventData.length > 0 && showCoverage && activeData ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 flex-wrap items-center gap-3">
@@ -1206,19 +1305,25 @@ export function EventDetailPage({ isLight, active, eventId }) {
         </>
       ) : null}
 
-      {showMeta && activeData ? (
+      {eventData.length > 0 && showMeta && activeData ? (
         <EventMetaTab
           snapshot={eventMetaSnapshot}
-          rounds={rounds}
+          rounds={metaRoundOptions}
           metaRound={metaRound}
           onMetaRoundChange={setMetaRound}
+          metaSubTab={metaSubTab}
+          onMetaSubTabChange={setMetaSubTab}
+          showMetaDaySplit={metaDaySplitActive}
+          metaDay={metaDay}
+          onMetaDayChange={onMetaDayChange}
+          maxRound={metaMaxRoundNumber(rounds)}
           loading={eventMetaLoading || roundsLoading}
           isLight={isLight}
           rowChrome={rowChrome}
         />
       ) : null}
 
-      {mainTab === "streams" && activeData ? (
+      {eventData.length > 0 && mainTab === "streams" && activeData ? (
         <>
           {streamTabs.length > 1 ? (
             <div className="inline-flex flex-wrap gap-0.5 rounded-lg border border-white/[0.1] bg-black/20 p-1">

@@ -2,6 +2,7 @@
  *   hero_id: number,
  *   name: string,
  *   art_image_url?: string | null,
+ *   card_image_url?: string | null,
  * }} MetaHeroRef */
 
 /** @typedef {{
@@ -31,6 +32,7 @@
 
 /** @typedef {{
  *   overall: OverallMetaShare,
+ *   from_round?: number,
  *   through_round: number,
  *   hero_win_rates: HeroWinRateRow[],
  *   matchup_heroes: MetaHeroRef[],
@@ -88,6 +90,7 @@ export function parseEventMetaSnapshot(raw) {
         hero_id: Number(h.hero_id) || 0,
         name: String(h.name ?? ""),
         art_image_url: h.art_image_url != null ? String(h.art_image_url) : null,
+        card_image_url: h.card_image_url != null ? String(h.card_image_url) : null,
       });
     }
   }
@@ -115,6 +118,7 @@ export function parseEventMetaSnapshot(raw) {
       heroes,
     },
     through_round: Number(o.through_round) || 0,
+    from_round: Number(o.from_round) || 1,
     hero_win_rates: winRates,
     matchup_heroes: matchupHeroes,
     matchup_matrix: matrix,

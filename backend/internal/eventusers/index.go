@@ -112,6 +112,9 @@ func IndexRound(ctx context.Context, repo *repository.Repository, round reposito
 	var results []resultRow
 	_ = json.Unmarshal(round.Results, &results)
 	for _, row := range results {
+		if !scrape.ValidMatchPlayers(row.Player1, row.Player2) {
+			continue
+		}
 		hero1 := cleanHero(row.Hero1)
 		hero2 := cleanHero(row.Hero2)
 		for _, u := range users {

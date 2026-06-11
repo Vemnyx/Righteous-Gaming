@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 /** @typedef {"share" | "round-stats" | "matchups"} MetaSubTab */
+/** @typedef {import("../utils/eventMetaDay.js").MetaDay} MetaDay */
 
 /**
  * @param {{
@@ -8,6 +9,12 @@ import { useState } from "react";
  *   rounds: { round_number: number, round_label?: string }[],
  *   metaRound: number,
  *   onMetaRoundChange: (round: number) => void,
+ *   metaSubTab: MetaSubTab,
+ *   onMetaSubTabChange: (tab: MetaSubTab) => void,
+ *   showMetaDaySplit?: boolean,
+ *   metaDay?: MetaDay,
+ *   onMetaDayChange?: (day: MetaDay) => void,
+ *   maxRound?: number,
  *   loading: boolean,
  *   isLight: boolean,
  *   rowChrome: string,
@@ -18,11 +25,17 @@ export function EventMetaTab({
   rounds,
   metaRound,
   onMetaRoundChange,
+  metaSubTab,
+  onMetaSubTabChange,
+  showMetaDaySplit = false,
+  metaDay = "day1",
+  onMetaDayChange,
+  maxRound = 0,
   loading,
   isLight,
   rowChrome,
 }) {
-  const [metaSubTab, setMetaSubTab] = useState(/** @type {MetaSubTab} */ ("share"));
+  const [focusedMatchupHeroId, setFocusedMatchupHeroId] = useState(/** @type {number | null} */ (null));
   const sectionTitle = "text-[0.72rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/50";
   const border = isLight ? "border-white/[0.12] bg-black/25" : rowChrome;
   const heroArtFade =
@@ -36,12 +49,79 @@ export function EventMetaTab({
         className={`rounded-md px-2.5 py-1 text-[0.8125rem] font-medium transition ${
           on ? "bg-white/10 text-[#f4f0fa]" : "text-[#f4f0fa]/55 hover:bg-white/[0.06] hover:text-[#f4f0fa]/85"
         }`}
-        onClick={() => setMetaSubTab(id)}
+        onClick={() => onMetaSubTabChange(id)}
       >
         {label}
       </button>
     );
   };
+
+  const matchupHeroes = snapshot?.matchup_heroes ?? [];
+  const throughRound = snapshot?.through_round ?? 0;
+
+  useEffect(() => {
+    setFocusedMatchupHeroId(null);
+  }, [metaSubTab, metaRound, throughRound, metaDay]);
+
+  const dayLabel = metaDay === "day2" ? "Day 2" : "Day 1";
+  const roundScopeLabel =
+    showMetaDaySplit && snapshot
+      ? metaSubTab === "share"
+        ? metaDay === "day1"
+          ? "R1–R8"
+          : `R9–R${snapshot.through_round || maxRound}`
+        : snapshot.from_round && snapshot.from_round > 1
+          ? `R${snapshot.from_round}–R${snapshot.through_round}`
+          : `through R${snapshot.through_round}`
+      : snapshot
+        ? `through R${snapshot.through_round}`
+        : "";
+
+  const roundSelect =
+    metaSubTab !== "share" && rounds.length > 0 ? (
+      <select
+        className="rg-select shrink-0 rounded-md border border-white/15 bg-black/25 py-1.5 pl-2.5 text-[0.8125rem] text-[#f4f0fa] outline-none focus:border-purple-400/45"
+        value={metaRound}
+        aria-label="Round"
+        onChange={(e) => onMetaRoundChange(Number(e.target.value))}
+      >
+        {rounds.map((r) => (
+          <option key={r.round_number} value={r.round_number}>
+            {r.round_label || `Round ${r.round_number}`}
+          </option>
+        ))}
+      </select>
+    ) : null;
+
+  const daySelect = showMetaDaySplit ? (
+    <select
+      className="rg-select shrink-0 rounded-md border border-white/15 bg-black/25 py-1.5 pl-2.5 text-[0.8125rem] text-[#f4f0fa] outline-none focus:border-purple-400/45"
+      value={metaDay}
+      aria-label="Day"
+      onChange={(e) => onMetaDayChange?.(/** @type {MetaDay} */ (e.target.value))}
+    >
+      <option value="day1">Day 1</option>
+      <option value="day2">Day 2</option>
+    </select>
+  ) : null;
+
+  const focusedMatchupIndex = useMemo(() => {
+    if (focusedMatchupHeroId == null) return -1;
+    return matchupHeroes.findIndex((h) => h.hero_id === focusedMatchupHeroId);
+  }, [focusedMatchupHeroId, matchupHeroes]);
+
+  const matchupDisplayRows = useMemo(() => {
+    if (focusedMatchupIndex >= 0) {
+      return [{ hero: matchupHeroes[focusedMatchupIndex], index: focusedMatchupIndex }];
+    }
+    return matchupHeroes.map((hero, index) => ({ hero, index }));
+  }, [focusedMatchupIndex, matchupHeroes]);
+
+  const toggleMatchupHero = (heroId) => {
+    setFocusedMatchupHeroId((prev) => (prev === heroId ? null : heroId));
+  };
+
+  const focusedMatchupHero = focusedMatchupIndex >= 0 ? matchupHeroes[focusedMatchupIndex] : null;
 
   if (loading) {
     return (
@@ -58,41 +138,27 @@ export function EventMetaTab({
   const overall = snapshot.overall;
   const maxBarPct = overall.heroes[0]?.pct ?? 100;
 
-  const roundSelect = (
-    <label className="flex items-center gap-2 text-[0.8125rem] text-[#f4f0fa]/70">
-      Through round
-      <select
-        className="rg-select rounded-md border border-white/15 bg-black/25 py-1.5 pl-2.5 text-[0.8125rem] text-[#f4f0fa] outline-none focus:border-purple-400/45"
-        value={metaRound}
-        onChange={(e) => onMetaRoundChange(Number(e.target.value))}
-      >
-        {rounds.map((r) => (
-          <option key={r.round_number} value={r.round_number}>
-            {r.round_label || `Round ${r.round_number}`}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="inline-flex flex-wrap gap-0.5 rounded-lg bg-black/15 p-0.5" role="tablist">
-          {subTabBtn("share", "Meta Share")}
-          {subTabBtn("round-stats", "Round Stats")}
-          {subTabBtn("matchups", "Matchups")}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="inline-flex flex-wrap gap-0.5 rounded-lg bg-black/15 p-0.5" role="tablist">
+            {subTabBtn("share", "Meta Share")}
+            {subTabBtn("round-stats", "Round Stats")}
+            {subTabBtn("matchups", "Matchups")}
+          </div>
+          {daySelect}
         </div>
-        {metaSubTab !== "share" ? roundSelect : null}
+        {roundSelect}
       </div>
 
       {metaSubTab === "share" ? (
         <section>
           <h3 className={`m-0 mb-1 ${sectionTitle}`}>Field meta share</h3>
           <p className="m-0 mb-4 text-[0.82rem] text-[#f4f0fa]/60">
-            {overall.total_decks} decks across the full event
+            {overall.total_decks} decks{showMetaDaySplit ? ` on ${dayLabel}` : " across the full event"}
             {overall.source_round > 0
-              ? ` · each player counted once (latest standing through R${overall.source_round})`
+              ? ` · each player counted once (latest standing ${roundScopeLabel})`
               : ""}
           </p>
           {overall.heroes.length === 0 ? (
@@ -111,7 +177,7 @@ export function EventMetaTab({
                     </span>
                     <div className="relative min-h-[3.25rem] overflow-hidden rounded-lg border border-white/[0.08] bg-black/20">
                       <div
-                        className="absolute inset-y-0 left-0 overflow-hidden"
+                        className="absolute inset-y-0 left-0 overflow-hidden bg-gradient-to-r from-purple-600/90 via-purple-500/75 to-purple-400/45"
                         style={{ width: `${Math.max(barWidth, hero.pct > 0 ? 8 : 0)}%` }}
                         aria-hidden
                       >
@@ -122,12 +188,8 @@ export function EventMetaTab({
                             className={`h-full w-full object-contain object-left ${heroArtFade}`}
                             draggable={false}
                           />
-                        ) : (
-                          <div
-                            className={`h-full w-full bg-gradient-to-r from-purple-900/40 via-purple-800/20 to-transparent ${heroArtFade}`}
-                          />
-                        )}
-                        <div className="absolute inset-0 bg-black/25" />
+                        ) : null}
+                        {hero.art_image_url ? <div className="absolute inset-0 bg-purple-800/25" /> : null}
                       </div>
                       <div className="relative z-[1] flex h-full min-h-[3.25rem] items-center justify-between gap-2 px-3 py-1.5 text-[0.78rem]">
                         <span className="font-medium tabular-nums text-[#f4f0fa]/85">
@@ -146,7 +208,9 @@ export function EventMetaTab({
 
       {metaSubTab === "round-stats" ? (
         <section>
-          <h3 className={`m-0 mb-3 ${sectionTitle}`}>Hero win rate (through R{snapshot.through_round})</h3>
+          <h3 className={`m-0 mb-3 ${sectionTitle}`}>
+            Hero win rate{showMetaDaySplit ? ` (${dayLabel}, ${roundScopeLabel})` : ` (${roundScopeLabel})`}
+          </h3>
           {snapshot.hero_win_rates.length === 0 ? (
             <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">No results through this round yet.</p>
           ) : (
@@ -180,7 +244,9 @@ export function EventMetaTab({
         <section>
           <h3 className={`m-0 mb-1 ${sectionTitle}`}>Matchup grid</h3>
           <p className="m-0 mb-3 text-[0.75rem] text-[#f4f0fa]/50">
-            Row hero win rate vs column hero (through R{snapshot.through_round})
+            {focusedMatchupHero
+              ? `Matchups for ${focusedMatchupHero.name} (${roundScopeLabel}) · click their card again to show all heroes`
+              : `Row hero win rate vs column hero (${roundScopeLabel}) · click a hero card to focus`}
           </p>
           {snapshot.matchup_heroes.length === 0 ? (
             <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">No head-to-head data through this round.</p>
@@ -192,16 +258,24 @@ export function EventMetaTab({
                     <th className="sticky left-0 z-[2] bg-[#120a1c]/95 p-1" />
                     {snapshot.matchup_heroes.map((h) => (
                       <th key={`col-${h.hero_id}-${h.name}`} className="p-1">
-                        <MatchupHeroArt hero={h} />
+                        <MatchupHeroArt
+                          hero={h}
+                          selected={focusedMatchupHeroId === h.hero_id}
+                          onClick={() => toggleMatchupHero(h.hero_id)}
+                        />
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {snapshot.matchup_heroes.map((rowHero, i) => (
+                  {matchupDisplayRows.map(({ hero: rowHero, index: i }) => (
                     <tr key={`row-${rowHero.hero_id}-${rowHero.name}`}>
                       <th className="sticky left-0 z-[1] bg-[#120a1c]/95 p-1">
-                        <MatchupHeroArt hero={rowHero} />
+                        <MatchupHeroArt
+                          hero={rowHero}
+                          selected={focusedMatchupHeroId === rowHero.hero_id}
+                          onClick={() => toggleMatchupHero(rowHero.hero_id)}
+                        />
                       </th>
                       {snapshot.matchup_matrix[i]?.map((cell, j) => (
                         <td
@@ -230,24 +304,42 @@ export function EventMetaTab({
   );
 }
 
-/** @param {{ hero: { name: string, art_image_url?: string | null } }} props */
-function MatchupHeroArt({ hero }) {
+/**
+ * @param {{
+ *   hero: { name: string, card_image_url?: string | null, art_image_url?: string | null },
+ *   selected?: boolean,
+ *   onClick?: () => void,
+ * }} props
+ */
+function MatchupHeroArt({ hero, selected = false, onClick }) {
+  const imageUrl = hero.card_image_url || hero.art_image_url;
+  const title = selected
+    ? `${hero.name} — click to show all matchups`
+    : `${hero.name} — click to show their matchups`;
+
   return (
-    <div
-      className="mx-auto h-11 w-9 overflow-hidden rounded-md border border-white/[0.08] bg-black/25"
-      title={hero.name}
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`mx-auto block h-11 w-9 overflow-hidden rounded-md border bg-black/25 transition ${
+        selected
+          ? "border-purple-400/80 ring-2 ring-purple-400/45"
+          : "border-white/[0.08] hover:border-purple-400/45 hover:bg-black/35"
+      }`}
+      title={title}
     >
-      {hero.art_image_url ? (
+      {imageUrl ? (
         <img
-          src={hero.art_image_url}
+          src={imageUrl}
           alt=""
-          className="h-full w-full object-cover object-left"
+          className="h-full w-full object-cover object-top"
           draggable={false}
         />
       ) : (
         <div className="h-full w-full bg-gradient-to-b from-purple-900/40 to-black/20" />
       )}
-    </div>
+    </button>
   );
 }
 

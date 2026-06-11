@@ -199,6 +199,32 @@ ORDER BY start_date ASC, id ASC`, eventID)
 	return out, rows.Err()
 }
 
+// ListEventsWithoutCoverage returns events that have no coverage segments yet and may still gain links.
+func (r *Repository) ListEventsWithoutCoverage(ctx context.Context, now time.Time) ([]Event, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	rows, err := r.pool.Query(ctx, `
+SELECT e.id, e.event_url, e.title, e.image_url, e.date_text, e.venue, e.start_date, e.end_date, e.created_at
+FROM events e
+WHERE NOT EXISTS (SELECT 1 FROM event_data ed WHERE ed.event_id = e.id)
+AND (e.end_date IS NULL OR e.end_date >= $1::timestamptz - INTERVAL '1 day')
+ORDER BY e.id ASC`, now)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list events without coverage: %w", err)
+	}
+	defer rows.Close()
+	var out []Event
+	for rows.Next() {
+		e, err := scanEvent(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 func (r *Repository) GetEventDataByID(ctx context.Context, id int) (EventData, error) {
 	var ed EventData
 	var raw []byte

@@ -281,9 +281,10 @@ func (h *eventsHTTP) adminCreateEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to fetch event page: "+err.Error(), http.StatusBadGateway)
 		return
 	}
-	if len(parsed.CoverageLinks) == 0 {
-		http.Error(w, "no coverage links found on event page", http.StatusBadRequest)
-		return
+
+	title := strings.TrimSpace(parsed.Title)
+	if title == "" {
+		title = "Upcoming event"
 	}
 
 	var imageURL *string
@@ -305,10 +306,9 @@ func (h *eventsHTTP) adminCreateEvent(w http.ResponseWriter, r *http.Request) {
 			endDate = &e
 		}
 	}
-	eventFormat := evt.ParseCardFormat(parsed.FormatText)
 
 	e, err := h.app.Repo.CreateEvent(r.Context(), repository.CreateEventParams{
-		EventURL: eventURL, Title: parsed.Title, ImageURL: imageURL,
+		EventURL: eventURL, Title: title, ImageURL: imageURL,
 		DateText: dateText, Venue: venue, StartDate: startDate, EndDate: endDate,
 	})
 	if err != nil {
@@ -317,44 +317,23 @@ func (h *eventsHTTP) adminCreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dataOut := make([]eventDataJSON, 0, len(parsed.CoverageLinks))
-	for _, link := range parsed.CoverageLinks {
-		et, ok := domain.EventTypeFromCoverageLabel(link.Label)
-		if !ok {
-			continue
-		}
-		var label *string
-		if link.Label != "" {
-			label = &link.Label
-		}
-		var edStart, edEnd time.Time
-		if startDate != nil && endDate != nil {
-			edStart, edEnd = evt.EventDataDateRange(*startDate, *endDate, et.DurationDays())
-		} else {
-			now := time.Now().UTC()
-			ps := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-			peDay := ps.AddDate(0, 0, et.DurationDays()-1)
-			pe := time.Date(peDay.Year(), peDay.Month(), peDay.Day(), 23, 59, 59, 999999999, time.UTC)
-			edStart, edEnd = evt.EventDataDateRange(ps, pe, et.DurationDays())
-		}
-		tabs := et.StreamTabLabels()
-		ed, err := h.app.Repo.CreateEventData(r.Context(), repository.CreateEventDataParams{
-			EventID: e.ID, EventType: int16(et), StartDate: edStart, EndDate: edEnd,
-			CoverageSlug: link.Slug, CoverageURL: link.URL, Label: label, Format: eventFormat,
-			StreamURLs: evt.EmptyStreamURLs(len(tabs)),
-		})
-		if err != nil {
-			log.Error("create event data", "error", err)
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
-		}
+	createdData, err := eventsync.CreateMissingEventData(r.Context(), h.app.Repo, e, parsed)
+	if err != nil {
+		log.Error("create event data", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	dataOut := make([]eventDataJSON, 0, len(createdData))
+	for _, ed := range createdData {
 		dataOut = append(dataOut, eventDataToJSON(ed))
 	}
 
-	syncCtx, cancel := context.WithTimeout(r.Context(), eventsync.CreateSyncTimeout)
-	defer cancel()
-	if err := eventsync.SyncEvent(syncCtx, h.app.Repo, h.scrape, e.ID); err != nil {
-		log.Error("event create sync", "event_id", e.ID, "error", err)
+	if len(createdData) > 0 {
+		syncCtx, cancel := context.WithTimeout(r.Context(), eventsync.CreateSyncTimeout)
+		defer cancel()
+		if err := eventsync.SyncEvent(syncCtx, h.app.Repo, h.scrape, e.ID); err != nil {
+			log.Error("event create sync", "event_id", e.ID, "error", err)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -465,11 +444,30 @@ func (h *eventsHTTP) getEventRoundData(w http.ResponseWriter, r *http.Request, f
 	case "pairings":
 		payload["pairings"] = rr.Pairings
 	case "results":
-		payload["results"] = rr.Results
+		payload["results"] = filterStoredResults(rr.Results)
 	case "standings":
 		payload["standings"] = rr.Standings
 	}
 	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func filterStoredResults(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return raw
+	}
+	var rows []scrape.ResultRow
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return raw
+	}
+	filtered := scrape.FilterResultRows(rows)
+	if len(filtered) == len(rows) {
+		return raw
+	}
+	out, err := json.Marshal(filtered)
+	if err != nil {
+		return raw
+	}
+	return out
 }
 
 func (h *eventsHTTP) getEventPairings(w http.ResponseWriter, r *http.Request) {
@@ -482,6 +480,21 @@ func (h *eventsHTTP) getEventResults(w http.ResponseWriter, r *http.Request) {
 
 func (h *eventsHTTP) getEventStandings(w http.ResponseWriter, r *http.Request) {
 	h.getEventRoundData(w, r, "standings")
+}
+
+func parseFromRoundQuery(r *http.Request, defaultFrom, throughRound int) int {
+	raw := strings.TrimSpace(r.URL.Query().Get("from_round"))
+	if raw == "" {
+		return defaultFrom
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return defaultFrom
+	}
+	if throughRound > 0 && n > throughRound {
+		return throughRound
+	}
+	return n
 }
 
 func parseThroughRoundQuery(r *http.Request, maxRound int) int {
@@ -528,6 +541,7 @@ func (h *eventsHTTP) getEventMeta(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	throughRound := parseThroughRoundQuery(r, maxRound)
+	fromRound := parseFromRoundQuery(r, 1, throughRound)
 
 	heroRows, err := h.app.Repo.ListHeroesForMatch(ctx)
 	if err != nil {
@@ -545,10 +559,10 @@ func (h *eventsHTTP) getEventMeta(w http.ResponseWriter, r *http.Request) {
 	}
 	catalog := make(map[int]eventmeta.HeroCatalog, len(displayRows))
 	for _, row := range displayRows {
-		catalog[row.ID] = eventmeta.HeroCatalog{Name: row.Name, ArtImageURL: row.ArtImageURL}
+		catalog[row.ID] = eventmeta.HeroCatalog{Name: row.Name, ArtImageURL: row.ArtImageURL, CardImageURL: row.CardImageURL}
 	}
 
-	snap := eventmeta.Build(rounds, throughRound, ed.Format, catalog, matcher)
+	snap := eventmeta.Build(rounds, fromRound, throughRound, ed.Format, catalog, matcher)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(snap)

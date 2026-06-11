@@ -170,16 +170,21 @@ func (c *Client) FetchEventPageData(ctx context.Context, eventURL string) (Event
 
 	if htmlText, err := c.FetchHTMLReferer(ctx, eventURL, fabHomeURL); err == nil {
 		parsed := ParseEventPage(htmlText)
+		if parsed.Title == "" {
+			parsed.Title = textFromFirstTag(htmlText, "h1")
+		}
 		if len(parsed.CoverageLinks) > 0 {
-			if parsed.Title == "" {
-				parsed.Title = textFromFirstTag(htmlText, "h1")
-			}
 			return parsed, nil
 		}
 		if apiURL := wpTournamentAPIURLFromHTML(htmlText); apiURL != "" {
 			if out, err := c.fetchEventPageFromTournamentAPI(ctx, apiURL, eventURL); err == nil {
-				return out, nil
+				if len(out.CoverageLinks) > 0 || eventPageHasMetadata(out) {
+					return out, nil
+				}
 			}
+		}
+		if eventPageHasMetadata(parsed) {
+			return parsed, nil
 		}
 	}
 	return c.fetchEventPageViaWordPress(ctx, eventURL)
@@ -290,10 +295,18 @@ func (c *Client) fetchEventPageFromTournamentAPI(ctx context.Context, apiURL, re
 	if out.ImageURL == "" {
 		out.ImageURL = metaContent(contentHTML, "og:image")
 	}
-	if len(out.CoverageLinks) == 0 {
-		return EventPageData{}, fmt.Errorf("no coverage links found in tournament API response")
+	if len(out.CoverageLinks) == 0 && !eventPageHasMetadata(out) {
+		return EventPageData{}, fmt.Errorf("no event metadata found in tournament API response")
 	}
 	return out, nil
+}
+
+func eventPageHasMetadata(d EventPageData) bool {
+	return strings.TrimSpace(d.Title) != "" ||
+		strings.TrimSpace(d.DateText) != "" ||
+		strings.TrimSpace(d.Venue) != "" ||
+		strings.TrimSpace(d.ImageURL) != "" ||
+		strings.TrimSpace(d.FormatText) != ""
 }
 
 func extractFabDateText(htmlText string) string {
@@ -497,8 +510,11 @@ func ParseResults(htmlText string) []ResultRow {
 		lower := strings.ToLower(winnerSide)
 		if strings.Contains(lower, "player 1") {
 			winner = p1
-		} else if strings.Contains(lower, "player 2") {
+		} else 		if strings.Contains(lower, "player 2") {
 			winner = p2
+		}
+		if !ValidMatchPlayers(p1, p2) {
+			continue
 		}
 		out = append(out, ResultRow{
 			Player1:    p1,
@@ -585,6 +601,38 @@ func cleanInlineText(s string) string {
 	s = html.UnescapeString(s)
 	s = stripTags(s)
 	return reWhitespace.ReplaceAllString(strings.TrimSpace(s), " ")
+}
+
+// ValidPlayerName reports whether s is a real player name from FabTCG coverage.
+func ValidPlayerName(s string) bool {
+	s = cleanInlineText(s)
+	if s == "" {
+		return false
+	}
+	switch strings.ToLower(s) {
+	case "n/a", "na", "tbd", "-":
+		return false
+	}
+	return true
+}
+
+// ValidMatchPlayers reports whether both sides of a pairing/result row are real players.
+func ValidMatchPlayers(player1, player2 string) bool {
+	return ValidPlayerName(player1) && ValidPlayerName(player2)
+}
+
+// FilterResultRows drops result rows with placeholder player names (e.g. N/A).
+func FilterResultRows(rows []ResultRow) []ResultRow {
+	if len(rows) == 0 {
+		return rows
+	}
+	out := make([]ResultRow, 0, len(rows))
+	for _, row := range rows {
+		if ValidMatchPlayers(row.Player1, row.Player2) {
+			out = append(out, row)
+		}
+	}
+	return out
 }
 
 func atoi(s string) int {

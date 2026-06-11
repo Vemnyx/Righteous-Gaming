@@ -123,20 +123,21 @@ type HeroMatchRow struct {
 	Young bool
 }
 
-// HeroDisplayRow is used for event meta charts (name + art).
+// HeroDisplayRow is used for event meta charts (name + art + card).
 type HeroDisplayRow struct {
-	ID          int
-	Name        string
-	ArtImageURL *string
+	ID            int
+	Name          string
+	ArtImageURL   *string
+	CardImageURL  *string
 }
 
-// ListHeroDisplayRows returns hero id, name, and art for meta UI.
+// ListHeroDisplayRows returns hero id, name, art, and card image for meta UI.
 func (r *Repository) ListHeroDisplayRows(ctx context.Context) ([]HeroDisplayRow, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	rows, err := r.pool.Query(ctx, `
-SELECT id, name, art_image_url
+SELECT id, name, art_image_url, card_image_url
 FROM heroes
 ORDER BY id ASC`)
 	if err != nil {
@@ -146,7 +147,7 @@ ORDER BY id ASC`)
 	var out []HeroDisplayRow
 	for rows.Next() {
 		var h HeroDisplayRow
-		if err := rows.Scan(&h.ID, &h.Name, &h.ArtImageURL); err != nil {
+		if err := rows.Scan(&h.ID, &h.Name, &h.ArtImageURL, &h.CardImageURL); err != nil {
 			return nil, fmt.Errorf("repository: scan hero display row: %w", err)
 		}
 		out = append(out, h)

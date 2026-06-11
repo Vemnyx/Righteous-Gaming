@@ -52,7 +52,27 @@ func (r *Runner) Stop() {
 }
 
 func (r *Runner) tick(ctx context.Context) {
-	rows, err := r.repo.ListActiveEventData(ctx, time.Now().UTC())
+	now := time.Now().UTC()
+	pending, err := r.repo.ListEventsWithoutCoverage(ctx, now)
+	if err != nil {
+		log.Error("event sync list pending coverage", "error", err)
+	} else {
+		for _, e := range pending {
+			created, err := DiscoverEventCoverage(ctx, r.repo, r.scrape, e)
+			if err != nil {
+				log.Error("event sync discover coverage", "event_id", e.ID, "error", err)
+				continue
+			}
+			for _, ed := range created {
+				log.Info("event sync discovered coverage", "event_id", e.ID, "event_data_id", ed.ID, "slug", ed.CoverageSlug)
+				if err := SyncEventData(ctx, r.repo, r.scrape, ed); err != nil {
+					log.Error("event sync", "event_data_id", ed.ID, "error", err)
+				}
+			}
+		}
+	}
+
+	rows, err := r.repo.ListActiveEventData(ctx, now)
 	if err != nil {
 		log.Error("event sync list active", "error", err)
 		return
@@ -182,7 +202,7 @@ func encodeResults(rows []scrape.ResultRow) (json.RawMessage, error) {
 		WinnerName string `json:"winner_name"`
 	}
 	out := make([]row, 0, len(rows))
-	for _, r := range rows {
+	for _, r := range scrape.FilterResultRows(rows) {
 		out = append(out, row{
 			Player1: r.Player1, Player2: r.Player2, Hero1: r.Hero1, Hero2: r.Hero2,
 			WinnerSide: r.WinnerSide, WinnerName: r.WinnerName,

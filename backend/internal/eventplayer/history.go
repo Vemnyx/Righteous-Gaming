@@ -81,6 +81,9 @@ func rowFromResults(rr repository.EventRound, query string) *HistoryRow {
 	var rows []resultRow
 	_ = json.Unmarshal(rr.Results, &rows)
 	for _, row := range rows {
+		if !scrape.ValidMatchPlayers(row.Player1, row.Player2) {
+			continue
+		}
 		side := playerSide(row.Player1, row.Player2, query)
 		if side == 0 {
 			continue
