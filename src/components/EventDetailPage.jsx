@@ -15,9 +15,14 @@ function segmentLabel(d) {
 }
 
 const MATCH_ROW_MIN_H = "min-h-[5.5rem]";
-/** Soft edge fade for standings/deck-style panels only. */
+/** Soft edge fade for hero art panels (deck-style). */
+const heroArtFadeToRight =
+  "[mask-image:linear-gradient(to_right,black_0%,black_72%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_72%,transparent_100%)]";
+const heroArtFadeToLeft =
+  "[mask-image:linear-gradient(to_left,black_0%,black_72%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_72%,transparent_100%)]";
 const heroArtFadeLeft =
   "[mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)]";
+const matchRowsWrapCls = "mx-auto flex w-full max-w-xl flex-col gap-2.5";
 
 function TabSpinner() {
   return (
@@ -167,7 +172,44 @@ function orientMatchRowForTeam(row, members) {
   };
 }
 
-const matchHeroArtWidth = "w-[5.5rem] shrink-0 sm:w-[6.25rem]";
+const matchHeroArtWidth = "w-[46%] max-w-[8.5rem] sm:max-w-[9rem]";
+
+/**
+ * Full-height hero art bleeding toward center with edge fade.
+ * @param {{ side: "left" | "right", src?: string | null, name?: string | null, isWinner?: boolean }} props
+ */
+function MatchHeroArtPanel({ side, src, name, isWinner = false }) {
+  const label = name != null && String(name).trim() !== "" ? String(name).trim() : "Hero";
+  const winnerCls = isWinner ? "ring-2 ring-inset ring-amber-400/75" : "";
+  const posCls = side === "left" ? `left-0 ${matchHeroArtWidth}` : `right-0 ${matchHeroArtWidth}`;
+  const fadeCls = side === "left" ? heroArtFadeToRight : heroArtFadeToLeft;
+  const objectCls = side === "left" ? "object-left" : "object-right";
+
+  return (
+    <div
+      className={`pointer-events-none absolute inset-y-0 overflow-hidden bg-black/15 ${posCls} ${winnerCls}`}
+      aria-hidden={!src}
+    >
+      {src ? (
+        <img
+          src={src}
+          alt=""
+          className={`h-full w-full scale-[1.08] object-cover ${objectCls} ${fadeCls}`}
+          draggable={false}
+        />
+      ) : (
+        <div
+          className={`h-full w-full ${
+            side === "right"
+              ? "bg-gradient-to-l from-purple-900/30 via-purple-800/12 to-transparent"
+              : "bg-gradient-to-r from-purple-900/30 via-purple-800/12 to-transparent"
+          } ${fadeCls}`}
+          title={label}
+        />
+      )}
+    </div>
+  );
+}
 
 /**
  * @param {object} row
@@ -185,33 +227,6 @@ function matchRowWinnerSide(row) {
   if (side.includes("player 1")) return 1;
   if (side.includes("player 2")) return 2;
   return null;
-}
-
-/**
- * Fixed-width hero art panel (matches deck list cropping, not full-bleed stretch).
- * @param {{ side: "left" | "right", src?: string | null, name?: string | null, isWinner?: boolean }} props
- */
-function MatchHeroArtPanel({ src, name, isWinner = false }) {
-  const label = name != null && String(name).trim() !== "" ? String(name).trim() : "Hero";
-  const winnerCls = isWinner ? "ring-2 ring-inset ring-amber-400/75 bg-amber-500/[0.06]" : "";
-
-  return (
-    <div
-      className={`relative flex shrink-0 items-center justify-center self-stretch overflow-hidden bg-black/15 ${matchHeroArtWidth} ${winnerCls}`}
-      aria-hidden={!src}
-    >
-      {src ? (
-        <img
-          src={src}
-          alt=""
-          className="h-full w-full object-contain object-center"
-          draggable={false}
-        />
-      ) : (
-        <div className="h-full w-full bg-gradient-to-b from-purple-900/25 to-transparent" title={label} />
-      )}
-    </div>
-  );
 }
 
 /**
@@ -236,7 +251,7 @@ function MatchRowDiagonalCenter({ player1, hero1, player2, hero2, table, winner 
     }`;
 
   return (
-    <div className={`relative mx-auto min-w-0 max-w-[11.5rem] flex-1 ${MATCH_ROW_MIN_H} px-1`}>
+    <div className={`relative z-[1] mx-auto min-w-0 w-full flex-1 ${MATCH_ROW_MIN_H} px-[38%] sm:px-[36%]`}>
       <div
         className={`absolute left-0 top-[18%] max-w-[88%] -translate-y-0 text-left ${
           winner === 1 ? "rounded-md px-1.5 py-1 shadow-[inset_0_0_20px_rgba(251,191,36,0.12)] ring-1 ring-amber-400/55" : ""
@@ -283,7 +298,7 @@ function PairingMatchRow({ isLight, rowChrome, heroes, formatId, row }) {
   const border = isLight ? "border-white/[0.12] bg-black/25" : rowChrome;
 
   return (
-    <div className={`flex w-full items-stretch overflow-hidden rounded-xl border ${MATCH_ROW_MIN_H} ${border}`}>
+    <div className={`relative overflow-hidden rounded-xl border ${MATCH_ROW_MIN_H} ${border}`}>
       <MatchHeroArtPanel side="left" src={heroArtForName(row.hero1, heroes, formatId)} name={row.hero1} />
       <MatchRowDiagonalCenter
         player1={row.player1}
@@ -305,7 +320,7 @@ function ResultMatchRow({ isLight, rowChrome, heroes, formatId, row }) {
   const winner = matchRowWinnerSide(row);
 
   return (
-    <div className={`flex w-full items-stretch overflow-hidden rounded-xl border ${MATCH_ROW_MIN_H} ${border}`}>
+    <div className={`relative overflow-hidden rounded-xl border ${MATCH_ROW_MIN_H} ${border}`}>
       <MatchHeroArtPanel
         side="left"
         src={heroArtForName(row.hero1, heroes, formatId)}
@@ -374,29 +389,26 @@ function StandingGridCard({ isLight, rowChrome, heroes, formatId, row, rankDelta
 
   return (
     <div className={`relative min-h-[5.75rem] overflow-hidden rounded-lg border ${border}`}>
-      <div
-        className="pointer-events-none absolute inset-y-0 left-0 flex w-[38%] items-center justify-center bg-black/15"
-        aria-hidden
-      >
+      <div className="pointer-events-none absolute inset-y-0 left-0 w-[58%] sm:w-[54%]" aria-hidden>
         {heroArt ? (
           <img
             src={heroArt}
             alt=""
-            className="h-full w-full object-contain object-center"
+            className={`h-full w-full scale-[1.06] object-cover object-left ${heroArtFadeLeft}`}
             draggable={false}
           />
         ) : (
-          <div className={`h-full w-full bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent ${heroArtFadeLeft}`} />
+          <div
+            className={`h-full w-full bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent ${heroArtFadeLeft}`}
+          />
         )}
       </div>
-      <div className="relative z-[1] flex min-h-[5.75rem] flex-col justify-center gap-0.5 py-2.5 pl-[40%] pr-3">
-        <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
-          <span className="text-[0.62rem] font-bold uppercase tracking-wide text-[#f4f0fa]/45">
-            #{row.rank}
-          </span>
+      <div className="relative z-[1] flex min-h-[5.75rem] flex-col justify-between py-2.5 pl-[52%] pr-3 sm:pl-[48%]">
+        <div className="flex flex-wrap items-baseline justify-end gap-x-1.5 gap-y-0">
+          <span className="text-[0.72rem] font-bold tabular-nums text-[#f4f0fa]/55">#{row.rank}</span>
           {rankDelta != null && rankDelta !== 0 ? (
             <span
-              className={`text-[0.62rem] font-semibold tabular-nums ${
+              className={`text-[0.68rem] font-semibold tabular-nums ${
                 rankDelta > 0 ? "text-emerald-400" : "text-red-400"
               }`}
               title={rankDelta > 0 ? `Up ${rankDelta} from last round` : `Down ${Math.abs(rankDelta)} from last round`}
@@ -405,13 +417,17 @@ function StandingGridCard({ isLight, rowChrome, heroes, formatId, row, rankDelta
             </span>
           ) : null}
         </div>
-        <p className="m-0 max-w-full truncate text-[0.78rem] font-semibold leading-tight text-[#f4f0fa]">
-          {row.player}
-        </p>
-        <p className="m-0 max-w-full truncate text-[0.68rem] leading-tight text-[#f4f0fa]/68">
-          {row.hero || "—"}
-        </p>
-        <p className="m-0 text-[0.62rem] text-[#f4f0fa]/50">{row.wins}W</p>
+        <div className="text-left">
+          <p className="m-0 max-w-full truncate text-[0.78rem] font-semibold leading-tight text-[#f4f0fa]">
+            {row.player}
+          </p>
+          <p className="m-0 max-w-full truncate text-[0.68rem] leading-tight text-[#f4f0fa]/68">
+            {row.hero || "—"}
+          </p>
+          <p className="m-0 text-[0.65rem] text-[#f4f0fa]/52">
+            {row.wins} {row.wins === 1 ? "Win" : "Wins"}
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -796,7 +812,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
     for (const m of segmentTeamMatches) {
       if (seen.has(m.user_id)) continue;
       seen.add(m.user_id);
-      out.push({ first_name: m.first_name, last_name: m.last_name });
+      out.push({ user_id: m.user_id, first_name: m.first_name, last_name: m.last_name });
     }
     return out;
   }, [segmentTeamMatches]);
@@ -1009,7 +1025,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
           ) : null}
 
           {!roundsLoading && !coverageLoading && coverageTab === "pairings" ? (
-            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+            <div className={matchRowsWrapCls}>
               {filteredPairings.map((row, idx) => (
                 <PairingMatchRow
                   key={idx}
@@ -1021,7 +1037,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
                 />
               ))}
               {filteredPairings.length === 0 ? (
-                <p className="col-span-full m-0 text-[0.85rem] text-[#f4f0fa]/60">
+                <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">
                   {nameFilterActive ? "No pairings match that name." : "No pairings for this round."}
                 </p>
               ) : null}
@@ -1029,7 +1045,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
           ) : null}
 
           {!roundsLoading && !coverageLoading && coverageTab === "results" ? (
-            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
+            <div className={matchRowsWrapCls}>
               {filteredResults.map((row, idx) => (
                 <ResultMatchRow
                   key={idx}
@@ -1041,7 +1057,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
                 />
               ))}
               {filteredResults.length === 0 ? (
-                <p className="col-span-full m-0 text-[0.85rem] text-[#f4f0fa]/60">
+                <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">
                   {nameFilterActive ? "No results match that name." : "No results for this round."}
                 </p>
               ) : null}
