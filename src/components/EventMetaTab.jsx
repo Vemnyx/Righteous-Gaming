@@ -40,6 +40,8 @@ export function EventMetaTab({
   const border = isLight ? "border-white/[0.12] bg-black/25" : rowChrome;
   const heroArtFade =
     "[mask-image:linear-gradient(to_right,black_0%,black_70%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_70%,transparent_100%)]";
+  const metaShareArtWidth = "w-[4.75rem]";
+  const metaShareBarHeight = "min-h-[3.25rem] h-[3.25rem]";
 
   const subTabBtn = (id, label) => {
     const on = metaSubTab === id;
@@ -164,7 +166,7 @@ export function EventMetaTab({
           {overall.heroes.length === 0 ? (
             <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">No standings data yet.</p>
           ) : (
-            <ul className="m-0 mx-auto flex w-full max-w-[66%] list-none flex-col gap-3 p-0">
+            <ul className="m-0 mr-auto flex w-full max-w-[52%] min-w-[16rem] list-none flex-col gap-3 p-0">
               {overall.heroes.map((hero) => {
                 const barWidth = maxBarPct > 0 ? (hero.pct / maxBarPct) * 100 : 0;
                 return (
@@ -175,27 +177,41 @@ export function EventMetaTab({
                     >
                       {hero.name}
                     </span>
-                    <div className="relative min-h-[3.25rem] overflow-hidden rounded-lg border border-white/[0.08] bg-black/20">
+                    <div className={`flex overflow-hidden rounded-lg border border-white/[0.08] bg-black/20 ${metaShareBarHeight}`}>
                       <div
-                        className="absolute inset-y-0 left-0 overflow-hidden bg-gradient-to-r from-purple-600/90 via-purple-500/75 to-purple-400/45"
-                        style={{ width: `${Math.max(barWidth, hero.pct > 0 ? 8 : 0)}%` }}
+                        className={`relative shrink-0 overflow-hidden border-r border-white/[0.06] bg-black/25 ${metaShareArtWidth} ${metaShareBarHeight}`}
                         aria-hidden
                       >
                         {hero.art_image_url ? (
                           <img
                             src={hero.art_image_url}
                             alt=""
-                            className={`h-full w-full object-contain object-left ${heroArtFade}`}
+                            className={`h-full w-full object-cover object-left ${heroArtFade}`}
                             draggable={false}
                           />
-                        ) : null}
-                        {hero.art_image_url ? <div className="absolute inset-0 bg-purple-800/25" /> : null}
+                        ) : (
+                          <div className="h-full w-full bg-gradient-to-r from-purple-900/40 via-purple-800/20 to-transparent" />
+                        )}
                       </div>
-                      <div className="relative z-[1] flex h-full min-h-[3.25rem] items-center justify-between gap-2 px-3 py-1.5 text-[0.78rem]">
-                        <span className="font-medium tabular-nums text-[#f4f0fa]/85">
-                          {hero.count} {hero.count === 1 ? "deck" : "decks"}
-                        </span>
-                        <span className="font-semibold tabular-nums text-[#f4f0fa]">{hero.pct.toFixed(1)}%</span>
+                      <div className={`relative min-w-0 flex-1 ${metaShareBarHeight}`}>
+                        <div
+                          className="absolute inset-y-0 left-0 overflow-hidden bg-gradient-to-r from-purple-900/40 via-purple-800/20 to-purple-800/10"
+                          style={{ width: `${Math.max(barWidth, hero.pct > 0 ? 8 : 0)}%` }}
+                        >
+                          <div className="absolute inset-0 bg-black/20" aria-hidden />
+                          <div className="relative flex h-full items-center px-2.5 py-1.5 text-[0.78rem]">
+                            <span className="min-w-0 truncate font-medium tabular-nums text-[#f4f0fa]/90">
+                              {hero.count} {hero.count === 1 ? "deck" : "decks"}
+                            </span>
+                          </div>
+                        </div>
+                        <div
+                          className={`relative z-[1] flex h-full items-center justify-end px-3 py-1.5 text-[0.78rem] ${metaShareBarHeight}`}
+                        >
+                          <span className="shrink-0 font-semibold tabular-nums text-[#f4f0fa]">
+                            {hero.pct.toFixed(1)}%
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </li>
@@ -255,9 +271,9 @@ export function EventMetaTab({
               <table className="border-collapse">
                 <thead>
                   <tr>
-                    <th className="sticky left-0 z-[2] bg-[#120a1c]/95 p-1" />
+                    <th className="sticky left-0 z-[2] bg-[#120a1c]/95 p-1.5" />
                     {snapshot.matchup_heroes.map((h) => (
-                      <th key={`col-${h.hero_id}-${h.name}`} className="p-1">
+                      <th key={`col-${h.hero_id}-${h.name}`} className="p-1.5">
                         <MatchupHeroArt
                           hero={h}
                           selected={focusedMatchupHeroId === h.hero_id}
@@ -270,7 +286,7 @@ export function EventMetaTab({
                 <tbody>
                   {matchupDisplayRows.map(({ hero: rowHero, index: i }) => (
                     <tr key={`row-${rowHero.hero_id}-${rowHero.name}`}>
-                      <th className="sticky left-0 z-[1] bg-[#120a1c]/95 p-1">
+                      <th className="sticky left-0 z-[1] bg-[#120a1c]/95 p-1.5">
                         <MatchupHeroArt
                           hero={rowHero}
                           selected={focusedMatchupHeroId === rowHero.hero_id}
@@ -280,7 +296,7 @@ export function EventMetaTab({
                       {snapshot.matchup_matrix[i]?.map((cell, j) => (
                         <td
                           key={`cell-${i}-${j}`}
-                          className={`min-w-[2.85rem] p-1 text-center text-[0.68rem] tabular-nums ${matchupCellClass(cell, i === j)}`}
+                          className={`min-w-[3.25rem] p-1.5 text-center text-[0.68rem] tabular-nums ${matchupCellClass(cell, i === j)}`}
                           title={
                             i === j
                               ? rowHero.name
@@ -322,7 +338,7 @@ function MatchupHeroArt({ hero, selected = false, onClick }) {
       type="button"
       onClick={onClick}
       aria-pressed={selected}
-      className={`mx-auto block h-11 w-9 overflow-hidden rounded-md border bg-black/25 transition ${
+      className={`mx-auto block h-14 w-11 overflow-hidden rounded-md border bg-black/25 transition sm:h-[3.75rem] sm:w-12 ${
         selected
           ? "border-purple-400/80 ring-2 ring-purple-400/45"
           : "border-white/[0.08] hover:border-purple-400/45 hover:bg-black/35"

@@ -26,7 +26,7 @@ function segmentLabel(d) {
   return d.label || d.event_type_name || `Segment ${d.id}`;
 }
 
-const MATCH_ROW_MIN_H = "min-h-[6.5rem]";
+const MATCH_ROW_MIN_H = "min-h-[5.5rem]";
 /** Soft edge fade for hero art panels (deck-style). */
 const heroArtFadeToRight =
   "[mask-image:linear-gradient(to_right,black_0%,black_78%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_78%,transparent_100%)]";
@@ -200,7 +200,7 @@ function orientMatchRowForTeam(row, members) {
 }
 
 /**
- * Hero art flush to the card edge, full row height, full image width via object-contain.
+ * Hero art flush to the card edge and corners on its side (cover fill).
  * @param {{ align: "left" | "right", src?: string | null, name?: string | null, isWinner?: boolean }} props
  */
 function MatchHeroArtStrip({ align, src, name, isWinner = false }) {
@@ -208,19 +208,18 @@ function MatchHeroArtStrip({ align, src, name, isWinner = false }) {
   const winnerCls = isWinner ? "ring-2 ring-inset ring-amber-400/75" : "";
   const fadeCls = align === "left" ? heroArtFadeToRight : heroArtFadeToLeft;
   const objectCls = align === "left" ? "object-left" : "object-right";
-  const edgeCls = align === "left" ? "left-0 justify-start" : "right-0 justify-end";
-  const cornerCls = align === "left" ? "rounded-l-xl" : "rounded-r-xl";
+  const edgeCls = align === "left" ? "left-0" : "right-0";
 
   return (
     <div
-      className={`absolute inset-y-0 z-0 flex overflow-hidden ${matchHeroArtEdgeWidth} ${edgeCls} ${cornerCls} ${winnerCls}`}
+      className={`absolute inset-y-0 z-0 overflow-hidden ${matchHeroArtEdgeWidth} ${edgeCls} ${winnerCls}`}
       aria-hidden={!src}
     >
       {src ? (
         <img
           src={src}
           alt=""
-          className={`h-full w-auto max-w-full shrink-0 object-contain ${objectCls} ${fadeCls}`}
+          className={`h-full w-full scale-[1.08] object-cover ${objectCls} ${fadeCls}`}
           draggable={false}
         />
       ) : (
@@ -251,8 +250,8 @@ function MatchPlayerTextBlock({ align, player, hero, isWinner = false, onPlayerC
   const playerNameCls = isWinner ? "text-amber-50" : "text-[#f4f0fa]";
   const heroNameCls = isWinner ? "text-amber-100/85" : "text-[#f4f0fa]/68";
   const textPosCls = isLeft
-    ? "justify-start pt-2.5 pb-2 pl-2 pr-1 text-left items-start"
-    : "justify-end pt-2 pb-2.5 pl-1 pr-2 text-right items-end";
+    ? "justify-start pt-2 pb-1.5 pl-2 pr-1 text-left items-start"
+    : "justify-end pt-1.5 pb-2 pl-1 pr-2 text-right items-end";
 
   return (
     <div className={`flex min-h-full min-w-0 flex-1 flex-col ${textPosCls}`}>
