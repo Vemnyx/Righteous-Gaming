@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -34,6 +35,7 @@ type EventData struct {
 	CoverageSlug  string
 	CoverageURL   string
 	Label         *string
+	Format        *int16
 	StreamURLs    []string
 	CreatedAt     time.Time
 }
@@ -85,6 +87,7 @@ type CreateEventDataParams struct {
 	CoverageSlug string
 	CoverageURL  string
 	Label        *string
+	Format       *int16
 	StreamURLs   []string
 }
 
@@ -154,9 +157,27 @@ RETURNING id, event_url, title, image_url, date_text, venue, start_date, end_dat
 	))
 }
 
+// DeleteEvent removes an event and cascades to event_data, rounds, and related rows.
+func (r *Repository) DeleteEvent(ctx context.Context, id int) error {
+	if r.pool == nil {
+		return fmt.Errorf("repository: pool is closed")
+	}
+	if id <= 0 {
+		return fmt.Errorf("repository: invalid event id")
+	}
+	tag, err := r.pool.Exec(ctx, `DELETE FROM events WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("repository: delete event: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrEventNotFound
+	}
+	return nil
+}
+
 func (r *Repository) ListEventDataByEventID(ctx context.Context, eventID int) ([]EventData, error) {
 	rows, err := r.pool.Query(ctx, `
-SELECT id, event_id, event_type, start_date, end_date, coverage_slug, coverage_url, label, stream_urls, created_at
+SELECT id, event_id, event_type, start_date, end_date, coverage_slug, coverage_url, label, format, stream_urls, created_at
 FROM event_data
 WHERE event_id = $1
 ORDER BY start_date ASC, id ASC`, eventID)
@@ -169,7 +190,7 @@ ORDER BY start_date ASC, id ASC`, eventID)
 		var ed EventData
 		var raw []byte
 		if err := rows.Scan(&ed.ID, &ed.EventID, &ed.EventType, &ed.StartDate, &ed.EndDate,
-			&ed.CoverageSlug, &ed.CoverageURL, &ed.Label, &raw, &ed.CreatedAt); err != nil {
+			&ed.CoverageSlug, &ed.CoverageURL, &ed.Label, &ed.Format, &raw, &ed.CreatedAt); err != nil {
 			return nil, err
 		}
 		ed.StreamURLs = decodeStreamURLs(raw)
@@ -182,10 +203,10 @@ func (r *Repository) GetEventDataByID(ctx context.Context, id int) (EventData, e
 	var ed EventData
 	var raw []byte
 	err := r.pool.QueryRow(ctx, `
-SELECT id, event_id, event_type, start_date, end_date, coverage_slug, coverage_url, label, stream_urls, created_at
+SELECT id, event_id, event_type, start_date, end_date, coverage_slug, coverage_url, label, format, stream_urls, created_at
 FROM event_data
 WHERE id = $1`, id).Scan(&ed.ID, &ed.EventID, &ed.EventType, &ed.StartDate, &ed.EndDate,
-		&ed.CoverageSlug, &ed.CoverageURL, &ed.Label, &raw, &ed.CreatedAt)
+		&ed.CoverageSlug, &ed.CoverageURL, &ed.Label, &ed.Format, &raw, &ed.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return EventData{}, ErrEventDataNotFound
 	}
@@ -198,7 +219,7 @@ WHERE id = $1`, id).Scan(&ed.ID, &ed.EventID, &ed.EventType, &ed.StartDate, &ed.
 
 func (r *Repository) ListActiveEventData(ctx context.Context, now time.Time) ([]EventData, error) {
 	rows, err := r.pool.Query(ctx, `
-SELECT id, event_id, event_type, start_date, end_date, coverage_slug, coverage_url, label, stream_urls, created_at
+SELECT id, event_id, event_type, start_date, end_date, coverage_slug, coverage_url, label, format, stream_urls, created_at
 FROM event_data
 WHERE start_date <= $1 AND end_date >= $1
 ORDER BY id ASC`, now)
@@ -211,7 +232,7 @@ ORDER BY id ASC`, now)
 		var ed EventData
 		var raw []byte
 		if err := rows.Scan(&ed.ID, &ed.EventID, &ed.EventType, &ed.StartDate, &ed.EndDate,
-			&ed.CoverageSlug, &ed.CoverageURL, &ed.Label, &raw, &ed.CreatedAt); err != nil {
+			&ed.CoverageSlug, &ed.CoverageURL, &ed.Label, &ed.Format, &raw, &ed.CreatedAt); err != nil {
 			return nil, err
 		}
 		ed.StreamURLs = decodeStreamURLs(raw)
@@ -228,12 +249,12 @@ func (r *Repository) CreateEventData(ctx context.Context, p CreateEventDataParam
 	var ed EventData
 	var stored []byte
 	err = r.pool.QueryRow(ctx, `
-INSERT INTO event_data (event_id, event_type, start_date, end_date, coverage_slug, coverage_url, label, stream_urls)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
-RETURNING id, event_id, event_type, start_date, end_date, coverage_slug, coverage_url, label, stream_urls, created_at`,
-		p.EventID, p.EventType, p.StartDate, p.EndDate, p.CoverageSlug, p.CoverageURL, p.Label, raw,
+INSERT INTO event_data (event_id, event_type, start_date, end_date, coverage_slug, coverage_url, label, format, stream_urls)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+RETURNING id, event_id, event_type, start_date, end_date, coverage_slug, coverage_url, label, format, stream_urls, created_at`,
+		p.EventID, p.EventType, p.StartDate, p.EndDate, p.CoverageSlug, p.CoverageURL, p.Label, p.Format, raw,
 	).Scan(&ed.ID, &ed.EventID, &ed.EventType, &ed.StartDate, &ed.EndDate,
-		&ed.CoverageSlug, &ed.CoverageURL, &ed.Label, &stored, &ed.CreatedAt)
+		&ed.CoverageSlug, &ed.CoverageURL, &ed.Label, &ed.Format, &stored, &ed.CreatedAt)
 	if err != nil {
 		return EventData{}, err
 	}

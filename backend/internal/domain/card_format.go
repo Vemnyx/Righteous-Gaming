@@ -46,3 +46,20 @@ func CardFormats() []CardFormat {
 		CardFormatLivingLegend,
 	}
 }
+
+// formatUsesYoungHeroes maps each competitive format to the hero age pool it allows.
+// Limited covers Draft and Sealed (both use young heroes).
+var formatUsesYoungHeroes = map[CardFormat]bool{
+	CardFormatLimited:             true,
+	CardFormatSilverAge:           true,
+	CardFormatGoldenAge:           false,
+	CardFormatClassicConstruction: false,
+	CardFormatLivingLegend:        false,
+}
+
+// FormatUsesYoungHeroes reports whether format f uses young heroes (true) or adult heroes (false).
+// The second return is false when f is not a known CardFormat.
+func FormatUsesYoungHeroes(f CardFormat) (young bool, ok bool) {
+	v, ok := formatUsesYoungHeroes[f]
+	return v, ok
+}

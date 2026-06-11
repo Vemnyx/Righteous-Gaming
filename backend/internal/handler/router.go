@@ -103,6 +103,7 @@ func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient 
 	mux.HandleFunc("POST /api/events/data/{dataId}/stream-urls", eh.updateEventDataStreamURLs)
 	mux.HandleFunc("GET /api/admin/events", eh.adminListEvents)
 	mux.HandleFunc("POST /api/admin/events", eh.adminCreateEvent)
+	mux.HandleFunc("DELETE /api/admin/events/{id}", eh.adminDeleteEvent)
 
 	return mux
 }

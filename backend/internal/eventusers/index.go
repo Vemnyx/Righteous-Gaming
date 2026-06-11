@@ -3,6 +3,7 @@ package eventusers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"righteous-gaming/backend/internal/repository"
 	"righteous-gaming/backend/internal/scrape"
@@ -56,7 +57,13 @@ func IndexRound(ctx context.Context, repo *repository.Repository, round reposito
 	if err != nil {
 		return err
 	}
-	heroes := NewHeroMatcher(heroRows)
+	var eventFormat *int16
+	if ed, err := repo.GetEventDataByID(ctx, round.EventDataID); err == nil {
+		eventFormat = ed.Format
+	} else if !errors.Is(err, repository.ErrEventDataNotFound) {
+		return err
+	}
+	heroes := NewHeroMatcher(heroRows, eventFormat)
 
 	var pairings []pairingRow
 	_ = json.Unmarshal(round.Pairings, &pairings)

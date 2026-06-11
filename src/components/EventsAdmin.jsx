@@ -11,9 +11,9 @@ function formatDateTime(iso) {
 }
 
 /**
- * @param {{ isLight: boolean, active: boolean, onOpenEvent?: (id: number) => void }} props
+ * @param {{ isLight: boolean, active: boolean, onOpenEvent?: (id: number) => void, onEventDeleted?: (id: number) => void }} props
  */
-export function EventsAdmin({ isLight, active, onOpenEvent }) {
+export function EventsAdmin({ isLight, active, onOpenEvent, onEventDeleted }) {
   const { user } = useAuth();
   const [rows, setRows] = useState(/** @type {object[]} */ ([]));
   const [loading, setLoading] = useState(false);
@@ -23,6 +23,7 @@ export function EventsAdmin({ isLight, active, onOpenEvent }) {
   const [eventUrl, setEventUrl] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState(/** @type {string | null} */ (null));
+  const [deletingId, setDeletingId] = useState(/** @type {number | null} */ (null));
 
   useEffect(() => {
     if (!active || !user) return undefined;
@@ -84,6 +85,33 @@ export function EventsAdmin({ isLight, active, onOpenEvent }) {
     }
   }, [user, creating, eventUrl, onOpenEvent]);
 
+  const onDelete = useCallback(
+    async (row) => {
+      if (!user || deletingId != null) return;
+      const label = row.title?.trim() || `Event #${row.id}`;
+      if (!window.confirm(`Delete “${label}”? All coverage, rounds, and comments will be removed. This cannot be undone.`)) {
+        return;
+      }
+      setDeletingId(row.id);
+      setError(null);
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/admin/events/${row.id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
+        onEventDeleted?.(row.id);
+        setReloadSeq((n) => n + 1);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to delete event");
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [user, deletingId, onEventDeleted],
+  );
+
   const tableChromeBorder = isLight ? "border-white/[0.12]" : "border-white/[0.24] ring-1 ring-white/[0.05]";
   const tableHeadBorder = isLight ? "border-white/12" : "border-white/[0.20]";
   const tableRowBorder = isLight ? "border-white/[0.08]" : "border-white/[0.12]";
@@ -121,18 +149,19 @@ export function EventsAdmin({ isLight, active, onOpenEvent }) {
               <th className="px-3 py-2.5 font-semibold sm:px-4">Event URL</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Created</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">View</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Delete</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-[#f4f0fa]/60">
+                <td colSpan={7} className="px-4 py-8 text-center text-[#f4f0fa]/60">
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-[#f4f0fa]/60">
+                <td colSpan={7} className="px-4 py-8 text-center text-[#f4f0fa]/60">
                   No events yet.
                 </td>
               </tr>
@@ -154,6 +183,16 @@ export function EventsAdmin({ isLight, active, onOpenEvent }) {
                         Open
                       </button>
                     ) : null}
+                  </td>
+                  <td className="px-3 py-2.5 sm:px-4">
+                    <button
+                      type="button"
+                      className="text-red-300/90 underline hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-45"
+                      disabled={deletingId != null}
+                      onClick={() => void onDelete(row)}
+                    >
+                      {deletingId === row.id ? "Deleting…" : "Delete"}
+                    </button>
                   </td>
                 </tr>
               ))

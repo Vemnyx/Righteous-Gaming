@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { cardFormatName } from "../constants/cardFormat";
 import { youtubeEmbedSrc, youtubeVideoIdFromInput } from "../utils/youtube";
 
 /** @typedef {"team" | "overall" | "streams"} MainTab */
@@ -91,6 +92,78 @@ function playerOnTeam(player, members) {
   });
 }
 
+/** @param {string | undefined | null} side */
+function flipWinnerSide(side) {
+  if (!side) return side;
+  const s = String(side);
+  const lower = s.toLowerCase();
+  if (lower.includes("player 2")) {
+    return s
+      .replace(/player\s*2/gi, "PLAYER__ONE__PLACEHOLDER")
+      .replace(/player\s*1/gi, "Player 2")
+      .replace(/PLAYER__ONE__PLACEHOLDER/gi, "Player 1");
+  }
+  if (lower.includes("player 1")) {
+    return s
+      .replace(/player\s*1/gi, "PLAYER__TWO__PLACEHOLDER")
+      .replace(/player\s*2/gi, "Player 1")
+      .replace(/PLAYER__TWO__PLACEHOLDER/gi, "Player 2");
+  }
+  return s;
+}
+
+/**
+ * Puts the Righteous team member on the left (player1 / hero1) for match rows.
+ * @param {object} row
+ * @param {{ first_name: string, last_name: string }[]} members
+ */
+function orientMatchRowForTeam(row, members) {
+  const p1Team = playerOnTeam(row.player1, members);
+  const p2Team = playerOnTeam(row.player2, members);
+  if (!p2Team || p1Team) return row;
+  const winnerName = row.winner_name;
+  let flippedWinnerName = winnerName;
+  if (winnerName) {
+    const w = normalizeHeroKey(winnerName);
+    const p1 = normalizeHeroKey(row.player1);
+    const p2 = normalizeHeroKey(row.player2);
+    if (w === p2) flippedWinnerName = row.player1;
+    else if (w === p1) flippedWinnerName = row.player2;
+  }
+  return {
+    ...row,
+    player1: row.player2,
+    player2: row.player1,
+    hero1: row.hero2,
+    hero2: row.hero1,
+    winner_side: flipWinnerSide(row.winner_side),
+    winner_name: flippedWinnerName,
+  };
+}
+
+const matchRowGridCols =
+  "grid-cols-[minmax(0,1fr)_minmax(3.25rem,4.5rem)_minmax(0,1fr)]";
+
+const nameShadow = "drop-shadow-[0_1px_4px_rgba(0,0,0,0.92)]";
+
+/**
+ * @param {object} row
+ * @returns {1 | 2 | null}
+ */
+function matchRowWinnerSide(row) {
+  if (row.winner_name) {
+    const w = normalizeHeroKey(row.winner_name);
+    const p1 = normalizeHeroKey(row.player1);
+    const p2 = normalizeHeroKey(row.player2);
+    if (w && p1 && w === p1) return 1;
+    if (w && p2 && w === p2) return 2;
+  }
+  const side = String(row.winner_side || "").toLowerCase();
+  if (side.includes("player 1")) return 1;
+  if (side.includes("player 2")) return 2;
+  return null;
+}
+
 /**
  * @param {{ side: "left" | "right", src?: string | null, name?: string | null }} props
  */
@@ -104,7 +177,7 @@ function MatchRowHeroArt({ side, src, name }) {
     : "bg-gradient-to-l from-purple-900/35 via-purple-800/15 to-transparent";
 
   return (
-    <div className={`relative ${MATCH_ROW_H} min-w-0 overflow-hidden`} aria-hidden>
+    <div className="absolute inset-0 overflow-hidden" aria-hidden>
       {src ? (
         <img src={src} alt="" className={`h-full w-full object-cover ${objectCls} ${fadeCls}`} draggable={false} />
       ) : (
@@ -115,27 +188,90 @@ function MatchRowHeroArt({ side, src, name }) {
 }
 
 /**
+ * @param {{
+ *   side: "left" | "right",
+ *   player: string,
+ *   hero?: string | null,
+ *   heroArt?: string | null,
+ *   isWinner?: boolean,
+ * }} props
+ */
+function MatchRowPlayerColumn({ side, player, hero, heroArt, isWinner = false }) {
+  const isLeft = side === "left";
+  const alignCls = isLeft ? "items-end text-right pr-2 sm:pr-3" : "items-start text-left pl-2 sm:pl-3";
+  const posCls = isLeft ? "right-0" : "left-0";
+  const winnerCls = isWinner
+    ? "z-[2] shadow-[inset_0_0_28px_rgba(251,191,36,0.18)] ring-2 ring-inset ring-amber-400/80 bg-amber-500/[0.07]"
+    : "";
+
+  return (
+    <div
+      className={`relative min-w-0 ${MATCH_ROW_H} ${winnerCls}`}
+      aria-label={isWinner ? `Winner: ${player}` : undefined}
+    >
+      <MatchRowHeroArt side={side} src={heroArt} name={hero} />
+      <div
+        className={`absolute inset-y-0 ${posCls} z-[1] flex w-[min(100%,13.5rem)] flex-col justify-center gap-0.5 ${alignCls}`}
+      >
+        <p
+          className={`m-0 max-w-full truncate text-[0.85rem] font-semibold leading-tight ${nameShadow} ${
+            isWinner ? "text-amber-50" : "text-[#f4f0fa]"
+          }`}
+        >
+          {player}
+        </p>
+        {hero ? (
+          <p
+            className={`m-0 max-w-full truncate text-[0.72rem] leading-tight ${nameShadow} ${
+              isWinner ? "text-amber-100/85" : "text-[#f4f0fa]/68"
+            }`}
+          >
+            {hero}
+          </p>
+        ) : null}
+      </div>
+      {isWinner ? (
+        <span
+          className={`pointer-events-none absolute top-2 z-[3] rounded-full bg-amber-400/90 px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-wide text-amber-950 ${isLeft ? "right-2" : "left-2"}`}
+          aria-hidden
+        >
+          Win
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * @param {{ isLight: boolean, rowChrome: string, heroes: HeroOption[], row: object }} props
  */
 function PairingMatchRow({ isLight, rowChrome, heroes, row }) {
-  const hero1Art = heroArtForName(row.hero1, heroes);
-  const hero2Art = heroArtForName(row.hero2, heroes);
   const border = isLight ? "border-white/[0.12] bg-black/25" : rowChrome;
 
   return (
     <div
-      className={`grid w-full grid-cols-[minmax(0,1fr)_minmax(10.75rem,15.2rem)_minmax(0,1fr)] items-stretch overflow-hidden rounded-xl border ${MATCH_ROW_H} ${border}`}
+      className={`grid w-full ${matchRowGridCols} items-stretch overflow-hidden rounded-xl border ${MATCH_ROW_H} ${border}`}
     >
-      <MatchRowHeroArt side="left" src={hero1Art} name={row.hero1} />
-      <div className={`relative z-[1] flex ${MATCH_ROW_H} flex-col items-center justify-center gap-0.5 px-2.5 py-1.5 text-center`}>
-        <p className="m-0 text-[0.7rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/45">
-          Table {row.table}
-        </p>
-        <p className="m-0 max-w-full truncate text-[0.85rem] font-semibold text-[#f4f0fa]">{row.player1}</p>
+      <MatchRowPlayerColumn
+        side="left"
+        player={row.player1}
+        hero={row.hero1}
+        heroArt={heroArtForName(row.hero1, heroes)}
+      />
+      <div
+        className={`relative z-[1] flex ${MATCH_ROW_H} flex-col items-center justify-center gap-0.5 border-x border-white/[0.06] px-1 text-center`}
+      >
         <p className="m-0 text-[0.65rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/40">vs</p>
-        <p className="m-0 max-w-full truncate text-[0.85rem] font-semibold text-[#f4f0fa]">{row.player2}</p>
+        <p className="m-0 text-[0.7rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/45">
+          T{row.table}
+        </p>
       </div>
-      <MatchRowHeroArt side="right" src={hero2Art} name={row.hero2} />
+      <MatchRowPlayerColumn
+        side="right"
+        player={row.player2}
+        hero={row.hero2}
+        heroArt={heroArtForName(row.hero2, heroes)}
+      />
     </div>
   );
 }
@@ -144,22 +280,28 @@ function PairingMatchRow({ isLight, rowChrome, heroes, row }) {
  * @param {{ isLight: boolean, rowChrome: string, heroes: HeroOption[], row: object }} props
  */
 function ResultMatchRow({ isLight, rowChrome, heroes, row }) {
-  const hero1Art = heroArtForName(row.hero1, heroes);
-  const hero2Art = heroArtForName(row.hero2, heroes);
   const border = isLight ? "border-white/[0.12] bg-black/25" : rowChrome;
-  const result = row.winner_side || "—";
+  const winner = matchRowWinnerSide(row);
 
   return (
     <div
-      className={`grid w-full grid-cols-[minmax(0,1fr)_minmax(10.75rem,15.2rem)_minmax(0,1fr)] items-stretch overflow-hidden rounded-xl border ${MATCH_ROW_H} ${border}`}
+      className={`grid w-full ${matchRowGridCols} items-stretch overflow-hidden rounded-xl border ${MATCH_ROW_H} ${border}`}
     >
-      <MatchRowHeroArt side="left" src={hero1Art} name={row.hero1} />
-      <div className={`relative z-[1] flex ${MATCH_ROW_H} flex-col items-center justify-center gap-0.5 px-2.5 py-1.5 text-center`}>
-        <p className="m-0 max-w-full truncate text-[0.82rem] font-semibold text-[#f4f0fa]">{row.player1}</p>
-        <p className="m-0 text-[0.78rem] font-semibold text-amber-200/90">{result}</p>
-        <p className="m-0 max-w-full truncate text-[0.82rem] font-semibold text-[#f4f0fa]">{row.player2}</p>
-      </div>
-      <MatchRowHeroArt side="right" src={hero2Art} name={row.hero2} />
+      <MatchRowPlayerColumn
+        side="left"
+        player={row.player1}
+        hero={row.hero1}
+        heroArt={heroArtForName(row.hero1, heroes)}
+        isWinner={winner === 1}
+      />
+      <div className={`relative z-[1] ${MATCH_ROW_H} border-x border-white/[0.06]`} aria-hidden />
+      <MatchRowPlayerColumn
+        side="right"
+        player={row.player2}
+        hero={row.hero2}
+        heroArt={heroArtForName(row.hero2, heroes)}
+        isWinner={winner === 2}
+      />
     </div>
   );
 }
@@ -249,10 +391,10 @@ export function EventDetailPage({ isLight, active, eventId }) {
       <button
         type="button"
         key={id}
-        className={`rounded-lg border px-3 py-2 text-[0.8125rem] font-semibold transition ${
+        className={`border-b-2 pb-2.5 text-[0.875rem] font-semibold transition -mb-px ${
           on
-            ? "border-purple-400/55 bg-purple-900/40 text-white"
-            : "border-white/[0.14] bg-black/20 text-[#f4f0fa]/75 hover:border-white/25"
+            ? "border-purple-400/80 text-[#f4f0fa]"
+            : "border-transparent text-[#f4f0fa]/50 hover:border-white/20 hover:text-[#f4f0fa]/80"
         }`}
         onClick={() => setMainTab(id)}
       >
@@ -267,10 +409,8 @@ export function EventDetailPage({ isLight, active, eventId }) {
       <button
         type="button"
         key={id}
-        className={`rounded-md border px-2.5 py-1.5 text-[0.78rem] font-semibold ${
-          on
-            ? "border-purple-400/45 bg-purple-900/35 text-purple-100"
-            : "border-white/15 bg-black/20 text-[#f4f0fa]/70"
+        className={`rounded-md px-2.5 py-1 text-[0.8125rem] font-medium transition ${
+          on ? "bg-white/10 text-[#f4f0fa]" : "text-[#f4f0fa]/55 hover:bg-white/[0.06] hover:text-[#f4f0fa]/85"
         }`}
         onClick={() => setCoverageTab(id)}
       >
@@ -549,9 +689,11 @@ export function EventDetailPage({ isLight, active, eventId }) {
     let rows = pairings;
     if (mainTab === "team") {
       if (teamMembers.length === 0) return [];
-      rows = rows.filter(
-        (row) => playerOnTeam(row.player1, teamMembers) || playerOnTeam(row.player2, teamMembers),
-      );
+      rows = rows
+        .filter(
+          (row) => playerOnTeam(row.player1, teamMembers) || playerOnTeam(row.player2, teamMembers),
+        )
+        .map((row) => orientMatchRowForTeam(row, teamMembers));
     }
     if (!nameFilter.trim()) return rows;
     return rows.filter(
@@ -563,9 +705,11 @@ export function EventDetailPage({ isLight, active, eventId }) {
     let rows = results;
     if (mainTab === "team") {
       if (teamMembers.length === 0) return [];
-      rows = rows.filter(
-        (row) => playerOnTeam(row.player1, teamMembers) || playerOnTeam(row.player2, teamMembers),
-      );
+      rows = rows
+        .filter(
+          (row) => playerOnTeam(row.player1, teamMembers) || playerOnTeam(row.player2, teamMembers),
+        )
+        .map((row) => orientMatchRowForTeam(row, teamMembers));
     }
     if (!nameFilter.trim()) return rows;
     return rows.filter(
@@ -588,10 +732,6 @@ export function EventDetailPage({ isLight, active, eventId }) {
   const coverageLoading =
     coverageTab === "pairings" ? pairingsLoading : coverageTab === "results" ? resultsLoading : standingsLoading;
 
-  const sectionCls = isLight
-    ? "rounded-xl border border-white/[0.14] bg-black/30 p-4 backdrop-blur-[2px]"
-    : "rounded-xl border border-white/[0.12] bg-black/40 p-4 backdrop-blur-[2px]";
-
   const rowChrome = isLight
     ? "border-white/[0.12] bg-black/25"
     : "border-white/[0.20] bg-black/20 ring-1 ring-white/[0.05]";
@@ -602,10 +742,10 @@ export function EventDetailPage({ isLight, active, eventId }) {
       <button
         type="button"
         key={idx}
-        className={`rounded-lg border px-4 py-2.5 text-[0.875rem] font-semibold transition ${
+        className={`rounded-md px-3.5 py-1.5 text-[0.8125rem] font-semibold transition ${
           on
-            ? "border-amber-300/55 bg-amber-900/35 text-amber-50 shadow-[0_2px_12px_rgba(0,0,0,0.25)]"
-            : "border-white/[0.14] bg-black/25 text-[#f4f0fa]/75 hover:border-white/28 hover:bg-black/35"
+            ? "bg-amber-500/20 text-amber-100 shadow-sm"
+            : "text-[#f4f0fa]/60 hover:bg-white/[0.05] hover:text-[#f4f0fa]/90"
         }`}
         onClick={() => setDataIdx(idx)}
       >
@@ -626,174 +766,166 @@ export function EventDetailPage({ isLight, active, eventId }) {
   }
 
   return (
-    <div className="relative flex min-h-[min(60vh,28rem)] w-full flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.1]">
-      {event.image_url ? (
-        <>
-          <div
-            className="pointer-events-none absolute inset-0 scale-105 bg-cover bg-center opacity-[0.16] blur-[1px]"
-            style={{ backgroundImage: `url(${event.image_url})` }}
-            aria-hidden
-          />
-          <div
-            className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#0c0616]/50 via-[#0c0616]/78 to-[#0c0616]/94"
-            aria-hidden
-          />
-        </>
-      ) : (
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/40 to-black/60" aria-hidden />
-      )}
-
-      <div className="relative z-10 flex flex-1 flex-col gap-3 px-3 py-3 sm:px-4 sm:py-4">
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-white/[0.08] pb-3 text-[0.875rem]">
-          <h2 className="m-0 text-base font-semibold tracking-tight text-[#f4f0fa] sm:text-lg">{event.title}</h2>
-          {event.date_text ? (
-            <>
-              <span className="text-[#f4f0fa]/35" aria-hidden>
-                ·
-              </span>
-              <span className="text-[#f4f0fa]/70">{event.date_text}</span>
-            </>
-          ) : null}
-          <span className="text-[#f4f0fa]/35" aria-hidden>
-            ·
-          </span>
-          <a
-            href={event.event_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 text-purple-200/90 underline hover:text-purple-100"
-          >
-            FabTCG event page
-          </a>
-        </div>
-
-        {eventData.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {eventData.map((d, idx) => segmentTabBtn(idx, segmentLabel(d)))}
-          </div>
+    <div className="flex w-full flex-1 flex-col gap-5">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.875rem]">
+        <h2 className="m-0 text-base font-semibold tracking-tight text-[#f4f0fa] sm:text-lg">{event.title}</h2>
+        {event.date_text ? (
+          <>
+            <span className="text-[#f4f0fa]/35" aria-hidden>
+              ·
+            </span>
+            <span className="text-[#f4f0fa]/70">{event.date_text}</span>
+          </>
         ) : null}
+        {activeData?.format_name || (activeData?.format != null && cardFormatName(activeData.format)) ? (
+          <>
+            <span className="text-[#f4f0fa]/35" aria-hidden>
+              ·
+            </span>
+            <span className="text-[#f4f0fa]/70">
+              {activeData.format_name || cardFormatName(activeData.format)}
+            </span>
+          </>
+        ) : null}
+        <span className="text-[#f4f0fa]/35" aria-hidden>
+          ·
+        </span>
+        <a
+          href={event.event_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 text-purple-200/90 underline hover:text-purple-100"
+        >
+          FabTCG event page
+        </a>
+      </div>
 
-        <div className="flex flex-wrap gap-2">
-          {mainTabBtn("team", "Team")}
-          {mainTabBtn("overall", "Overall")}
-          {mainTabBtn("streams", "Streams")}
+      {eventData.length > 0 ? (
+        <div
+          className="inline-flex max-w-full flex-wrap gap-0.5 rounded-lg border border-white/[0.1] bg-black/20 p-1"
+          role="tablist"
+          aria-label="Event segment"
+        >
+          {eventData.map((d, idx) => segmentTabBtn(idx, segmentLabel(d)))}
         </div>
+      ) : null}
 
-        <div className="flex flex-1 flex-col gap-4">
-          {showCoverage && activeData ? (
-            <section className={sectionCls}>
-              <div className="mb-4 flex flex-col gap-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-wrap gap-2">
-                    {coverageTabBtn("pairings", "Pairings")}
-                    {coverageTabBtn("results", "Results")}
-                    {coverageTabBtn("standings", "Standings")}
-                  </div>
-                  {roundsLoading ? (
-                    <span className="text-[0.8rem] text-[#f4f0fa]/55">Loading rounds…</span>
-                  ) : (
-                    <label className="flex items-center gap-2 text-[0.85rem] text-[#f4f0fa]/80">
-                      Round
-                      <select
-                        className="rounded-md border border-white/20 bg-black/30 px-2 py-1 text-[#f4f0fa]"
-                        value={round}
-                        onChange={(e) => setRound(Number(e.target.value))}
-                      >
-                        {rounds.map((r) => (
-                          <option key={r.id ?? r.round_number} value={r.round_number}>
-                            {r.round_label || `Round ${r.round_number}`}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-                </div>
-                <label className="flex max-w-md flex-col gap-1">
-                  <span className="text-[0.72rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/50">
-                    Search by name
-                  </span>
-                  <input
-                    type="search"
-                    value={nameFilter}
-                    onChange={(e) => setNameFilter(e.target.value)}
-                    placeholder="Filter players…"
-                    className="w-full rounded-lg border border-white/[0.22] bg-black/35 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/55"
-                  />
+      <nav className="flex gap-6 border-b border-white/[0.1]" aria-label="Event view">
+        {mainTabBtn("team", "Team")}
+        {mainTabBtn("overall", "Overall")}
+        {mainTabBtn("streams", "Streams")}
+      </nav>
+
+      {showCoverage && activeData ? (
+        <>
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+            <div className="inline-flex flex-wrap gap-0.5 rounded-lg bg-black/15 p-0.5" role="tablist">
+              {coverageTabBtn("pairings", "Pairings")}
+              {coverageTabBtn("results", "Results")}
+              {coverageTabBtn("standings", "Standings")}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {roundsLoading ? (
+                <span className="text-[0.8rem] text-[#f4f0fa]/55">Loading rounds…</span>
+              ) : (
+                <label className="flex items-center gap-2 text-[0.8125rem] text-[#f4f0fa]/70">
+                  Round
+                  <select
+                    className="rounded-md border border-white/15 bg-black/25 px-2 py-1.5 text-[0.8125rem] text-[#f4f0fa]"
+                    value={round}
+                    onChange={(e) => setRound(Number(e.target.value))}
+                  >
+                    {rounds.map((r) => (
+                      <option key={r.id ?? r.round_number} value={r.round_number}>
+                        {r.round_label || `Round ${r.round_number}`}
+                      </option>
+                    ))}
+                  </select>
                 </label>
-              </div>
+              )}
+              <input
+                type="search"
+                value={nameFilter}
+                onChange={(e) => setNameFilter(e.target.value)}
+                placeholder="Search players…"
+                aria-label="Search players"
+                className="w-full min-w-[10rem] max-w-xs rounded-md border border-white/15 bg-black/25 px-3 py-1.5 text-[0.8125rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/45 sm:w-48"
+              />
+            </div>
+          </div>
 
-              {mainTab === "team" && !teamLoading && teamMembers.length === 0 ? (
+          {mainTab === "team" && !teamLoading && teamMembers.length === 0 ? (
+            <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">
+              No Righteous players matched in {segmentLabel(activeData)} yet.
+            </p>
+          ) : null}
+
+          {roundsLoading || coverageLoading ? <TabSpinner /> : null}
+
+          {!roundsLoading && !coverageLoading && coverageTab === "pairings" ? (
+            <div className="flex flex-col gap-2.5">
+              {filteredPairings.map((row, idx) => (
+                <PairingMatchRow key={idx} isLight={isLight} rowChrome={rowChrome} heroes={heroes} row={row} />
+              ))}
+              {filteredPairings.length === 0 ? (
                 <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">
-                  No Righteous players matched in {segmentLabel(activeData)} yet.
+                  {nameFilterActive ? "No pairings match that name." : "No pairings for this round."}
                 </p>
               ) : null}
-
-              {roundsLoading || coverageLoading ? <TabSpinner /> : null}
-
-              {!roundsLoading && !coverageLoading && coverageTab === "pairings" ? (
-                <div className="flex flex-col gap-2">
-                  {filteredPairings.map((row, idx) => (
-                    <PairingMatchRow key={idx} isLight={isLight} rowChrome={rowChrome} heroes={heroes} row={row} />
-                  ))}
-                  {filteredPairings.length === 0 ? (
-                    <p className="m-0 text-[#f4f0fa]/60">
-                      {nameFilterActive ? "No pairings match that name." : "No pairings for this round."}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {!roundsLoading && !coverageLoading && coverageTab === "results" ? (
-                <div className="flex flex-col gap-2">
-                  {filteredResults.map((row, idx) => (
-                    <ResultMatchRow key={idx} isLight={isLight} rowChrome={rowChrome} heroes={heroes} row={row} />
-                  ))}
-                  {filteredResults.length === 0 ? (
-                    <p className="m-0 text-[#f4f0fa]/60">
-                      {nameFilterActive ? "No results match that name." : "No results for this round."}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {!roundsLoading && !coverageLoading && coverageTab === "standings" ? (
-                <div className="flex flex-col gap-2">
-                  {filteredStandings.map((row, idx) => (
-                    <StandingMatchRow key={idx} isLight={isLight} rowChrome={rowChrome} heroes={heroes} row={row} />
-                  ))}
-                  {filteredStandings.length === 0 ? (
-                    <p className="m-0 text-[#f4f0fa]/60">
-                      {nameFilterActive ? "No standings match that name." : "No standings for this round."}
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-            </section>
+            </div>
           ) : null}
 
-          {mainTab === "streams" && activeData ? (
-            <section className={sectionCls}>
-              {streamTabs.length > 1 ? (
-                <div className="mb-4 flex flex-wrap gap-2">
-                  {streamTabs.map((label, idx) => (
-                    <button
-                      key={label}
-                      type="button"
-                      className={`rounded-md border px-2.5 py-1.5 text-[0.78rem] font-semibold ${
-                        streamTabIdx === idx
-                          ? "border-purple-400/45 bg-purple-900/35 text-purple-100"
-                          : "border-white/15 bg-black/20 text-[#f4f0fa]/70"
-                      }`}
-                      onClick={() => setStreamTabIdx(idx)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+          {!roundsLoading && !coverageLoading && coverageTab === "results" ? (
+            <div className="flex flex-col gap-2.5">
+              {filteredResults.map((row, idx) => (
+                <ResultMatchRow key={idx} isLight={isLight} rowChrome={rowChrome} heroes={heroes} row={row} />
+              ))}
+              {filteredResults.length === 0 ? (
+                <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">
+                  {nameFilterActive ? "No results match that name." : "No results for this round."}
+                </p>
               ) : null}
+            </div>
+          ) : null}
 
-              {youtubeId ? (
-                <div className="aspect-video w-full overflow-hidden rounded-lg border border-white/10 bg-black">
+          {!roundsLoading && !coverageLoading && coverageTab === "standings" ? (
+            <div className="flex flex-col gap-2.5">
+              {filteredStandings.map((row, idx) => (
+                <StandingMatchRow key={idx} isLight={isLight} rowChrome={rowChrome} heroes={heroes} row={row} />
+              ))}
+              {filteredStandings.length === 0 ? (
+                <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">
+                  {nameFilterActive ? "No standings match that name." : "No standings for this round."}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      {mainTab === "streams" && activeData ? (
+        <>
+          {streamTabs.length > 1 ? (
+            <div className="inline-flex flex-wrap gap-0.5 rounded-lg border border-white/[0.1] bg-black/20 p-1">
+              {streamTabs.map((label, idx) => (
+                <button
+                  key={label}
+                  type="button"
+                  className={`rounded-md px-3 py-1.5 text-[0.8125rem] font-semibold transition ${
+                    streamTabIdx === idx
+                      ? "bg-purple-500/25 text-purple-100"
+                      : "text-[#f4f0fa]/60 hover:bg-white/[0.05] hover:text-[#f4f0fa]/90"
+                  }`}
+                  onClick={() => setStreamTabIdx(idx)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {youtubeId ? (
+            <div className="aspect-video w-full overflow-hidden rounded-xl border border-white/10 bg-black">
                   <iframe
                     title="Event stream"
                     className="h-full w-full"
@@ -802,8 +934,8 @@ export function EventDetailPage({ isLight, active, eventId }) {
                     allowFullScreen
                   />
                 </div>
-              ) : (
-                <div className="flex flex-col gap-3 rounded-lg border border-dashed border-white/20 bg-black/25 px-4 py-6">
+          ) : (
+            <div className="flex flex-col gap-3 rounded-xl border border-dashed border-white/15 bg-black/15 px-4 py-6">
                   <p className="m-0 text-[0.9rem] text-[#f4f0fa]/70">
                     No stream URL for {streamTabs[streamTabIdx] ?? "this segment"} yet.
                   </p>
@@ -830,10 +962,10 @@ export function EventDetailPage({ isLight, active, eventId }) {
                     {streamUrlSaving ? "Saving…" : "Save stream URL"}
                   </button>
                 </div>
-              )}
+          )}
 
-              <div className="mt-6 border-t border-white/10 pt-4">
-                <h3 className="m-0 text-[0.95rem] font-semibold text-[#f4f0fa]">Stream comments</h3>
+          <div className="border-t border-white/[0.08] pt-5">
+            <h3 className="m-0 text-[0.9rem] font-semibold text-[#f4f0fa]/90">Stream comments</h3>
                 {commentsLoading ? <TabSpinner /> : null}
                 {!commentsLoading && comments.length === 0 ? (
                   <p className="mt-2 text-[0.85rem] text-[#f4f0fa]/60">No comments yet.</p>
@@ -866,12 +998,10 @@ export function EventDetailPage({ isLight, active, eventId }) {
                   >
                     {commentSubmitting ? "Posting…" : "Post comment"}
                   </button>
-                </div>
-              </div>
-            </section>
-          ) : null}
-        </div>
-      </div>
+            </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strings"
 
+	"righteous-gaming/backend/internal/domain"
 	"righteous-gaming/backend/internal/repository"
 )
 
@@ -11,16 +12,32 @@ var reHeroWhitespace = regexp.MustCompile(`\s+`)
 
 // HeroMatcher resolves FabTCG hero display names to heroes.id values.
 type HeroMatcher struct {
-	byFull map[string]int
-	byBase map[string]int
+	byFull    map[string]int
+	byBase    map[string]int
+	youngByID map[int]bool
+	// preferYoung is set when event format is known; nil prefers adult heroes.
+	preferYoung *bool
 }
 
-func NewHeroMatcher(rows []repository.HeroMatchRow) *HeroMatcher {
+// NewHeroMatcher builds a matcher for FabTCG hero labels. When format is non-nil and
+// recognized, only heroes of the legal age for that format are indexed.
+func NewHeroMatcher(rows []repository.HeroMatchRow, format *int16) *HeroMatcher {
 	m := &HeroMatcher{
-		byFull: make(map[string]int, len(rows)*2),
-		byBase: make(map[string]int, len(rows)*2),
+		byFull:    make(map[string]int, len(rows)*2),
+		byBase:    make(map[string]int, len(rows)*2),
+		youngByID: make(map[int]bool, len(rows)),
 	}
+	if format != nil {
+		if young, ok := domain.FormatUsesYoungHeroes(domain.CardFormat(*format)); ok {
+			m.preferYoung = &young
+		}
+	}
+
 	for _, h := range rows {
+		if m.preferYoung != nil && h.Young != *m.preferYoung {
+			continue
+		}
+		m.youngByID[h.ID] = h.Young
 		full := normalizeHeroName(h.Name)
 		if full == "" {
 			continue
@@ -39,13 +56,25 @@ func (m *HeroMatcher) put(idx map[string]int, key string, id int, young bool) {
 		return
 	}
 	if existing, ok := idx[key]; ok {
-		// Prefer adult heroes when multiple rows share the same key.
-		if young {
+		if !m.shouldReplace(m.youngByID[existing], young) {
 			return
 		}
-		_ = existing
 	}
 	idx[key] = id
+}
+
+func (m *HeroMatcher) shouldReplace(existingYoung, newYoung bool) bool {
+	if m.preferYoung == nil {
+		// Unknown format: prefer adult when young and adult share a lookup key.
+		if !newYoung && existingYoung {
+			return true
+		}
+		return false
+	}
+	if *m.preferYoung {
+		return newYoung && !existingYoung
+	}
+	return !newYoung && existingYoung
 }
 
 func normalizeHeroName(s string) string {

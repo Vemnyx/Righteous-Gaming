@@ -48,6 +48,8 @@ type eventDataJSON struct {
 	CoverageSlug  string    `json:"coverage_slug"`
 	CoverageURL   string    `json:"coverage_url"`
 	Label         *string   `json:"label,omitempty"`
+	Format        *int16    `json:"format,omitempty"`
+	FormatName    *string   `json:"format_name,omitempty"`
 	StreamURLs    []string  `json:"stream_urls"`
 	StreamTabs    []string  `json:"stream_tabs"`
 	CreatedAt     time.Time `json:"created_at"`
@@ -90,10 +92,16 @@ func eventDataToJSON(ed repository.EventData) eventDataJSON {
 		copy(padded, urls)
 		urls = padded
 	}
+	var formatName *string
+	if ed.Format != nil {
+		name := domain.CardFormat(*ed.Format).String()
+		formatName = &name
+	}
 	return eventDataJSON{
 		ID: ed.ID, EventID: ed.EventID, EventType: ed.EventType, EventTypeName: t.String(),
 		StartDate: ed.StartDate, EndDate: ed.EndDate, CoverageSlug: ed.CoverageSlug, CoverageURL: ed.CoverageURL,
-		Label: ed.Label, StreamURLs: urls, StreamTabs: tabs, CreatedAt: ed.CreatedAt,
+		Label: ed.Label, Format: ed.Format, FormatName: formatName,
+		StreamURLs: urls, StreamTabs: tabs, CreatedAt: ed.CreatedAt,
 	}
 }
 
@@ -295,6 +303,7 @@ func (h *eventsHTTP) adminCreateEvent(w http.ResponseWriter, r *http.Request) {
 			endDate = &e
 		}
 	}
+	eventFormat := evt.ParseCardFormat(parsed.FormatText)
 
 	e, err := h.app.Repo.CreateEvent(r.Context(), repository.CreateEventParams{
 		EventURL: eventURL, Title: parsed.Title, ImageURL: imageURL,
@@ -329,7 +338,7 @@ func (h *eventsHTTP) adminCreateEvent(w http.ResponseWriter, r *http.Request) {
 		tabs := et.StreamTabLabels()
 		ed, err := h.app.Repo.CreateEventData(r.Context(), repository.CreateEventDataParams{
 			EventID: e.ID, EventType: int16(et), StartDate: edStart, EndDate: edEnd,
-			CoverageSlug: link.Slug, CoverageURL: link.URL, Label: label,
+			CoverageSlug: link.Slug, CoverageURL: link.URL, Label: label, Format: eventFormat,
 			StreamURLs: evt.EmptyStreamURLs(len(tabs)),
 		})
 		if err != nil {
@@ -352,6 +361,31 @@ func (h *eventsHTTP) adminCreateEvent(w http.ResponseWriter, r *http.Request) {
 		"event":      eventToJSON(e),
 		"event_data": dataOut,
 	})
+}
+
+func (h *eventsHTTP) adminDeleteEvent(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+	eventID, ok := parseEventID(r)
+	if !ok {
+		http.Error(w, "invalid event id", http.StatusBadRequest)
+		return
+	}
+	if err := h.app.Repo.DeleteEvent(r.Context(), eventID); err != nil {
+		if errors.Is(err, repository.ErrEventNotFound) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		log.Error("delete event", "event_id", eventID, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *eventsHTTP) getEventRounds(w http.ResponseWriter, r *http.Request) {

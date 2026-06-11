@@ -56,6 +56,27 @@ func TestParseEventPageMemphisDates(t *testing.T) {
 	}
 }
 
+func TestParseEventPageFormat(t *testing.T) {
+	html := `<div class="quick-details">
+		<strong>Date:</strong> June 14-15, 2025
+		<strong>Format:</strong> Classic Constructed
+		<strong>Entry Fee:</strong> 75€ EUR
+	</div>
+	<a href="https://fabtcg.com/en/coverage/calling-bologna/"><h3>Calling</h3></a>`
+	parsed := scrape.ParseEventPage(html)
+	if parsed.FormatText != "Classic Constructed" {
+		t.Fatalf("format_text: %q", parsed.FormatText)
+	}
+}
+
+func TestParseEventPagePlainFormat(t *testing.T) {
+	html := `Date: June 14-15, 2025Format: Classic ConstructedEntry Fee: 75€ EUR`
+	parsed := scrape.ParseEventPage(html)
+	if parsed.FormatText != "Classic Constructed" {
+		t.Fatalf("format_text: %q", parsed.FormatText)
+	}
+}
+
 func TestParseEventPageMemphisPlainDate(t *testing.T) {
 	html := `Date: January 31 – February 2nd, 2025Venue: Renasant Convention Center`
 	parsed := scrape.ParseEventPage(html)
