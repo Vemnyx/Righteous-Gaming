@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { PlayerNameButton } from "./PlayerNameButton";
 
 /** @param {{ className?: string, title?: string }} props */
 function LeaderCrown({ className = "h-3.5 w-3.5 text-amber-400", title = "Highest ranked on team" }) {
@@ -208,9 +209,10 @@ function TeamWinsLineChart({ chartSeries, chartRounds, maxWins, isLight, leaderU
  *   isLight: boolean,
  *   rowChrome: string,
  *   leaderUserIds: Set<number>,
+ *   onPlayerClick?: (name: string) => void,
  * }} props
  */
-function TeamRankingsTable({ rankings, isLight, rowChrome, leaderUserIds }) {
+function TeamRankingsTable({ rankings, isLight, rowChrome, leaderUserIds, onPlayerClick }) {
   const border = isLight ? "border-white/[0.12] bg-black/25" : rowChrome;
 
   return (
@@ -230,7 +232,7 @@ function TeamRankingsTable({ rankings, isLight, rowChrome, leaderUserIds }) {
             <tr key={row.userId} className="border-b border-white/[0.06] last:border-b-0">
               <td className="px-3 py-2.5 font-semibold text-[#f4f0fa]">
                 <span className="inline-flex items-center gap-1.5">
-                  {row.name}
+                  <PlayerNameButton name={row.name} onPlayerClick={onPlayerClick} className="text-[#f4f0fa]" />
                   {leaderUserIds.has(row.userId) ? <LeaderCrown /> : null}
                 </span>
               </td>
@@ -268,6 +270,7 @@ function TeamRankingsTable({ rankings, isLight, rowChrome, leaderUserIds }) {
  *   isLight: boolean,
  *   rowChrome: string,
  *   currentRound: number,
+ *   onPlayerClick?: (name: string) => void,
  * }} props
  */
 export function EventTeamSnapshot({
@@ -278,6 +281,7 @@ export function EventTeamSnapshot({
   isLight,
   rowChrome,
   currentRound,
+  onPlayerClick,
 }) {
   const sectionTitle = "text-[0.72rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/50";
   const leaderUserIds = useMemo(() => topRankedUserIds(rankings), [rankings]);
@@ -309,6 +313,7 @@ export function EventTeamSnapshot({
             isLight={isLight}
             rowChrome={rowChrome}
             leaderUserIds={leaderUserIds}
+            onPlayerClick={onPlayerClick}
           />
         )}
       </section>

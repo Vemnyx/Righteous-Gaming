@@ -13,6 +13,7 @@ import (
 	"righteous-gaming/backend/internal/domain"
 	evt "righteous-gaming/backend/internal/events"
 	"righteous-gaming/backend/internal/eventmeta"
+	"righteous-gaming/backend/internal/eventplayer"
 	"righteous-gaming/backend/internal/eventsync"
 	"righteous-gaming/backend/internal/eventusers"
 	"righteous-gaming/backend/internal/repository"
@@ -551,6 +552,37 @@ func (h *eventsHTTP) getEventMeta(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(snap)
+}
+
+func (h *eventsHTTP) getEventPlayerHistory(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requireUser(w, r); !ok {
+		return
+	}
+	eventID, ok := parseEventID(r)
+	if !ok {
+		http.Error(w, "invalid event id", http.StatusBadRequest)
+		return
+	}
+	ed, ok := h.loadEventDataForEvent(w, r, eventID)
+	if !ok {
+		return
+	}
+	player := strings.TrimSpace(r.URL.Query().Get("player"))
+	if player == "" {
+		http.Error(w, "player query param required", http.StatusBadRequest)
+		return
+	}
+
+	rounds, err := h.app.Repo.ListEventRoundsByEventDataID(r.Context(), ed.ID)
+	if err != nil {
+		log.Error("event player history list rounds", "event_data_id", ed.ID, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	hist := eventplayer.BuildHistory(rounds, player)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(hist)
 }
 
 type teamMatchJSON struct {

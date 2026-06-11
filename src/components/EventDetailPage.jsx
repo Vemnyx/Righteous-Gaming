@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { EventTeamSnapshot } from "./EventTeamSnapshot";
 import { EventMetaTab } from "./EventMetaTab";
+import { EventPlayerHistoryModal, parsePlayerHistory } from "./EventPlayerHistoryModal";
+import { PlayerNameButton } from "./PlayerNameButton";
 import { cardFormatName, formatUsesYoungHeroes } from "../constants/cardFormat";
 import { buildTeamSnapshot } from "../utils/eventTeamSnapshot";
 import { parseEventMetaSnapshot } from "../utils/eventMeta";
@@ -16,15 +18,15 @@ function segmentLabel(d) {
   return d.label || d.event_type_name || `Segment ${d.id}`;
 }
 
-const MATCH_ROW_MIN_H = "min-h-[5.5rem]";
+const MATCH_ROW_MIN_H = "min-h-[6.5rem]";
 /** Soft edge fade for hero art panels (deck-style). */
 const heroArtFadeToRight =
-  "[mask-image:linear-gradient(to_right,black_0%,black_72%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_72%,transparent_100%)]";
+  "[mask-image:linear-gradient(to_right,black_0%,black_78%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_78%,transparent_100%)]";
 const heroArtFadeToLeft =
-  "[mask-image:linear-gradient(to_left,black_0%,black_72%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_72%,transparent_100%)]";
+  "[mask-image:linear-gradient(to_left,black_0%,black_78%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_78%,transparent_100%)]";
 const heroArtFadeLeft =
   "[mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)]";
-const matchRowsWrapCls = "mx-auto flex w-full max-w-4xl flex-col gap-2.5";
+const matchRowsWrapCls = "mx-auto flex w-full max-w-[52rem] flex-col gap-2.5";
 
 function TabSpinner() {
   return (
@@ -174,10 +176,10 @@ function orientMatchRowForTeam(row, members) {
   };
 }
 
-const matchHeroArtWidth = "w-[4.75rem] shrink-0 sm:w-[5.5rem]";
+const matchHeroArtWidth = "w-[7.25rem] shrink-0 sm:w-[8.25rem]";
 
 /**
- * Hero art strip with edge fade toward the card center (no text overlay).
+ * Hero art panel — full image width visible, fading toward the card center.
  * @param {{ align: "left" | "right", src?: string | null, name?: string | null, isWinner?: boolean }} props
  */
 function MatchHeroArtStrip({ align, src, name, isWinner = false }) {
@@ -188,14 +190,14 @@ function MatchHeroArtStrip({ align, src, name, isWinner = false }) {
 
   return (
     <div
-      className={`relative self-stretch overflow-hidden bg-black/15 ${matchHeroArtWidth} ${winnerCls}`}
+      className={`relative flex items-center justify-center self-stretch overflow-hidden bg-black/15 ${matchHeroArtWidth} ${winnerCls}`}
       aria-hidden={!src}
     >
       {src ? (
         <img
           src={src}
           alt=""
-          className={`h-full w-full scale-[1.08] object-cover ${objectCls} ${fadeCls}`}
+          className={`h-full w-full object-contain ${objectCls} ${fadeCls}`}
           draggable={false}
         />
       ) : (
@@ -219,18 +221,21 @@ function MatchHeroArtStrip({ align, src, name, isWinner = false }) {
  *   hero?: string | null,
  *   artSrc?: string | null,
  *   isWinner?: boolean,
+ *   onPlayerClick?: (name: string) => void,
  * }} props
  */
-function MatchPlayerSide({ align, player, hero, artSrc, isWinner = false }) {
+function MatchPlayerSide({ align, player, hero, artSrc, isWinner = false, onPlayerClick }) {
   const isLeft = align === "left";
   const playerNameCls = isWinner ? "text-amber-50" : "text-[#f4f0fa]";
   const heroNameCls = isWinner ? "text-amber-100/85" : "text-[#f4f0fa]/68";
-  const textAlign = isLeft ? "text-left items-start pl-1" : "text-right items-end pr-1";
+  const textPosCls = isLeft
+    ? "justify-start pt-2.5 pb-2 pl-2 pr-1 text-left items-start"
+    : "justify-end pt-2 pb-2.5 pl-1 pr-2 text-right items-end";
 
   return (
-    <div className={`flex min-w-0 flex-1 items-stretch gap-1.5 ${isLeft ? "" : "flex-row-reverse"}`}>
+    <div className={`flex min-w-0 flex-1 items-stretch gap-0 ${isLeft ? "" : "flex-row-reverse"}`}>
       <MatchHeroArtStrip align={align} src={artSrc} name={hero} isWinner={isWinner} />
-      <div className={`flex min-w-0 flex-1 flex-col justify-center py-2 ${textAlign}`}>
+      <div className={`flex min-w-0 flex-1 flex-col ${textPosCls}`}>
         <div
           className={`max-w-full ${
             isWinner
@@ -239,9 +244,12 @@ function MatchPlayerSide({ align, player, hero, artSrc, isWinner = false }) {
           }`}
           aria-label={isWinner ? `Winner: ${player}` : undefined}
         >
-          <p className={`m-0 max-w-full truncate text-[0.85rem] font-semibold leading-tight ${playerNameCls}`}>
-            {player}
-          </p>
+          <PlayerNameButton
+            name={player}
+            onPlayerClick={onPlayerClick}
+            align={isLeft ? "left" : "right"}
+            className={`text-[0.85rem] font-semibold leading-tight ${playerNameCls}`}
+          />
           {hero ? (
             <p className={`m-0 max-w-full truncate text-[0.72rem] leading-tight ${heroNameCls}`}>{hero}</p>
           ) : null}
@@ -266,9 +274,10 @@ function MatchPlayerSide({ align, player, hero, artSrc, isWinner = false }) {
  *   hero2Art?: string | null,
  *   table?: number | null,
  *   winner?: 1 | 2 | null,
+ *   onPlayerClick?: (name: string) => void,
  * }} props
  */
-function MatchRowContent({ player1, hero1, player2, hero2, hero1Art, hero2Art, table, winner = null }) {
+function MatchRowContent({ player1, hero1, player2, hero2, hero1Art, hero2Art, table, winner = null, onPlayerClick }) {
   return (
     <div className={`flex items-stretch ${MATCH_ROW_MIN_H}`}>
       <MatchPlayerSide
@@ -277,6 +286,7 @@ function MatchRowContent({ player1, hero1, player2, hero2, hero1Art, hero2Art, t
         hero={hero1}
         artSrc={hero1Art}
         isWinner={winner === 1}
+        onPlayerClick={onPlayerClick}
       />
       <div className="flex shrink-0 flex-col items-center justify-center px-2 sm:px-3">
         {table != null && table > 0 ? (
@@ -289,6 +299,7 @@ function MatchRowContent({ player1, hero1, player2, hero2, hero1Art, hero2Art, t
         hero={hero2}
         artSrc={hero2Art}
         isWinner={winner === 2}
+        onPlayerClick={onPlayerClick}
       />
     </div>
   );
@@ -313,9 +324,9 @@ function matchRowWinnerSide(row) {
 }
 
 /**
- * @param {{ isLight: boolean, rowChrome: string, heroes: HeroOption[], formatId?: number | null, row: object }} props
+ * @param {{ isLight: boolean, rowChrome: string, heroes: HeroOption[], formatId?: number | null, row: object, onPlayerClick?: (name: string) => void }} props
  */
-function PairingMatchRow({ isLight, rowChrome, heroes, formatId, row }) {
+function PairingMatchRow({ isLight, rowChrome, heroes, formatId, row, onPlayerClick }) {
   const border = isLight ? "border-white/[0.12] bg-black/25" : rowChrome;
 
   return (
@@ -328,15 +339,16 @@ function PairingMatchRow({ isLight, rowChrome, heroes, formatId, row }) {
         hero1Art={heroArtForName(row.hero1, heroes, formatId)}
         hero2Art={heroArtForName(row.hero2, heroes, formatId)}
         table={row.table}
+        onPlayerClick={onPlayerClick}
       />
     </div>
   );
 }
 
 /**
- * @param {{ isLight: boolean, rowChrome: string, heroes: HeroOption[], formatId?: number | null, row: object }} props
+ * @param {{ isLight: boolean, rowChrome: string, heroes: HeroOption[], formatId?: number | null, row: object, onPlayerClick?: (name: string) => void }} props
  */
-function ResultMatchRow({ isLight, rowChrome, heroes, formatId, row }) {
+function ResultMatchRow({ isLight, rowChrome, heroes, formatId, row, onPlayerClick }) {
   const border = isLight ? "border-white/[0.12] bg-black/25" : rowChrome;
   const winner = matchRowWinnerSide(row);
 
@@ -350,6 +362,7 @@ function ResultMatchRow({ isLight, rowChrome, heroes, formatId, row }) {
         hero1Art={heroArtForName(row.hero1, heroes, formatId)}
         hero2Art={heroArtForName(row.hero2, heroes, formatId)}
         winner={winner}
+        onPlayerClick={onPlayerClick}
       />
     </div>
   );
@@ -392,9 +405,10 @@ function standingRankDelta(currentRank, prevRankByPlayer, player) {
  *   formatId?: number | null,
  *   row: object,
  *   rankDelta?: number | null,
+ *   onPlayerClick?: (name: string) => void,
  * }} props
  */
-function StandingGridCard({ isLight, rowChrome, heroes, formatId, row, rankDelta = null }) {
+function StandingGridCard({ isLight, rowChrome, heroes, formatId, row, rankDelta = null, onPlayerClick }) {
   const heroArt = heroArtForName(row.hero, heroes, formatId);
   const border = isLight ? "border-white/[0.12] bg-black/25" : rowChrome;
 
@@ -429,9 +443,12 @@ function StandingGridCard({ isLight, rowChrome, heroes, formatId, row, rankDelta
           ) : null}
         </div>
         <div className="absolute bottom-2.5 right-3 max-w-[calc(100%-3.5rem)] text-right">
-          <p className="m-0 max-w-full truncate text-[0.78rem] font-semibold leading-tight text-[#f4f0fa]">
-            {row.player}
-          </p>
+          <PlayerNameButton
+            name={row.player}
+            onPlayerClick={onPlayerClick}
+            align="right"
+            className="text-[0.78rem] font-semibold leading-tight text-[#f4f0fa]"
+          />
           <p className="m-0 max-w-full truncate text-[0.68rem] leading-tight text-[#f4f0fa]/68">
             {row.hero || "—"}
           </p>
@@ -493,6 +510,13 @@ export function EventDetailPage({ isLight, active, eventId }) {
   );
   const [eventMetaLoading, setEventMetaLoading] = useState(false);
   const [metaRound, setMetaRound] = useState(1);
+
+  const [historyPlayer, setHistoryPlayer] = useState(/** @type {string | null} */ (null));
+  const [playerHistory, setPlayerHistory] = useState(
+    /** @type {import("./EventPlayerHistoryModal.jsx").PlayerHistory | null} */ (null),
+  );
+  const [playerHistoryLoading, setPlayerHistoryLoading] = useState(false);
+  const [playerHistoryError, setPlayerHistoryError] = useState(/** @type {string | null} */ (null));
 
   const activeData = eventData[dataIdx] ?? null;
   const showCoverage = mainTab === "team" || mainTab === "overall";
@@ -666,6 +690,50 @@ export function EventDetailPage({ isLight, active, eventId }) {
     void loadEventMeta();
   }, [active, showMeta, activeData, metaRound, roundsLoading, loadEventMeta]);
 
+  const openPlayerHistory = useCallback((name) => {
+    const label = String(name ?? "").trim();
+    if (!label) return;
+    setHistoryPlayer(label);
+  }, []);
+
+  const closePlayerHistory = useCallback(() => {
+    setHistoryPlayer(null);
+    setPlayerHistory(null);
+    setPlayerHistoryError(null);
+  }, []);
+
+  const loadPlayerHistory = useCallback(
+    async (playerName) => {
+      if (!user || !activeData || !playerName) return;
+      setPlayerHistoryLoading(true);
+      setPlayerHistoryError(null);
+      try {
+        const token = await user.getIdToken();
+        const params = new URLSearchParams({
+          event_data_id: String(activeData.id),
+          player: playerName,
+        });
+        const res = await fetch(`/api/events/${eventId}/player-history?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
+        const data = await res.json();
+        setPlayerHistory(parsePlayerHistory(data));
+      } catch (e) {
+        setPlayerHistory(null);
+        setPlayerHistoryError(e instanceof Error ? e.message : "Failed to load player history");
+      } finally {
+        setPlayerHistoryLoading(false);
+      }
+    },
+    [user, activeData, eventId],
+  );
+
+  useEffect(() => {
+    if (!active || !historyPlayer) return;
+    void loadPlayerHistory(historyPlayer);
+  }, [active, historyPlayer, loadPlayerHistory]);
+
   const fetchCoverageTab = useCallback(
     async (kind) => {
       if (!user || !activeData || !round) return;
@@ -771,7 +839,8 @@ export function EventDetailPage({ isLight, active, eventId }) {
     setMainTab("team");
     setCoverageTab("snapshot");
     setNameFilter("");
-  }, [dataIdx]);
+    closePlayerHistory();
+  }, [dataIdx, closePlayerHistory]);
 
   useEffect(() => {
     const urls = Array.isArray(activeData?.stream_urls) ? activeData.stream_urls : [];
@@ -1009,43 +1078,41 @@ export function EventDetailPage({ isLight, active, eventId }) {
 
       {showCoverage && activeData ? (
         <>
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="inline-flex flex-wrap gap-0.5 rounded-lg bg-black/15 p-0.5" role="tablist">
               {mainTab === "team" ? coverageTabBtn("snapshot", "Snapshot") : null}
               {coverageTabBtn("pairings", "Pairings")}
               {coverageTabBtn("results", "Results")}
               {coverageTabBtn("standings", "Standings")}
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              {roundsLoading ? (
-                <span className="text-[0.8rem] text-[#f4f0fa]/55">Loading rounds…</span>
-              ) : (
-                <label className="flex items-center gap-2 text-[0.8125rem] text-[#f4f0fa]/70">
-                  Round
-                  <select
-                    className="rg-select rounded-md border border-white/15 bg-black/25 py-1.5 pl-2.5 text-[0.8125rem] text-[#f4f0fa] outline-none focus:border-purple-400/45"
-                    value={round}
-                    onChange={(e) => setRound(Number(e.target.value))}
-                  >
-                    {rounds.map((r) => (
-                      <option key={r.id ?? r.round_number} value={r.round_number}>
-                        {r.round_label || `Round ${r.round_number}`}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              {coverageTab !== "snapshot" ? (
-                <input
-                  type="search"
-                  value={nameFilter}
-                  onChange={(e) => setNameFilter(e.target.value)}
-                  placeholder="Search players…"
-                  aria-label="Search players"
-                  className="w-full min-w-[10rem] max-w-xs rounded-md border border-white/15 bg-black/25 px-3 py-1.5 text-[0.8125rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/45 sm:w-48"
-                />
-              ) : null}
-            </div>
+            {roundsLoading ? (
+              <span className="text-[0.8rem] text-[#f4f0fa]/55">Loading rounds…</span>
+            ) : (
+              <label className="flex items-center gap-2 text-[0.8125rem] text-[#f4f0fa]/70">
+                Round
+                <select
+                  className="rg-select rounded-md border border-white/15 bg-black/25 py-1.5 pl-2.5 text-[0.8125rem] text-[#f4f0fa] outline-none focus:border-purple-400/45"
+                  value={round}
+                  onChange={(e) => setRound(Number(e.target.value))}
+                >
+                  {rounds.map((r) => (
+                    <option key={r.id ?? r.round_number} value={r.round_number}>
+                      {r.round_label || `Round ${r.round_number}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {coverageTab !== "snapshot" ? (
+              <input
+                type="search"
+                value={nameFilter}
+                onChange={(e) => setNameFilter(e.target.value)}
+                placeholder="Search players…"
+                aria-label="Search players"
+                className="min-w-[10rem] max-w-xs flex-1 rounded-md border border-white/15 bg-black/25 px-3 py-1.5 text-[0.8125rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/45 sm:w-48 sm:flex-none"
+              />
+            ) : null}
           </div>
 
           {mainTab === "team" &&
@@ -1068,6 +1135,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
               isLight={isLight}
               rowChrome={rowChrome}
               currentRound={round}
+              onPlayerClick={openPlayerHistory}
             />
           ) : null}
 
@@ -1081,6 +1149,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
                   heroes={heroes}
                   formatId={activeData.format}
                   row={row}
+                  onPlayerClick={openPlayerHistory}
                 />
               ))}
               {filteredPairings.length === 0 ? (
@@ -1101,6 +1170,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
                   heroes={heroes}
                   formatId={activeData.format}
                   row={row}
+                  onPlayerClick={openPlayerHistory}
                 />
               ))}
               {filteredResults.length === 0 ? (
@@ -1122,6 +1192,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
                   formatId={activeData.format}
                   row={row}
                   rankDelta={standingRankDelta(row.rank, prevRankByPlayer, row.player)}
+                  onPlayerClick={openPlayerHistory}
                 />
               ))}
               {filteredStandings.length === 0 ? (
@@ -1245,6 +1316,17 @@ export function EventDetailPage({ isLight, active, eventId }) {
           </div>
         </>
       ) : null}
+
+      <EventPlayerHistoryModal
+        open={historyPlayer != null}
+        player={historyPlayer}
+        history={playerHistory}
+        loading={playerHistoryLoading}
+        error={playerHistoryError}
+        isLight={isLight}
+        onClose={closePlayerHistory}
+        onPlayerClick={openPlayerHistory}
+      />
     </div>
   );
 }
