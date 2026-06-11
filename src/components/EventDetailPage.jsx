@@ -22,7 +22,7 @@ const heroArtFadeToLeft =
   "[mask-image:linear-gradient(to_left,black_0%,black_72%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_72%,transparent_100%)]";
 const heroArtFadeLeft =
   "[mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)]";
-const matchRowsWrapCls = "mx-auto flex w-full max-w-xl flex-col gap-2.5";
+const matchRowsWrapCls = "mx-auto flex w-full max-w-4xl flex-col gap-2.5";
 
 function TabSpinner() {
   return (
@@ -172,22 +172,21 @@ function orientMatchRowForTeam(row, members) {
   };
 }
 
-const matchHeroArtWidth = "w-[46%] max-w-[8.5rem] sm:max-w-[9rem]";
+const matchHeroArtWidth = "w-[4.75rem] shrink-0 sm:w-[5.5rem]";
 
 /**
- * Full-height hero art bleeding toward center with edge fade.
- * @param {{ side: "left" | "right", src?: string | null, name?: string | null, isWinner?: boolean }} props
+ * Hero art strip with edge fade toward the card center (no text overlay).
+ * @param {{ align: "left" | "right", src?: string | null, name?: string | null, isWinner?: boolean }} props
  */
-function MatchHeroArtPanel({ side, src, name, isWinner = false }) {
+function MatchHeroArtStrip({ align, src, name, isWinner = false }) {
   const label = name != null && String(name).trim() !== "" ? String(name).trim() : "Hero";
   const winnerCls = isWinner ? "ring-2 ring-inset ring-amber-400/75" : "";
-  const posCls = side === "left" ? `left-0 ${matchHeroArtWidth}` : `right-0 ${matchHeroArtWidth}`;
-  const fadeCls = side === "left" ? heroArtFadeToRight : heroArtFadeToLeft;
-  const objectCls = side === "left" ? "object-left" : "object-right";
+  const fadeCls = align === "left" ? heroArtFadeToRight : heroArtFadeToLeft;
+  const objectCls = align === "left" ? "object-left" : "object-right";
 
   return (
     <div
-      className={`pointer-events-none absolute inset-y-0 overflow-hidden bg-black/15 ${posCls} ${winnerCls}`}
+      className={`relative self-stretch overflow-hidden bg-black/15 ${matchHeroArtWidth} ${winnerCls}`}
       aria-hidden={!src}
     >
       {src ? (
@@ -200,13 +199,95 @@ function MatchHeroArtPanel({ side, src, name, isWinner = false }) {
       ) : (
         <div
           className={`h-full w-full ${
-            side === "right"
+            align === "right"
               ? "bg-gradient-to-l from-purple-900/30 via-purple-800/12 to-transparent"
               : "bg-gradient-to-r from-purple-900/30 via-purple-800/12 to-transparent"
           } ${fadeCls}`}
           title={label}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * @param {{
+ *   align: "left" | "right",
+ *   player: string,
+ *   hero?: string | null,
+ *   artSrc?: string | null,
+ *   isWinner?: boolean,
+ * }} props
+ */
+function MatchPlayerSide({ align, player, hero, artSrc, isWinner = false }) {
+  const isLeft = align === "left";
+  const playerNameCls = isWinner ? "text-amber-50" : "text-[#f4f0fa]";
+  const heroNameCls = isWinner ? "text-amber-100/85" : "text-[#f4f0fa]/68";
+  const textAlign = isLeft ? "text-left items-start pl-1" : "text-right items-end pr-1";
+
+  return (
+    <div className={`flex min-w-0 flex-1 items-stretch gap-1.5 ${isLeft ? "" : "flex-row-reverse"}`}>
+      <MatchHeroArtStrip align={align} src={artSrc} name={hero} isWinner={isWinner} />
+      <div className={`flex min-w-0 flex-1 flex-col justify-center py-2 ${textAlign}`}>
+        <div
+          className={`max-w-full ${
+            isWinner
+              ? "rounded-md px-1.5 py-1 shadow-[inset_0_0_20px_rgba(251,191,36,0.12)] ring-1 ring-amber-400/55"
+              : ""
+          }`}
+          aria-label={isWinner ? `Winner: ${player}` : undefined}
+        >
+          <p className={`m-0 max-w-full truncate text-[0.85rem] font-semibold leading-tight ${playerNameCls}`}>
+            {player}
+          </p>
+          {hero ? (
+            <p className={`m-0 max-w-full truncate text-[0.72rem] leading-tight ${heroNameCls}`}>{hero}</p>
+          ) : null}
+          {isWinner ? (
+            <span className="mt-0.5 inline-block rounded-full bg-amber-400/90 px-1.5 py-0.5 text-[0.58rem] font-bold uppercase tracking-wide text-amber-950">
+              Win
+            </span>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * @param {{
+ *   player1: string,
+ *   hero1?: string | null,
+ *   player2: string,
+ *   hero2?: string | null,
+ *   hero1Art?: string | null,
+ *   hero2Art?: string | null,
+ *   table?: number | null,
+ *   winner?: 1 | 2 | null,
+ * }} props
+ */
+function MatchRowContent({ player1, hero1, player2, hero2, hero1Art, hero2Art, table, winner = null }) {
+  return (
+    <div className={`flex items-stretch ${MATCH_ROW_MIN_H}`}>
+      <MatchPlayerSide
+        align="left"
+        player={player1}
+        hero={hero1}
+        artSrc={hero1Art}
+        isWinner={winner === 1}
+      />
+      <div className="flex shrink-0 flex-col items-center justify-center px-2 sm:px-3">
+        {table != null && table > 0 ? (
+          <p className="m-0 whitespace-nowrap text-[0.68rem] font-semibold text-[#f4f0fa]/48">Table {table}</p>
+        ) : null}
+      </div>
+      <MatchPlayerSide
+        align="right"
+        player={player2}
+        hero={hero2}
+        artSrc={hero2Art}
+        isWinner={winner === 2}
+      />
     </div>
   );
 }
@@ -230,84 +311,22 @@ function matchRowWinnerSide(row) {
 }
 
 /**
- * Diagonal matchup text: player 1 top-left, table center, player 2 bottom-right.
- * @param {{
- *   player1: string,
- *   hero1?: string | null,
- *   player2: string,
- *   hero2?: string | null,
- *   table?: number | null,
- *   winner?: 1 | 2 | null,
- * }} props
- */
-function MatchRowDiagonalCenter({ player1, hero1, player2, hero2, table, winner = null }) {
-  const playerNameCls = (isWinner) =>
-    `m-0 max-w-full truncate text-[0.85rem] font-semibold leading-tight ${
-      isWinner ? "text-amber-50" : "text-[#f4f0fa]"
-    }`;
-  const heroNameCls = (isWinner) =>
-    `m-0 max-w-full truncate text-[0.72rem] leading-tight ${
-      isWinner ? "text-amber-100/85" : "text-[#f4f0fa]/68"
-    }`;
-
-  return (
-    <div className={`relative z-[1] mx-auto min-w-0 w-full flex-1 ${MATCH_ROW_MIN_H} px-[38%] sm:px-[36%]`}>
-      <div
-        className={`absolute left-0 top-[18%] max-w-[88%] -translate-y-0 text-left ${
-          winner === 1 ? "rounded-md px-1.5 py-1 shadow-[inset_0_0_20px_rgba(251,191,36,0.12)] ring-1 ring-amber-400/55" : ""
-        }`}
-        aria-label={winner === 1 ? `Winner: ${player1}` : undefined}
-      >
-        <p className={playerNameCls(winner === 1)}>{player1}</p>
-        {hero1 ? <p className={heroNameCls(winner === 1)}>{hero1}</p> : null}
-        {winner === 1 ? (
-          <span className="mt-0.5 inline-block rounded-full bg-amber-400/90 px-1.5 py-0.5 text-[0.58rem] font-bold uppercase tracking-wide text-amber-950">
-            Win
-          </span>
-        ) : null}
-      </div>
-
-      {table != null && table > 0 ? (
-        <p className="pointer-events-none absolute left-1/2 top-1/2 m-0 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap text-[0.68rem] font-semibold text-[#f4f0fa]/48">
-          Table {table}
-        </p>
-      ) : null}
-
-      <div
-        className={`absolute bottom-[18%] right-0 max-w-[88%] translate-y-0 text-right ${
-          winner === 2 ? "rounded-md px-1.5 py-1 shadow-[inset_0_0_20px_rgba(251,191,36,0.12)] ring-1 ring-amber-400/55" : ""
-        }`}
-        aria-label={winner === 2 ? `Winner: ${player2}` : undefined}
-      >
-        <p className={playerNameCls(winner === 2)}>{player2}</p>
-        {hero2 ? <p className={heroNameCls(winner === 2)}>{hero2}</p> : null}
-        {winner === 2 ? (
-          <span className="mt-0.5 inline-block rounded-full bg-amber-400/90 px-1.5 py-0.5 text-[0.58rem] font-bold uppercase tracking-wide text-amber-950">
-            Win
-          </span>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-/**
  * @param {{ isLight: boolean, rowChrome: string, heroes: HeroOption[], formatId?: number | null, row: object }} props
  */
 function PairingMatchRow({ isLight, rowChrome, heroes, formatId, row }) {
   const border = isLight ? "border-white/[0.12] bg-black/25" : rowChrome;
 
   return (
-    <div className={`relative overflow-hidden rounded-xl border ${MATCH_ROW_MIN_H} ${border}`}>
-      <MatchHeroArtPanel side="left" src={heroArtForName(row.hero1, heroes, formatId)} name={row.hero1} />
-      <MatchRowDiagonalCenter
+    <div className={`overflow-hidden rounded-xl border ${border}`}>
+      <MatchRowContent
         player1={row.player1}
         hero1={row.hero1}
         player2={row.player2}
         hero2={row.hero2}
+        hero1Art={heroArtForName(row.hero1, heroes, formatId)}
+        hero2Art={heroArtForName(row.hero2, heroes, formatId)}
         table={row.table}
       />
-      <MatchHeroArtPanel side="right" src={heroArtForName(row.hero2, heroes, formatId)} name={row.hero2} />
     </div>
   );
 }
@@ -320,25 +339,15 @@ function ResultMatchRow({ isLight, rowChrome, heroes, formatId, row }) {
   const winner = matchRowWinnerSide(row);
 
   return (
-    <div className={`relative overflow-hidden rounded-xl border ${MATCH_ROW_MIN_H} ${border}`}>
-      <MatchHeroArtPanel
-        side="left"
-        src={heroArtForName(row.hero1, heroes, formatId)}
-        name={row.hero1}
-        isWinner={winner === 1}
-      />
-      <MatchRowDiagonalCenter
+    <div className={`overflow-hidden rounded-xl border ${border}`}>
+      <MatchRowContent
         player1={row.player1}
         hero1={row.hero1}
         player2={row.player2}
         hero2={row.hero2}
+        hero1Art={heroArtForName(row.hero1, heroes, formatId)}
+        hero2Art={heroArtForName(row.hero2, heroes, formatId)}
         winner={winner}
-      />
-      <MatchHeroArtPanel
-        side="right"
-        src={heroArtForName(row.hero2, heroes, formatId)}
-        name={row.hero2}
-        isWinner={winner === 2}
       />
     </div>
   );
@@ -403,8 +412,8 @@ function StandingGridCard({ isLight, rowChrome, heroes, formatId, row, rankDelta
           />
         )}
       </div>
-      <div className="relative z-[1] flex min-h-[5.75rem] flex-col justify-between py-2.5 pl-[52%] pr-3 sm:pl-[48%]">
-        <div className="flex flex-wrap items-baseline justify-end gap-x-1.5 gap-y-0">
+      <div className="relative z-[1] min-h-[5.75rem]">
+        <div className="absolute right-3 top-2.5 flex flex-wrap items-baseline justify-end gap-x-1.5 gap-y-0">
           <span className="text-[0.72rem] font-bold tabular-nums text-[#f4f0fa]/55">#{row.rank}</span>
           {rankDelta != null && rankDelta !== 0 ? (
             <span
@@ -417,7 +426,7 @@ function StandingGridCard({ isLight, rowChrome, heroes, formatId, row, rankDelta
             </span>
           ) : null}
         </div>
-        <div className="text-left">
+        <div className="absolute bottom-2.5 right-3 max-w-[calc(100%-3.5rem)] text-right">
           <p className="m-0 max-w-full truncate text-[0.78rem] font-semibold leading-tight text-[#f4f0fa]">
             {row.player}
           </p>
