@@ -9,7 +9,7 @@ import (
 )
 
 // NewRouter registers HTTP API routes and returns the root handler.
-func NewRouter(application *app.App, userSvc *service.UserService) http.Handler {
+func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient *scrape.Client) http.Handler {
 	mux := http.NewServeMux()
 	uh := &userHTTP{svc: userSvc, app: application}
 	mh := &mailHTTP{app: application}
@@ -20,7 +20,7 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	dh := &decksHTTP{app: application, svc: userSvc}
 	rdh := &runawaysDraftHTTP{app: application, svc: userSvc}
 	rec := &recordingsHTTP{app: application, svc: userSvc}
-	eh := &eventsHTTP{app: application, svc: userSvc, scrape: scrape.NewClient()}
+	eh := &eventsHTTP{app: application, svc: userSvc, scrape: scrapeClient}
 
 	mux.HandleFunc("POST /api/users", uh.createUser)
 	mux.HandleFunc("POST /api/complete-registration", uh.completeRegistration)
@@ -97,9 +97,10 @@ func NewRouter(application *app.App, userSvc *service.UserService) http.Handler 
 	mux.HandleFunc("GET /api/events/{id}/results", eh.getEventResults)
 	mux.HandleFunc("GET /api/events/{id}/standings", eh.getEventStandings)
 	mux.HandleFunc("GET /api/events/{id}/team-summary", eh.getEventTeamSummary)
-	mux.HandleFunc("GET /api/events/streams/{streamId}/comments", eh.listStreamComments)
-	mux.HandleFunc("POST /api/events/streams/{streamId}/comments", eh.createStreamComment)
-	mux.HandleFunc("POST /api/events/streams/{streamId}/refresh-youtube", eh.refreshStreamYoutube)
+	mux.HandleFunc("GET /api/events/data/{dataId}/comments", eh.listEventDataComments)
+	mux.HandleFunc("POST /api/events/data/{dataId}/comments", eh.createEventDataComment)
+	mux.HandleFunc("PATCH /api/events/data/{dataId}/stream-urls", eh.updateEventDataStreamURLs)
+	mux.HandleFunc("POST /api/events/data/{dataId}/stream-urls", eh.updateEventDataStreamURLs)
 	mux.HandleFunc("GET /api/admin/events", eh.adminListEvents)
 	mux.HandleFunc("POST /api/admin/events", eh.adminCreateEvent)
 

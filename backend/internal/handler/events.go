@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 
 	"righteous-gaming/backend/internal/app"
 	"righteous-gaming/backend/internal/domain"
+	evt "righteous-gaming/backend/internal/events"
+	"righteous-gaming/backend/internal/eventsync"
 	"righteous-gaming/backend/internal/repository"
 	"righteous-gaming/backend/internal/scrape"
 	"righteous-gaming/backend/internal/service"
@@ -23,30 +26,46 @@ type eventsHTTP struct {
 }
 
 type eventJSON struct {
-	ID       int        `json:"id"`
-	EventURL string     `json:"event_url"`
-	Title    string     `json:"title"`
-	ImageURL *string    `json:"image_url,omitempty"`
-	DateText *string    `json:"date_text,omitempty"`
-	Venue    *string    `json:"venue,omitempty"`
-	DayCount int16      `json:"day_count"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        int        `json:"id"`
+	EventURL  string     `json:"event_url"`
+	Title     string     `json:"title"`
+	ImageURL  *string    `json:"image_url,omitempty"`
+	DateText  *string    `json:"date_text,omitempty"`
+	Venue     *string    `json:"venue,omitempty"`
+	StartDate *time.Time `json:"start_date,omitempty"`
+	EndDate   *time.Time `json:"end_date,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
 }
 
-type eventStreamJSON struct {
-	ID           int        `json:"id"`
-	EventID      int        `json:"event_id"`
-	DayNumber    int16      `json:"day_number"`
-	URL          string     `json:"url"`
-	Label        *string    `json:"label,omitempty"`
-	CoverageSlug string     `json:"coverage_slug"`
-	YoutubeURL   *string    `json:"youtube_url,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-}
-
-type eventStreamCommentJSON struct {
+type eventDataJSON struct {
 	ID            int       `json:"id"`
-	EventStreamID int       `json:"event_stream_id"`
+	EventID       int       `json:"event_id"`
+	EventType     int16     `json:"event_type"`
+	EventTypeName string    `json:"event_type_name"`
+	StartDate     time.Time `json:"start_date"`
+	EndDate       time.Time `json:"end_date"`
+	CoverageSlug  string    `json:"coverage_slug"`
+	CoverageURL   string    `json:"coverage_url"`
+	Label         *string   `json:"label,omitempty"`
+	StreamURLs    []string  `json:"stream_urls"`
+	StreamTabs    []string  `json:"stream_tabs"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+type eventRoundJSON struct {
+	ID          int             `json:"id"`
+	EventDataID int             `json:"event_data_id"`
+	RoundNumber int             `json:"round_number"`
+	RoundLabel  *string         `json:"round_label,omitempty"`
+	Pairings    json.RawMessage `json:"pairings"`
+	Results     json.RawMessage `json:"results"`
+	Standings   json.RawMessage `json:"standings"`
+	SyncedAt    time.Time       `json:"synced_at"`
+}
+
+type eventDataCommentJSON struct {
+	ID            int       `json:"id"`
+	EventDataID   int       `json:"event_data_id"`
 	UserID        int       `json:"user_id"`
 	Comment       string    `json:"comment"`
 	CreatedAt     time.Time `json:"created_at"`
@@ -57,14 +76,30 @@ type eventStreamCommentJSON struct {
 func eventToJSON(e repository.Event) eventJSON {
 	return eventJSON{
 		ID: e.ID, EventURL: e.EventURL, Title: e.Title, ImageURL: e.ImageURL,
-		DateText: e.DateText, Venue: e.Venue, DayCount: e.DayCount, CreatedAt: e.CreatedAt,
+		DateText: e.DateText, Venue: e.Venue, StartDate: e.StartDate, EndDate: e.EndDate, CreatedAt: e.CreatedAt,
 	}
 }
 
-func streamToJSON(s repository.EventStream) eventStreamJSON {
-	return eventStreamJSON{
-		ID: s.ID, EventID: s.EventID, DayNumber: s.DayNumber, URL: s.URL, Label: s.Label,
-		CoverageSlug: s.CoverageSlug, YoutubeURL: s.YoutubeURL, CreatedAt: s.CreatedAt,
+func eventDataToJSON(ed repository.EventData) eventDataJSON {
+	t := domain.EventType(ed.EventType)
+	tabs := t.StreamTabLabels()
+	urls := ed.StreamURLs
+	if len(urls) < len(tabs) {
+		padded := make([]string, len(tabs))
+		copy(padded, urls)
+		urls = padded
+	}
+	return eventDataJSON{
+		ID: ed.ID, EventID: ed.EventID, EventType: ed.EventType, EventTypeName: t.String(),
+		StartDate: ed.StartDate, EndDate: ed.EndDate, CoverageSlug: ed.CoverageSlug, CoverageURL: ed.CoverageURL,
+		Label: ed.Label, StreamURLs: urls, StreamTabs: tabs, CreatedAt: ed.CreatedAt,
+	}
+}
+
+func roundToJSON(r repository.EventRound) eventRoundJSON {
+	return eventRoundJSON{
+		ID: r.ID, EventDataID: r.EventDataID, RoundNumber: r.RoundNumber, RoundLabel: r.RoundLabel,
+		Pairings: r.Pairings, Results: r.Results, Standings: r.Standings, SyncedAt: r.SyncedAt,
 	}
 }
 
@@ -111,12 +146,42 @@ func parseEventID(r *http.Request) (int, bool) {
 	return id, true
 }
 
-func parseStreamID(r *http.Request) (int, bool) {
-	id, err := strconv.Atoi(strings.TrimSpace(r.PathValue("streamId")))
+func parseEventDataID(r *http.Request) (int, bool) {
+	id, err := strconv.Atoi(strings.TrimSpace(r.PathValue("dataId")))
 	if err != nil || id <= 0 {
 		return 0, false
 	}
 	return id, true
+}
+
+func parseEventDataQuery(r *http.Request) (int, bool) {
+	id, err := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("event_data_id")))
+	if err != nil || id <= 0 {
+		return 0, false
+	}
+	return id, true
+}
+
+func (h *eventsHTTP) loadEventDataForEvent(w http.ResponseWriter, r *http.Request, eventID int) (repository.EventData, bool) {
+	dataID, ok := parseEventDataQuery(r)
+	if !ok {
+		http.Error(w, "event_data_id query param required", http.StatusBadRequest)
+		return repository.EventData{}, false
+	}
+	ed, err := h.app.Repo.GetEventDataByID(r.Context(), dataID)
+	if err != nil {
+		if errors.Is(err, repository.ErrEventDataNotFound) {
+			http.Error(w, "event data not found", http.StatusNotFound)
+			return repository.EventData{}, false
+		}
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return repository.EventData{}, false
+	}
+	if ed.EventID != eventID {
+		http.Error(w, "event data not found", http.StatusNotFound)
+		return repository.EventData{}, false
+	}
+	return ed, true
 }
 
 func (h *eventsHTTP) listEvents(w http.ResponseWriter, r *http.Request) {
@@ -156,20 +221,20 @@ func (h *eventsHTTP) getEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	streams, err := h.app.Repo.ListEventStreamsByEventID(r.Context(), eventID)
+	dataRows, err := h.app.Repo.ListEventDataByEventID(r.Context(), eventID)
 	if err != nil {
-		log.Error("list event streams", "error", err)
+		log.Error("list event data", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	streamJSON := make([]eventStreamJSON, 0, len(streams))
-	for _, s := range streams {
-		streamJSON = append(streamJSON, streamToJSON(s))
+	dataJSON := make([]eventDataJSON, 0, len(dataRows))
+	for _, ed := range dataRows {
+		dataJSON = append(dataJSON, eventDataToJSON(ed))
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"event":    eventToJSON(e),
-		"streams":  streamJSON,
+		"event":       eventToJSON(e),
+		"event_data":  dataJSON,
 	})
 }
 
@@ -181,9 +246,7 @@ func (h *eventsHTTP) adminListEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 type createEventRequest struct {
-	EventURL string  `json:"event_url"`
-	DayCount int16   `json:"day_count"`
-	PageHTML *string `json:"page_html,omitempty"`
+	EventURL string `json:"event_url"`
 }
 
 func (h *eventsHTTP) adminCreateEvent(w http.ResponseWriter, r *http.Request) {
@@ -200,29 +263,15 @@ func (h *eventsHTTP) adminCreateEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "event_url is required", http.StatusBadRequest)
 		return
 	}
-	if body.DayCount < 1 || body.DayCount > 3 {
-		http.Error(w, "day_count must be 1, 2, or 3", http.StatusBadRequest)
+
+	parsed, err := h.scrape.FetchEventPageData(r.Context(), eventURL)
+	if err != nil {
+		log.Error("crawl event page", "url", eventURL, "error", err)
+		http.Error(w, "failed to fetch event page: "+err.Error(), http.StatusBadGateway)
 		return
 	}
-
-	var parsed scrape.EventPageData
-	if body.PageHTML != nil && strings.TrimSpace(*body.PageHTML) != "" {
-		parsed = scrape.EventPageDataFromHTML(strings.TrimSpace(*body.PageHTML))
-		if len(parsed.CoverageLinks) == 0 {
-			http.Error(w, "page_html did not contain coverage links", http.StatusBadRequest)
-			return
-		}
-	} else {
-		var err error
-		parsed, err = h.scrape.FetchEventPageData(r.Context(), eventURL)
-		if err != nil {
-			log.Error("crawl event page", "url", eventURL, "error", err)
-			http.Error(w, "failed to fetch event page: "+err.Error(), http.StatusBadGateway)
-			return
-		}
-	}
-	if int(body.DayCount) > len(parsed.CoverageLinks) {
-		http.Error(w, "event page has fewer coverage days than requested", http.StatusBadRequest)
+	if len(parsed.CoverageLinks) == 0 {
+		http.Error(w, "no coverage links found on event page", http.StatusBadRequest)
 		return
 	}
 
@@ -238,14 +287,17 @@ func (h *eventsHTTP) adminCreateEvent(w http.ResponseWriter, r *http.Request) {
 	if parsed.Venue != "" {
 		venue = &parsed.Venue
 	}
+	var startDate, endDate *time.Time
+	if dateText != nil {
+		if s, e, ok := evt.ParseDateRange(*dateText); ok {
+			startDate = &s
+			endDate = &e
+		}
+	}
 
 	e, err := h.app.Repo.CreateEvent(r.Context(), repository.CreateEventParams{
-		EventURL: eventURL,
-		Title:    parsed.Title,
-		ImageURL: imageURL,
-		DateText: dateText,
-		Venue:    venue,
-		DayCount: body.DayCount,
+		EventURL: eventURL, Title: parsed.Title, ImageURL: imageURL,
+		DateText: dateText, Venue: venue, StartDate: startDate, EndDate: endDate,
 	})
 	if err != nil {
 		log.Error("create event", "error", err)
@@ -253,65 +305,49 @@ func (h *eventsHTTP) adminCreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	streamOut := make([]eventStreamJSON, 0, body.DayCount)
-	for i := int16(0); i < body.DayCount; i++ {
-		link := parsed.CoverageLinks[i]
+	dataOut := make([]eventDataJSON, 0, len(parsed.CoverageLinks))
+	for _, link := range parsed.CoverageLinks {
+		et, ok := domain.EventTypeFromCoverageLabel(link.Label)
+		if !ok {
+			continue
+		}
 		var label *string
 		if link.Label != "" {
 			label = &link.Label
 		}
-		var yt *string
-		if covHTML, err := h.scrape.FetchHTMLReferer(r.Context(), link.URL, eventURL); err == nil {
-			if u := scrape.FindYouTubeWatchURL(covHTML); u != "" {
-				yt = &u
-			}
+		var edStart, edEnd time.Time
+		if startDate != nil && endDate != nil {
+			edStart, edEnd = evt.EventDataDateRange(*startDate, *endDate, et.DurationDays())
+		} else {
+			now := time.Now().UTC()
+			ps := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+			peDay := ps.AddDate(0, 0, et.DurationDays()-1)
+			pe := time.Date(peDay.Year(), peDay.Month(), peDay.Day(), 23, 59, 59, 999999999, time.UTC)
+			edStart, edEnd = evt.EventDataDateRange(ps, pe, et.DurationDays())
 		}
-		s, err := h.app.Repo.CreateEventStream(r.Context(), repository.CreateEventStreamParams{
-			EventID:      e.ID,
-			DayNumber:    i + 1,
-			URL:          link.URL,
-			Label:        label,
-			CoverageSlug: link.Slug,
-			YoutubeURL:   yt,
+		tabs := et.StreamTabLabels()
+		ed, err := h.app.Repo.CreateEventData(r.Context(), repository.CreateEventDataParams{
+			EventID: e.ID, EventType: int16(et), StartDate: edStart, EndDate: edEnd,
+			CoverageSlug: link.Slug, CoverageURL: link.URL, Label: label,
+			StreamURLs: evt.EmptyStreamURLs(len(tabs)),
 		})
 		if err != nil {
-			log.Error("create event stream", "error", err)
+			log.Error("create event data", "error", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
-		streamOut = append(streamOut, streamToJSON(s))
+		dataOut = append(dataOut, eventDataToJSON(ed))
 	}
+
+	eventID := e.ID
+	go eventsync.SyncEventIfActive(context.Background(), h.app.Repo, h.scrape, eventID)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"event":   eventToJSON(e),
-		"streams": streamOut,
+		"event":      eventToJSON(e),
+		"event_data": dataOut,
 	})
-}
-
-func (h *eventsHTTP) loadStreamForEvent(w http.ResponseWriter, r *http.Request, eventID int) (repository.EventStream, bool) {
-	streamIDStr := strings.TrimSpace(r.URL.Query().Get("stream_id"))
-	streamID, err := strconv.Atoi(streamIDStr)
-	if err != nil || streamID <= 0 {
-		http.Error(w, "stream_id query param required", http.StatusBadRequest)
-		return repository.EventStream{}, false
-	}
-	s, err := h.app.Repo.GetEventStreamByID(r.Context(), streamID)
-	if err != nil {
-		if errors.Is(err, repository.ErrEventStreamNotFound) {
-			http.Error(w, "stream not found", http.StatusNotFound)
-			return repository.EventStream{}, false
-		}
-		log.Error("get event stream", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return repository.EventStream{}, false
-	}
-	if s.EventID != eventID {
-		http.Error(w, "stream not found", http.StatusNotFound)
-		return repository.EventStream{}, false
-	}
-	return s, true
 }
 
 func (h *eventsHTTP) getEventRounds(w http.ResponseWriter, r *http.Request) {
@@ -331,18 +367,21 @@ func (h *eventsHTTP) getEventRounds(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	s, ok := h.loadStreamForEvent(w, r, eventID)
+	ed, ok := h.loadEventDataForEvent(w, r, eventID)
 	if !ok {
 		return
 	}
-	htmlText, err := h.scrape.FetchHTMLReferer(r.Context(), s.URL, "https://fabtcg.com/")
+	rounds, err := h.app.Repo.ListEventRoundsByEventDataID(r.Context(), ed.ID)
 	if err != nil {
-		http.Error(w, "failed to fetch coverage page", http.StatusBadGateway)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	rounds := scrape.ParseCoverageRounds(htmlText, s.CoverageSlug)
+	out := make([]eventRoundJSON, 0, len(rounds))
+	for _, rr := range rounds {
+		out = append(out, roundToJSON(rr))
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"rounds": rounds})
+	_ = json.NewEncoder(w).Encode(map[string]any{"rounds": out})
 }
 
 func parseRoundQuery(r *http.Request) (int, bool) {
@@ -353,7 +392,7 @@ func parseRoundQuery(r *http.Request) (int, bool) {
 	return round, true
 }
 
-func (h *eventsHTTP) getEventPairings(w http.ResponseWriter, r *http.Request) {
+func (h *eventsHTTP) getEventRoundData(w http.ResponseWriter, r *http.Request, field string) {
 	if _, ok := h.requireUser(w, r); !ok {
 		return
 	}
@@ -367,98 +406,54 @@ func (h *eventsHTTP) getEventPairings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "round query param required", http.StatusBadRequest)
 		return
 	}
-	s, ok := h.loadStreamForEvent(w, r, eventID)
+	ed, ok := h.loadEventDataForEvent(w, r, eventID)
 	if !ok {
 		return
 	}
-	url := scrape.PairingsPageURL(s.CoverageSlug, round)
-	covReferer := scrape.CoveragePageURL(s.CoverageSlug)
-	htmlText, err := h.scrape.FetchHTMLReferer(r.Context(), url, covReferer)
+	rr, err := h.app.Repo.GetEventRound(r.Context(), ed.ID, round)
 	if err != nil {
-		http.Error(w, "failed to fetch pairings", http.StatusBadGateway)
+		if errors.Is(err, repository.ErrEventRoundNotFound) {
+			http.Error(w, "round not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"round":    round,
-		"pairings": scrape.ParsePairings(htmlText),
-	})
+	payload := map[string]any{"round": round}
+	switch field {
+	case "pairings":
+		payload["pairings"] = rr.Pairings
+	case "results":
+		payload["results"] = rr.Results
+	case "standings":
+		payload["standings"] = rr.Standings
+	}
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func (h *eventsHTTP) getEventPairings(w http.ResponseWriter, r *http.Request) {
+	h.getEventRoundData(w, r, "pairings")
 }
 
 func (h *eventsHTTP) getEventResults(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.requireUser(w, r); !ok {
-		return
-	}
-	eventID, ok := parseEventID(r)
-	if !ok {
-		http.Error(w, "invalid event id", http.StatusBadRequest)
-		return
-	}
-	round, ok := parseRoundQuery(r)
-	if !ok {
-		http.Error(w, "round query param required", http.StatusBadRequest)
-		return
-	}
-	s, ok := h.loadStreamForEvent(w, r, eventID)
-	if !ok {
-		return
-	}
-	url := scrape.ResultsPageURL(s.CoverageSlug, round)
-	covReferer := scrape.CoveragePageURL(s.CoverageSlug)
-	htmlText, err := h.scrape.FetchHTMLReferer(r.Context(), url, covReferer)
-	if err != nil {
-		http.Error(w, "failed to fetch results", http.StatusBadGateway)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"round":   round,
-		"results": scrape.ParseResults(htmlText),
-	})
+	h.getEventRoundData(w, r, "results")
 }
 
 func (h *eventsHTTP) getEventStandings(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.requireUser(w, r); !ok {
-		return
-	}
-	eventID, ok := parseEventID(r)
-	if !ok {
-		http.Error(w, "invalid event id", http.StatusBadRequest)
-		return
-	}
-	round, ok := parseRoundQuery(r)
-	if !ok {
-		http.Error(w, "round query param required", http.StatusBadRequest)
-		return
-	}
-	s, ok := h.loadStreamForEvent(w, r, eventID)
-	if !ok {
-		return
-	}
-	url := scrape.StandingsPageURL(s.CoverageSlug, round)
-	covReferer := scrape.CoveragePageURL(s.CoverageSlug)
-	htmlText, err := h.scrape.FetchHTMLReferer(r.Context(), url, covReferer)
-	if err != nil {
-		http.Error(w, "failed to fetch standings", http.StatusBadGateway)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"round":      round,
-		"standings": scrape.ParseStandings(htmlText),
-	})
+	h.getEventRoundData(w, r, "standings")
 }
 
 type teamMatchJSON struct {
-	UserID       int    `json:"user_id"`
-	FirstName    string `json:"first_name"`
-	LastName     string `json:"last_name"`
-	StreamID     int    `json:"stream_id"`
-	DayNumber    int16  `json:"day_number"`
-	StreamLabel  string `json:"stream_label,omitempty"`
-	Round        int    `json:"round"`
-	Kind         string `json:"kind"`
-	Detail       string `json:"detail"`
+	UserID        int    `json:"user_id"`
+	FirstName     string `json:"first_name"`
+	LastName      string `json:"last_name"`
+	EventDataID   int    `json:"event_data_id"`
+	EventTypeName string `json:"event_type_name"`
+	StreamLabel   string `json:"stream_label,omitempty"`
+	Round         int    `json:"round"`
+	Kind          string `json:"kind"`
+	Detail        string `json:"detail"`
 }
 
 func (h *eventsHTTP) getEventTeamSummary(w http.ResponseWriter, r *http.Request) {
@@ -483,84 +478,98 @@ func (h *eventsHTTP) getEventTeamSummary(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	streams, err := h.app.Repo.ListEventStreamsByEventID(r.Context(), eventID)
+	dataRows, err := h.app.Repo.ListEventDataByEventID(r.Context(), eventID)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
 	matches := make([]teamMatchJSON, 0)
-	for _, s := range streams {
+	for _, ed := range dataRows {
 		label := ""
-		if s.Label != nil {
-			label = *s.Label
+		if ed.Label != nil {
+			label = *ed.Label
 		}
-		covReferer := scrape.CoveragePageURL(s.CoverageSlug)
-		covHTML, err := h.scrape.FetchHTMLReferer(r.Context(), s.URL, "https://fabtcg.com/")
-		if err != nil {
+		typeName := domain.EventType(ed.EventType).String()
+		rounds, err := h.app.Repo.ListEventRoundsByEventDataID(r.Context(), ed.ID)
+		if err != nil || len(rounds) == 0 {
 			continue
 		}
-		rounds := scrape.ParseCoverageRounds(covHTML, s.CoverageSlug)
-		latest := scrape.LatestRound(rounds)
-		if latest <= 0 {
-			continue
+		latest := rounds[len(rounds)-1]
+
+		var standings []struct {
+			Rank   int    `json:"rank"`
+			Player string `json:"player"`
+			Hero   string `json:"hero"`
+			Wins   int    `json:"wins"`
+		}
+		_ = json.Unmarshal(latest.Standings, &standings)
+		for _, row := range standings {
+			for _, u := range users {
+				if scrape.NameMatches(u.FirstName, u.LastName, row.Player) {
+					matches = append(matches, teamMatchJSON{
+						UserID: u.ID, FirstName: u.FirstName, LastName: u.LastName,
+						EventDataID: ed.ID, EventTypeName: typeName, StreamLabel: label,
+						Round: latest.RoundNumber, Kind: "standing",
+						Detail: "Rank " + strconv.Itoa(row.Rank) + " · " + row.Hero + " · " + strconv.Itoa(row.Wins) + " wins",
+					})
+				}
+			}
 		}
 
-		if stHTML, err := h.scrape.FetchHTMLReferer(r.Context(), scrape.StandingsPageURL(s.CoverageSlug, latest), covReferer); err == nil {
-			for _, row := range scrape.ParseStandings(stHTML) {
-				for _, u := range users {
-					if scrape.NameMatches(u.FirstName, u.LastName, row.Player) {
-						matches = append(matches, teamMatchJSON{
-							UserID: u.ID, FirstName: u.FirstName, LastName: u.LastName,
-							StreamID: s.ID, DayNumber: s.DayNumber, StreamLabel: label,
-							Round: latest, Kind: "standing",
-							Detail: "Rank " + strconv.Itoa(row.Rank) + " · " + row.Hero + " · " + strconv.Itoa(row.Wins) + " wins",
-						})
-					}
-				}
-			}
+		var pairings []struct {
+			Table   int    `json:"table"`
+			Player1 string `json:"player1"`
+			Player2 string `json:"player2"`
+			Hero1   string `json:"hero1"`
+			Hero2   string `json:"hero2"`
 		}
-		if pHTML, err := h.scrape.FetchHTMLReferer(r.Context(), scrape.PairingsPageURL(s.CoverageSlug, latest), covReferer); err == nil {
-			for _, row := range scrape.ParsePairings(pHTML) {
-				for _, u := range users {
-					if scrape.NameMatches(u.FirstName, u.LastName, row.Player1) || scrape.NameMatches(u.FirstName, u.LastName, row.Player2) {
-					 opp := row.Player2
-					 hero := row.Hero1
-					 if scrape.NameMatches(u.FirstName, u.LastName, row.Player2) {
-						 opp = row.Player1
-						 hero = row.Hero2
-					 }
-					 matches = append(matches, teamMatchJSON{
-						 UserID: u.ID, FirstName: u.FirstName, LastName: u.LastName,
-						 StreamID: s.ID, DayNumber: s.DayNumber, StreamLabel: label,
-						 Round: latest, Kind: "pairing",
-						 Detail: "Table " + strconv.Itoa(row.Table) + " vs " + opp + " · " + hero,
-					 })
-					}
-				}
-			}
-		}
-		if rHTML, err := h.scrape.FetchHTMLReferer(r.Context(), scrape.ResultsPageURL(s.CoverageSlug, latest), covReferer); err == nil {
-			for _, row := range scrape.ParseResults(rHTML) {
-				for _, u := range users {
-					inMatch := scrape.NameMatches(u.FirstName, u.LastName, row.Player1) || scrape.NameMatches(u.FirstName, u.LastName, row.Player2)
-					if !inMatch {
-						continue
-					}
-					won := scrape.NameMatches(u.FirstName, u.LastName, row.WinnerName)
-					result := "Loss"
-					if won {
-						result = "Win"
-					} else if row.WinnerName == "" {
-						result = row.WinnerSide
+		_ = json.Unmarshal(latest.Pairings, &pairings)
+		for _, row := range pairings {
+			for _, u := range users {
+				if scrape.NameMatches(u.FirstName, u.LastName, row.Player1) || scrape.NameMatches(u.FirstName, u.LastName, row.Player2) {
+					opp := row.Player2
+					hero := row.Hero1
+					if scrape.NameMatches(u.FirstName, u.LastName, row.Player2) {
+						opp = row.Player1
+						hero = row.Hero2
 					}
 					matches = append(matches, teamMatchJSON{
 						UserID: u.ID, FirstName: u.FirstName, LastName: u.LastName,
-						StreamID: s.ID, DayNumber: s.DayNumber, StreamLabel: label,
-						Round: latest, Kind: "result",
-						Detail: result + " · " + row.WinnerSide,
+						EventDataID: ed.ID, EventTypeName: typeName, StreamLabel: label,
+						Round: latest.RoundNumber, Kind: "pairing",
+						Detail: "Table " + strconv.Itoa(row.Table) + " vs " + opp + " · " + hero,
 					})
 				}
+			}
+		}
+
+		var results []struct {
+			Player1    string `json:"player1"`
+			Player2    string `json:"player2"`
+			WinnerSide string `json:"winner_side"`
+			WinnerName string `json:"winner_name"`
+		}
+		_ = json.Unmarshal(latest.Results, &results)
+		for _, row := range results {
+			for _, u := range users {
+				inMatch := scrape.NameMatches(u.FirstName, u.LastName, row.Player1) || scrape.NameMatches(u.FirstName, u.LastName, row.Player2)
+				if !inMatch {
+					continue
+				}
+				won := scrape.NameMatches(u.FirstName, u.LastName, row.WinnerName)
+				result := "Loss"
+				if won {
+					result = "Win"
+				} else if row.WinnerName == "" {
+					result = row.WinnerSide
+				}
+				matches = append(matches, teamMatchJSON{
+					UserID: u.ID, FirstName: u.FirstName, LastName: u.LastName,
+					EventDataID: ed.ID, EventTypeName: typeName, StreamLabel: label,
+					Round: latest.RoundNumber, Kind: "result",
+					Detail: result + " · " + row.WinnerSide,
+				})
 			}
 		}
 	}
@@ -569,74 +578,75 @@ func (h *eventsHTTP) getEventTeamSummary(w http.ResponseWriter, r *http.Request)
 	_ = json.NewEncoder(w).Encode(map[string]any{"matches": matches})
 }
 
-func (h *eventsHTTP) refreshStreamYoutube(w http.ResponseWriter, r *http.Request) {
+type updateStreamURLsRequest struct {
+	StreamURLs []string `json:"stream_urls"`
+}
+
+func (h *eventsHTTP) updateEventDataStreamURLs(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireUser(w, r); !ok {
 		return
 	}
-	streamID, ok := parseStreamID(r)
+	dataID, ok := parseEventDataID(r)
 	if !ok {
-		http.Error(w, "invalid stream id", http.StatusBadRequest)
+		http.Error(w, "invalid event data id", http.StatusBadRequest)
 		return
 	}
-	s, err := h.app.Repo.GetEventStreamByID(r.Context(), streamID)
+	ed, err := h.app.Repo.GetEventDataByID(r.Context(), dataID)
 	if err != nil {
-		if errors.Is(err, repository.ErrEventStreamNotFound) {
+		if errors.Is(err, repository.ErrEventDataNotFound) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	var yt *string
-	if covHTML, err := h.scrape.FetchHTMLReferer(r.Context(), s.URL, "https://fabtcg.com/"); err == nil {
-		if u := scrape.FindYouTubeWatchURL(covHTML); u != "" {
-			yt = &u
+	var body updateStreamURLsRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	tabs := domain.EventType(ed.EventType).StreamTabLabels()
+	urls := make([]string, len(tabs))
+	for i := range tabs {
+		if i < len(body.StreamURLs) {
+			urls[i] = strings.TrimSpace(body.StreamURLs[i])
 		}
 	}
-	if yt == nil {
-		if e, err := h.app.Repo.GetEventByID(r.Context(), s.EventID); err == nil {
-			if evHTML, err := h.scrape.FetchHTMLReferer(r.Context(), e.EventURL, "https://fabtcg.com/"); err == nil {
-				if u := scrape.FindYouTubeWatchURL(evHTML); u != "" {
-					yt = &u
-				}
-			}
-		}
-	}
-	updated, err := h.app.Repo.UpdateEventStreamYoutubeURL(r.Context(), streamID, yt)
+	updated, err := h.app.Repo.UpdateEventDataStreamURLs(r.Context(), dataID, urls)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"stream": streamToJSON(updated)})
+	_ = json.NewEncoder(w).Encode(map[string]any{"event_data": eventDataToJSON(updated)})
 }
 
-func (h *eventsHTTP) listStreamComments(w http.ResponseWriter, r *http.Request) {
+func (h *eventsHTTP) listEventDataComments(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requireUser(w, r); !ok {
 		return
 	}
-	streamID, ok := parseStreamID(r)
+	dataID, ok := parseEventDataID(r)
 	if !ok {
-		http.Error(w, "invalid stream id", http.StatusBadRequest)
+		http.Error(w, "invalid event data id", http.StatusBadRequest)
 		return
 	}
-	if _, err := h.app.Repo.GetEventStreamByID(r.Context(), streamID); err != nil {
-		if errors.Is(err, repository.ErrEventStreamNotFound) {
+	if _, err := h.app.Repo.GetEventDataByID(r.Context(), dataID); err != nil {
+		if errors.Is(err, repository.ErrEventDataNotFound) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	rows, err := h.app.Repo.ListEventStreamComments(r.Context(), streamID)
+	rows, err := h.app.Repo.ListEventDataComments(r.Context(), dataID)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	out := make([]eventStreamCommentJSON, 0, len(rows))
+	out := make([]eventDataCommentJSON, 0, len(rows))
 	for _, c := range rows {
-		out = append(out, eventStreamCommentJSON{
-			ID: c.ID, EventStreamID: c.EventStreamID, UserID: c.UserID, Comment: c.Comment,
+		out = append(out, eventDataCommentJSON{
+			ID: c.ID, EventDataID: c.EventDataID, UserID: c.UserID, Comment: c.Comment,
 			CreatedAt: c.CreatedAt, OwnerUsername: c.OwnerUsername, OwnerEmail: c.OwnerEmail,
 		})
 	}
@@ -644,29 +654,29 @@ func (h *eventsHTTP) listStreamComments(w http.ResponseWriter, r *http.Request) 
 	_ = json.NewEncoder(w).Encode(map[string]any{"comments": out})
 }
 
-type createStreamCommentRequest struct {
+type createEventDataCommentRequest struct {
 	Comment string `json:"comment"`
 }
 
-func (h *eventsHTTP) createStreamComment(w http.ResponseWriter, r *http.Request) {
+func (h *eventsHTTP) createEventDataComment(w http.ResponseWriter, r *http.Request) {
 	u, ok := h.requireUser(w, r)
 	if !ok {
 		return
 	}
-	streamID, ok := parseStreamID(r)
+	dataID, ok := parseEventDataID(r)
 	if !ok {
-		http.Error(w, "invalid stream id", http.StatusBadRequest)
+		http.Error(w, "invalid event data id", http.StatusBadRequest)
 		return
 	}
-	if _, err := h.app.Repo.GetEventStreamByID(r.Context(), streamID); err != nil {
-		if errors.Is(err, repository.ErrEventStreamNotFound) {
+	if _, err := h.app.Repo.GetEventDataByID(r.Context(), dataID); err != nil {
+		if errors.Is(err, repository.ErrEventDataNotFound) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	var body createStreamCommentRequest
+	var body createEventDataCommentRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)
 		return
@@ -676,15 +686,15 @@ func (h *eventsHTTP) createStreamComment(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "comment is required", http.StatusBadRequest)
 		return
 	}
-	c, err := h.app.Repo.CreateEventStreamComment(r.Context(), streamID, u.ID, text)
+	c, err := h.app.Repo.CreateEventDataComment(r.Context(), dataID, u.ID, text)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(map[string]any{"comment": eventStreamCommentJSON{
-		ID: c.ID, EventStreamID: c.EventStreamID, UserID: c.UserID, Comment: c.Comment,
+	_ = json.NewEncoder(w).Encode(map[string]any{"comment": eventDataCommentJSON{
+		ID: c.ID, EventDataID: c.EventDataID, UserID: c.UserID, Comment: c.Comment,
 		CreatedAt: c.CreatedAt, OwnerUsername: c.OwnerUsername, OwnerEmail: c.OwnerEmail,
 	}})
 }

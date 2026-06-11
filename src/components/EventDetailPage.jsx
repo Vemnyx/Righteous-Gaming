@@ -31,12 +31,13 @@ function formatDateTime(iso) {
 export function EventDetailPage({ isLight, active, eventId, onBack }) {
   const { user } = useAuth();
   const [event, setEvent] = useState(/** @type {object | null} */ (null));
-  const [streams, setStreams] = useState(/** @type {object[]} */ ([]));
+  const [eventData, setEventData] = useState(/** @type {object[]} */ ([]));
   const [metaLoading, setMetaLoading] = useState(false);
   const [metaError, setMetaError] = useState(/** @type {string | null} */ (null));
 
   const [mainTab, setMainTab] = useState(/** @type {EventTab} */ ("streams"));
-  const [dayIdx, setDayIdx] = useState(0);
+  const [dataIdx, setDataIdx] = useState(0);
+  const [streamTabIdx, setStreamTabIdx] = useState(0);
   const [round, setRound] = useState(1);
   const [rounds, setRounds] = useState(/** @type {object[]} */ ([]));
   const [roundsLoading, setRoundsLoading] = useState(false);
@@ -55,9 +56,12 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentDraft, setCommentDraft] = useState("");
   const [commentSubmitting, setCommentSubmitting] = useState(false);
-  const [refreshingYoutube, setRefreshingYoutube] = useState(false);
 
-  const activeStream = streams[dayIdx] ?? null;
+  const [streamUrlDraft, setStreamUrlDraft] = useState("");
+  const [streamUrlSaving, setStreamUrlSaving] = useState(false);
+  const [streamUrlError, setStreamUrlError] = useState(/** @type {string | null} */ (null));
+
+  const activeData = eventData[dataIdx] ?? null;
 
   const tabBtn = (id, label) => {
     const on = mainTab === id;
@@ -92,8 +96,9 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
         const data = await res.json();
         if (cancelled) return;
         setEvent(data.event ?? null);
-        setStreams(Array.isArray(data.streams) ? data.streams : []);
-        setDayIdx(0);
+        setEventData(Array.isArray(data.event_data) ? data.event_data : []);
+        setDataIdx(0);
+        setStreamTabIdx(0);
       } catch (e) {
         if (!cancelled) setMetaError(e instanceof Error ? e.message : "Failed to load event");
       } finally {
@@ -130,11 +135,11 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
   }, [active, user, eventId, event]);
 
   const loadRounds = useCallback(async () => {
-    if (!user || !activeStream) return;
+    if (!user || !activeData) return;
     setRoundsLoading(true);
     try {
       const token = await user.getIdToken();
-      const params = new URLSearchParams({ stream_id: String(activeStream.id) });
+      const params = new URLSearchParams({ event_data_id: String(activeData.id) });
       const res = await fetch(`/api/events/${eventId}/rounds?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -143,7 +148,7 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
       const list = Array.isArray(data.rounds) ? data.rounds : [];
       setRounds(list);
       if (list.length > 0) {
-        const max = list.reduce((m, r) => (r.Number > m ? r.Number : m), list[0].Number ?? 1);
+        const max = list.reduce((m, r) => (r.round_number > m ? r.round_number : m), list[0].round_number ?? 1);
         setRound(max);
       }
     } catch {
@@ -151,18 +156,18 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
     } finally {
       setRoundsLoading(false);
     }
-  }, [user, activeStream, eventId]);
+  }, [user, activeData, eventId]);
 
   useEffect(() => {
-    if (!active || !activeStream) return;
+    if (!active || !activeData) return;
     if (mainTab === "pairings" || mainTab === "results" || mainTab === "standings") {
       void loadRounds();
     }
-  }, [active, activeStream, mainTab, loadRounds]);
+  }, [active, activeData, mainTab, loadRounds]);
 
   const fetchCoverageTab = useCallback(
     async (kind) => {
-      if (!user || !activeStream || !round) return;
+      if (!user || !activeData || !round) return;
       const setLoading =
         kind === "pairings" ? setPairingsLoading : kind === "results" ? setResultsLoading : setStandingsLoading;
       const setData = kind === "pairings" ? setPairings : kind === "results" ? setResults : setStandings;
@@ -170,7 +175,7 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
       try {
         const token = await user.getIdToken();
         const params = new URLSearchParams({
-          stream_id: String(activeStream.id),
+          event_data_id: String(activeData.id),
           round: String(round),
         });
         const res = await fetch(`/api/events/${eventId}/${kind}?${params}`, {
@@ -178,38 +183,49 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
         });
         if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
         const data = await res.json();
-        const key = kind === "pairings" ? "pairings" : kind === "results" ? "results" : "standings";
-        setData(Array.isArray(data[key]) ? data[key] : []);
+        const key = kind;
+        const raw = data[key];
+        if (Array.isArray(raw)) {
+          setData(raw);
+        } else if (typeof raw === "string") {
+          try {
+            setData(JSON.parse(raw));
+          } catch {
+            setData([]);
+          }
+        } else {
+          setData([]);
+        }
       } catch {
         setData([]);
       } finally {
         setLoading(false);
       }
     },
-    [user, activeStream, round, eventId],
+    [user, activeData, round, eventId],
   );
 
   useEffect(() => {
-    if (!active || mainTab !== "pairings" || !activeStream || roundsLoading) return;
+    if (!active || mainTab !== "pairings" || !activeData || roundsLoading) return;
     void fetchCoverageTab("pairings");
-  }, [active, mainTab, activeStream, round, roundsLoading, fetchCoverageTab]);
+  }, [active, mainTab, activeData, round, roundsLoading, fetchCoverageTab]);
 
   useEffect(() => {
-    if (!active || mainTab !== "results" || !activeStream || roundsLoading) return;
+    if (!active || mainTab !== "results" || !activeData || roundsLoading) return;
     void fetchCoverageTab("results");
-  }, [active, mainTab, activeStream, round, roundsLoading, fetchCoverageTab]);
+  }, [active, mainTab, activeData, round, roundsLoading, fetchCoverageTab]);
 
   useEffect(() => {
-    if (!active || mainTab !== "standings" || !activeStream || roundsLoading) return;
+    if (!active || mainTab !== "standings" || !activeData || roundsLoading) return;
     void fetchCoverageTab("standings");
-  }, [active, mainTab, activeStream, round, roundsLoading, fetchCoverageTab]);
+  }, [active, mainTab, activeData, round, roundsLoading, fetchCoverageTab]);
 
   const loadComments = useCallback(async () => {
-    if (!user || !activeStream) return;
+    if (!user || !activeData) return;
     setCommentsLoading(true);
     try {
       const token = await user.getIdToken();
-      const res = await fetch(`/api/events/streams/${activeStream.id}/comments`, {
+      const res = await fetch(`/api/events/data/${activeData.id}/comments`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
@@ -220,40 +236,60 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
     } finally {
       setCommentsLoading(false);
     }
-  }, [user, activeStream]);
+  }, [user, activeData]);
 
   useEffect(() => {
-    if (!active || mainTab !== "streams" || !activeStream) return;
+    if (!active || mainTab !== "streams" || !activeData) return;
     void loadComments();
-  }, [active, mainTab, activeStream, loadComments]);
+  }, [active, mainTab, activeData, loadComments]);
 
-  const onRefreshYoutube = useCallback(async () => {
-    if (!user || !activeStream || refreshingYoutube) return;
-    setRefreshingYoutube(true);
+  useEffect(() => {
+    setStreamTabIdx(0);
+  }, [dataIdx]);
+
+  useEffect(() => {
+    const urls = Array.isArray(activeData?.stream_urls) ? activeData.stream_urls : [];
+    setStreamUrlDraft(urls[streamTabIdx] ?? "");
+    setStreamUrlError(null);
+  }, [activeData, streamTabIdx]);
+
+  const onSaveStreamURL = useCallback(async () => {
+    if (!user || !activeData || streamUrlSaving) return;
+    setStreamUrlSaving(true);
+    setStreamUrlError(null);
     try {
       const token = await user.getIdToken();
-      const res = await fetch(`/api/events/streams/${activeStream.id}/refresh-youtube`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+      const urls = Array.isArray(activeData.stream_urls) ? [...activeData.stream_urls] : [];
+      while (urls.length <= streamTabIdx) urls.push("");
+      urls[streamTabIdx] = streamUrlDraft.trim();
+      const res = await fetch(`/api/events/data/${activeData.id}/stream-urls`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ stream_urls: urls }),
       });
       if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
       const data = await res.json();
-      if (data.stream) {
-        setStreams((prev) => prev.map((s) => (s.id === data.stream.id ? data.stream : s)));
+      if (data.event_data) {
+        setEventData((prev) => prev.map((row) => (row.id === data.event_data.id ? data.event_data : row)));
       }
+    } catch (e) {
+      setStreamUrlError(e instanceof Error ? e.message : "Failed to save stream URL");
     } finally {
-      setRefreshingYoutube(false);
+      setStreamUrlSaving(false);
     }
-  }, [user, activeStream, refreshingYoutube]);
+  }, [user, activeData, streamUrlDraft, streamTabIdx, streamUrlSaving]);
 
   const onPostComment = useCallback(async () => {
-    if (!user || !activeStream || commentSubmitting) return;
+    if (!user || !activeData || commentSubmitting) return;
     const text = commentDraft.trim();
     if (!text) return;
     setCommentSubmitting(true);
     try {
       const token = await user.getIdToken();
-      const res = await fetch(`/api/events/streams/${activeStream.id}/comments`, {
+      const res = await fetch(`/api/events/data/${activeData.id}/comments`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -267,11 +303,21 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
     } finally {
       setCommentSubmitting(false);
     }
-  }, [user, activeStream, commentDraft, commentSubmitting, loadComments]);
+  }, [user, activeData, commentDraft, commentSubmitting, loadComments]);
+
+  const streamTabs = useMemo(() => {
+    if (!activeData) return [];
+    return Array.isArray(activeData.stream_tabs) ? activeData.stream_tabs : [];
+  }, [activeData]);
+
+  const currentStreamURL = useMemo(() => {
+    const urls = Array.isArray(activeData?.stream_urls) ? activeData.stream_urls : [];
+    return urls[streamTabIdx] ?? "";
+  }, [activeData, streamTabIdx]);
 
   const youtubeId = useMemo(
-    () => (activeStream?.youtube_url ? youtubeVideoIdFromInput(activeStream.youtube_url) : null),
-    [activeStream?.youtube_url],
+    () => (currentStreamURL ? youtubeVideoIdFromInput(currentStreamURL) : null),
+    [currentStreamURL],
   );
 
   const sectionCls = isLight
@@ -325,28 +371,46 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
         {tabBtn("team", "Team")}
       </div>
 
-      {streams.length > 1 && mainTab !== "team" ? (
+      {eventData.length > 1 && mainTab !== "team" ? (
         <div className="flex flex-wrap gap-2">
-          {streams.map((s, idx) => (
+          {eventData.map((d, idx) => (
             <button
-              key={s.id}
+              key={d.id}
               type="button"
               className={`rounded-md border px-2.5 py-1.5 text-[0.78rem] font-semibold ${
-                dayIdx === idx
+                dataIdx === idx
                   ? "border-amber-300/50 bg-amber-900/30 text-amber-100"
                   : "border-white/15 bg-black/20 text-[#f4f0fa]/70"
               }`}
-              onClick={() => setDayIdx(idx)}
+              onClick={() => setDataIdx(idx)}
             >
-              Day {s.day_number}
-              {s.label ? ` · ${s.label}` : ""}
+              {d.event_type_name || d.label || `Segment ${idx + 1}`}
             </button>
           ))}
         </div>
       ) : null}
 
-      {mainTab === "streams" && activeStream ? (
+      {mainTab === "streams" && activeData ? (
         <section className={sectionCls}>
+          {streamTabs.length > 1 ? (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {streamTabs.map((label, idx) => (
+                <button
+                  key={label}
+                  type="button"
+                  className={`rounded-md border px-2.5 py-1.5 text-[0.78rem] font-semibold ${
+                    streamTabIdx === idx
+                      ? "border-purple-400/45 bg-purple-900/35 text-purple-100"
+                      : "border-white/15 bg-black/20 text-[#f4f0fa]/70"
+                  }`}
+                  onClick={() => setStreamTabIdx(idx)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
           {youtubeId ? (
             <div className="aspect-video w-full overflow-hidden rounded-lg border border-white/10 bg-black">
               <iframe
@@ -358,15 +422,29 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
               />
             </div>
           ) : (
-            <div className="flex flex-col items-start gap-3 rounded-lg border border-dashed border-white/20 bg-black/25 px-4 py-8">
-              <p className="m-0 text-[0.9rem] text-[#f4f0fa]/70">No stream video found for this day yet.</p>
+            <div className="flex flex-col gap-3 rounded-lg border border-dashed border-white/20 bg-black/25 px-4 py-6">
+              <p className="m-0 text-[0.9rem] text-[#f4f0fa]/70">
+                No stream URL for {streamTabs[streamTabIdx] ?? "this segment"} yet.
+              </p>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">YouTube URL</span>
+                <input
+                  type="url"
+                  className="w-full rounded-lg border border-white/[0.22] bg-black/35 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55"
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  value={streamUrlDraft}
+                  disabled={streamUrlSaving}
+                  onChange={(e) => setStreamUrlDraft(e.target.value)}
+                />
+              </label>
+              {streamUrlError ? <p className="m-0 text-[0.85rem] text-red-200/90">{streamUrlError}</p> : null}
               <button
                 type="button"
-                className="rounded-lg border border-white/25 bg-black/30 px-3 py-2 text-[0.8125rem] font-semibold text-[#f4f0fa] disabled:opacity-45"
-                disabled={refreshingYoutube}
-                onClick={() => void onRefreshYoutube()}
+                className="self-start rounded-lg border border-white/25 bg-purple-900/40 px-3 py-2 text-[0.8125rem] font-semibold text-white disabled:opacity-45"
+                disabled={streamUrlSaving || !streamUrlDraft.trim()}
+                onClick={() => void onSaveStreamURL()}
               >
-                {refreshingYoutube ? "Checking…" : "Try to retrieve stream"}
+                {streamUrlSaving ? "Saving…" : "Save stream URL"}
               </button>
             </div>
           )}
@@ -410,7 +488,7 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
         </section>
       ) : null}
 
-      {(mainTab === "pairings" || mainTab === "results" || mainTab === "standings") && activeStream ? (
+      {(mainTab === "pairings" || mainTab === "results" || mainTab === "standings") && activeData ? (
         <section className={sectionCls}>
           {roundsLoading ? (
             <TabSpinner />
@@ -424,8 +502,8 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
                   onChange={(e) => setRound(Number(e.target.value))}
                 >
                   {rounds.map((r) => (
-                    <option key={r.Number} value={r.Number}>
-                      {r.Label || `Round ${r.Number}`}
+                    <option key={r.id ?? r.round_number} value={r.round_number}>
+                      {r.round_label || `Round ${r.round_number}`}
                     </option>
                   ))}
                 </select>
@@ -445,20 +523,20 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
                     <tbody>
                       {pairings.map((row, idx) => (
                         <tr key={idx} className="border-b border-white/[0.06] last:border-b-0">
-                          <td className="py-2 pr-3 tabular-nums">{row.Table}</td>
+                          <td className="py-2 pr-3 tabular-nums">{row.table}</td>
                           <td className="py-2 pr-3">
-                            <div>{row.Player1}</div>
-                            <div className="text-[0.75rem] text-[#f4f0fa]/55">{row.Hero1}</div>
+                            <div>{row.player1}</div>
+                            <div className="text-[0.75rem] text-[#f4f0fa]/55">{row.hero1}</div>
                           </td>
                           <td className="py-2 pr-3">
-                            <div>{row.Player2}</div>
-                            <div className="text-[0.75rem] text-[#f4f0fa]/55">{row.Hero2}</div>
+                            <div>{row.player2}</div>
+                            <div className="text-[0.75rem] text-[#f4f0fa]/55">{row.hero2}</div>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  {pairings.length === 0 ? <p className="mt-3 text-[#f4f0fa]/60">No pairings for this round.</p> : null}
+                  {pairings.length === 0 ? <p className="mt-3 text-[#f4f0fa]/60">No pairings synced for this round yet.</p> : null}
                 </div>
               ) : null}
 
@@ -477,19 +555,19 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
                       {results.map((row, idx) => (
                         <tr key={idx} className="border-b border-white/[0.06] last:border-b-0">
                           <td className="py-2 pr-3">
-                            <div>{row.Player1}</div>
-                            <div className="text-[0.75rem] text-[#f4f0fa]/55">{row.Hero1}</div>
+                            <div>{row.player1}</div>
+                            <div className="text-[0.75rem] text-[#f4f0fa]/55">{row.hero1}</div>
                           </td>
-                          <td className="py-2 pr-3 text-amber-200/90">{row.WinnerSide || "—"}</td>
+                          <td className="py-2 pr-3 text-amber-200/90">{row.winner_side || "—"}</td>
                           <td className="py-2 pr-3">
-                            <div>{row.Player2}</div>
-                            <div className="text-[0.75rem] text-[#f4f0fa]/55">{row.Hero2}</div>
+                            <div>{row.player2}</div>
+                            <div className="text-[0.75rem] text-[#f4f0fa]/55">{row.hero2}</div>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  {results.length === 0 ? <p className="mt-3 text-[#f4f0fa]/60">No results for this round.</p> : null}
+                  {results.length === 0 ? <p className="mt-3 text-[#f4f0fa]/60">No results synced for this round yet.</p> : null}
                 </div>
               ) : null}
 
@@ -508,15 +586,15 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
                     <tbody>
                       {standings.map((row, idx) => (
                         <tr key={idx} className="border-b border-white/[0.06] last:border-b-0">
-                          <td className="py-2 pr-3 tabular-nums">{row.Rank}</td>
-                          <td className="py-2 pr-3">{row.Player}</td>
-                          <td className="py-2 pr-3">{row.Hero}</td>
-                          <td className="py-2 pr-3 tabular-nums">{row.Wins}</td>
+                          <td className="py-2 pr-3 tabular-nums">{row.rank}</td>
+                          <td className="py-2 pr-3">{row.player}</td>
+                          <td className="py-2 pr-3">{row.hero}</td>
+                          <td className="py-2 pr-3 tabular-nums">{row.wins}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  {standings.length === 0 ? <p className="mt-3 text-[#f4f0fa]/60">No standings for this round.</p> : null}
+                  {standings.length === 0 ? <p className="mt-3 text-[#f4f0fa]/60">No standings synced for this round yet.</p> : null}
                 </div>
               ) : null}
             </>
@@ -527,7 +605,7 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
       {mainTab === "team" ? (
         <section className={sectionCls}>
           <p className="m-0 text-[0.85rem] text-[#f4f0fa]/65">
-            Matches for users with first and last name set (scraped from latest round per day).
+            Matches for users with first and last name set (from latest synced round per segment).
           </p>
           {teamLoading ? <TabSpinner /> : null}
           {!teamLoading && teamMatches.length === 0 ? (
@@ -542,7 +620,7 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
                   </span>
                   <span className="text-[#f4f0fa]/55">
                     {" "}
-                    · Day {m.day_number}
+                    · {m.event_type_name}
                     {m.stream_label ? ` (${m.stream_label})` : ""} · Round {m.round} · {m.kind}
                   </span>
                   <div className="mt-0.5 text-[#f4f0fa]/75">{m.detail}</div>

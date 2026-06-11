@@ -63,7 +63,6 @@ export function EventsList({ isLight, active, onOpenEvent }) {
             <h3 className="m-0 text-[1rem] font-semibold text-[#f4f0fa]">{ev.title || `Event #${ev.id}`}</h3>
             {ev.date_text ? <p className="m-0 mt-1 text-[0.82rem] text-[#f4f0fa]/65">{ev.date_text}</p> : null}
             {ev.venue ? <p className="m-0 mt-0.5 line-clamp-2 text-[0.78rem] text-[#f4f0fa]/50">{ev.venue}</p> : null}
-            <p className="m-0 mt-2 text-[0.75rem] text-[#f4f0fa]/45">{ev.day_count} day{ev.day_count === 1 ? "" : "s"}</p>
           </button>
         ))}
       </div>

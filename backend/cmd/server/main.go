@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"righteous-gaming/backend/internal/app"
+	"righteous-gaming/backend/internal/eventsync"
 	"righteous-gaming/backend/internal/handler"
+	"righteous-gaming/backend/internal/scrape"
 	"righteous-gaming/backend/internal/service"
 	"righteous-gaming/backend/log"
 )
@@ -36,10 +38,15 @@ func main() {
 
 	log.Info("application initialized")
 
+	scrapeClient := scrape.NewClient()
+	syncRunner := eventsync.NewRunner(application.Repo, scrapeClient)
+	syncRunner.Start(ctx)
+	defer syncRunner.Stop()
+
 	addr := listenAddr()
 
 	userSvc := service.NewUserService(application.Repo, application.Firebase)
-	mux := handler.NewRouter(application, userSvc)
+	mux := handler.NewRouter(application, userSvc, scrapeClient)
 
 	// Read/write timeouts must cover large recording uploads proxied through nginx.
 	srv := &http.Server{

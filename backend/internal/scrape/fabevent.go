@@ -288,19 +288,6 @@ func (c *Client) fetchEventPageFromTournamentAPI(ctx context.Context, apiURL, re
 	return out, nil
 }
 
-// EventPageDataFromHTML parses tournament metadata from saved FabTCG page HTML
-// (for admin paste fallback when server-side fetch is blocked).
-func EventPageDataFromHTML(htmlText string) EventPageData {
-	parsed := ParseEventPage(htmlText)
-	if parsed.Title == "" {
-		parsed.Title = textFromFirstTag(htmlText, "h1")
-	}
-	if parsed.ImageURL == "" {
-		parsed.ImageURL = metaContent(htmlText, "og:image")
-	}
-	return parsed
-}
-
 func metaContent(htmlText, property string) string {
 	pat := regexp.MustCompile(`(?is)<meta\s+[^>]*property=["']` + property + `["'][^>]*content=["']([^"']+)["']`)
 	if m := pat.FindStringSubmatch(htmlText); len(m) > 1 {

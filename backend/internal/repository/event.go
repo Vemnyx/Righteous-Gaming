@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -9,7 +10,8 @@ import (
 )
 
 var ErrEventNotFound = errors.New("event not found")
-var ErrEventStreamNotFound = errors.New("event stream not found")
+var ErrEventDataNotFound = errors.New("event data not found")
+var ErrEventRoundNotFound = errors.New("event round not found")
 
 type Event struct {
 	ID        int
@@ -18,29 +20,43 @@ type Event struct {
 	ImageURL  *string
 	DateText  *string
 	Venue     *string
-	DayCount  int16
+	StartDate *time.Time
+	EndDate   *time.Time
 	CreatedAt time.Time
 }
 
-type EventStream struct {
+type EventData struct {
 	ID            int
 	EventID       int
-	DayNumber     int16
-	URL           string
-	Label         *string
+	EventType     int16
+	StartDate     time.Time
+	EndDate       time.Time
 	CoverageSlug  string
-	YoutubeURL    *string
+	CoverageURL   string
+	Label         *string
+	StreamURLs    []string
 	CreatedAt     time.Time
 }
 
-type EventStreamComment struct {
-	ID             int
-	EventStreamID  int
-	UserID         int
-	Comment        string
-	CreatedAt      time.Time
-	OwnerUsername  *string
-	OwnerEmail     string
+type EventRound struct {
+	ID          int
+	EventDataID int
+	RoundNumber int
+	RoundLabel  *string
+	Pairings    json.RawMessage
+	Results     json.RawMessage
+	Standings   json.RawMessage
+	SyncedAt    time.Time
+}
+
+type EventDataComment struct {
+	ID            int
+	EventDataID   int
+	UserID        int
+	Comment       string
+	CreatedAt     time.Time
+	OwnerUsername *string
+	OwnerEmail    string
 }
 
 type NamedUser struct {
@@ -52,26 +68,55 @@ type NamedUser struct {
 }
 
 type CreateEventParams struct {
-	EventURL string
-	Title    string
-	ImageURL *string
-	DateText *string
-	Venue    *string
-	DayCount int16
+	EventURL  string
+	Title     string
+	ImageURL  *string
+	DateText  *string
+	Venue     *string
+	StartDate *time.Time
+	EndDate   *time.Time
 }
 
-type CreateEventStreamParams struct {
+type CreateEventDataParams struct {
 	EventID      int
-	DayNumber    int16
-	URL          string
-	Label        *string
+	EventType    int16
+	StartDate    time.Time
+	EndDate      time.Time
 	CoverageSlug string
-	YoutubeURL   *string
+	CoverageURL  string
+	Label        *string
+	StreamURLs   []string
+}
+
+type CreateEventRoundParams struct {
+	EventDataID int
+	RoundNumber int
+	RoundLabel  *string
+	Pairings    json.RawMessage
+	Results     json.RawMessage
+	Standings   json.RawMessage
+}
+
+func scanEvent(row pgx.Row) (Event, error) {
+	var e Event
+	err := row.Scan(&e.ID, &e.EventURL, &e.Title, &e.ImageURL, &e.DateText, &e.Venue, &e.StartDate, &e.EndDate, &e.CreatedAt)
+	return e, err
+}
+
+func decodeStreamURLs(raw []byte) []string {
+	if len(raw) == 0 {
+		return []string{}
+	}
+	var out []string
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return []string{}
+	}
+	return out
 }
 
 func (r *Repository) ListEvents(ctx context.Context) ([]Event, error) {
 	rows, err := r.pool.Query(ctx, `
-SELECT id, event_url, title, image_url, date_text, venue, day_count, created_at
+SELECT id, event_url, title, image_url, date_text, venue, start_date, end_date, created_at
 FROM events
 ORDER BY id DESC`)
 	if err != nil {
@@ -80,8 +125,8 @@ ORDER BY id DESC`)
 	defer rows.Close()
 	var out []Event
 	for rows.Next() {
-		var e Event
-		if err := rows.Scan(&e.ID, &e.EventURL, &e.Title, &e.ImageURL, &e.DateText, &e.Venue, &e.DayCount, &e.CreatedAt); err != nil {
+		e, err := scanEvent(rows)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, e)
@@ -90,11 +135,10 @@ ORDER BY id DESC`)
 }
 
 func (r *Repository) GetEventByID(ctx context.Context, id int) (Event, error) {
-	var e Event
-	err := r.pool.QueryRow(ctx, `
-SELECT id, event_url, title, image_url, date_text, venue, day_count, created_at
+	e, err := scanEvent(r.pool.QueryRow(ctx, `
+SELECT id, event_url, title, image_url, date_text, venue, start_date, end_date, created_at
 FROM events
-WHERE id = $1`, id).Scan(&e.ID, &e.EventURL, &e.Title, &e.ImageURL, &e.DateText, &e.Venue, &e.DayCount, &e.CreatedAt)
+WHERE id = $1`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Event{}, ErrEventNotFound
 	}
@@ -102,90 +146,205 @@ WHERE id = $1`, id).Scan(&e.ID, &e.EventURL, &e.Title, &e.ImageURL, &e.DateText,
 }
 
 func (r *Repository) CreateEvent(ctx context.Context, p CreateEventParams) (Event, error) {
-	var e Event
-	err := r.pool.QueryRow(ctx, `
-INSERT INTO events (event_url, title, image_url, date_text, venue, day_count)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, event_url, title, image_url, date_text, venue, day_count, created_at`,
-		p.EventURL, p.Title, p.ImageURL, p.DateText, p.Venue, p.DayCount,
-	).Scan(&e.ID, &e.EventURL, &e.Title, &e.ImageURL, &e.DateText, &e.Venue, &e.DayCount, &e.CreatedAt)
-	return e, err
+	return scanEvent(r.pool.QueryRow(ctx, `
+INSERT INTO events (event_url, title, image_url, date_text, venue, start_date, end_date)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, event_url, title, image_url, date_text, venue, start_date, end_date, created_at`,
+		p.EventURL, p.Title, p.ImageURL, p.DateText, p.Venue, p.StartDate, p.EndDate,
+	))
 }
 
-func (r *Repository) ListEventStreamsByEventID(ctx context.Context, eventID int) ([]EventStream, error) {
+func (r *Repository) ListEventDataByEventID(ctx context.Context, eventID int) ([]EventData, error) {
 	rows, err := r.pool.Query(ctx, `
-SELECT id, event_id, day_number, url, label, coverage_slug, youtube_url, created_at
-FROM event_streams
+SELECT id, event_id, event_type, start_date, end_date, coverage_slug, coverage_url, label, stream_urls, created_at
+FROM event_data
 WHERE event_id = $1
-ORDER BY day_number ASC`, eventID)
+ORDER BY start_date ASC, id ASC`, eventID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []EventStream
+	var out []EventData
 	for rows.Next() {
-		var s EventStream
-		if err := rows.Scan(&s.ID, &s.EventID, &s.DayNumber, &s.URL, &s.Label, &s.CoverageSlug, &s.YoutubeURL, &s.CreatedAt); err != nil {
+		var ed EventData
+		var raw []byte
+		if err := rows.Scan(&ed.ID, &ed.EventID, &ed.EventType, &ed.StartDate, &ed.EndDate,
+			&ed.CoverageSlug, &ed.CoverageURL, &ed.Label, &raw, &ed.CreatedAt); err != nil {
 			return nil, err
 		}
-		out = append(out, s)
+		ed.StreamURLs = decodeStreamURLs(raw)
+		out = append(out, ed)
 	}
 	return out, rows.Err()
 }
 
-func (r *Repository) GetEventStreamByID(ctx context.Context, id int) (EventStream, error) {
-	var s EventStream
+func (r *Repository) GetEventDataByID(ctx context.Context, id int) (EventData, error) {
+	var ed EventData
+	var raw []byte
 	err := r.pool.QueryRow(ctx, `
-SELECT id, event_id, day_number, url, label, coverage_slug, youtube_url, created_at
-FROM event_streams
-WHERE id = $1`, id).Scan(&s.ID, &s.EventID, &s.DayNumber, &s.URL, &s.Label, &s.CoverageSlug, &s.YoutubeURL, &s.CreatedAt)
+SELECT id, event_id, event_type, start_date, end_date, coverage_slug, coverage_url, label, stream_urls, created_at
+FROM event_data
+WHERE id = $1`, id).Scan(&ed.ID, &ed.EventID, &ed.EventType, &ed.StartDate, &ed.EndDate,
+		&ed.CoverageSlug, &ed.CoverageURL, &ed.Label, &raw, &ed.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return EventStream{}, ErrEventStreamNotFound
+		return EventData{}, ErrEventDataNotFound
 	}
-	return s, err
-}
-
-func (r *Repository) CreateEventStream(ctx context.Context, p CreateEventStreamParams) (EventStream, error) {
-	var s EventStream
-	err := r.pool.QueryRow(ctx, `
-INSERT INTO event_streams (event_id, day_number, url, label, coverage_slug, youtube_url)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, event_id, day_number, url, label, coverage_slug, youtube_url, created_at`,
-		p.EventID, p.DayNumber, p.URL, p.Label, p.CoverageSlug, p.YoutubeURL,
-	).Scan(&s.ID, &s.EventID, &s.DayNumber, &s.URL, &s.Label, &s.CoverageSlug, &s.YoutubeURL, &s.CreatedAt)
-	return s, err
-}
-
-func (r *Repository) UpdateEventStreamYoutubeURL(ctx context.Context, streamID int, youtubeURL *string) (EventStream, error) {
-	var s EventStream
-	err := r.pool.QueryRow(ctx, `
-UPDATE event_streams
-SET youtube_url = $2
-WHERE id = $1
-RETURNING id, event_id, day_number, url, label, coverage_slug, youtube_url, created_at`,
-		streamID, youtubeURL,
-	).Scan(&s.ID, &s.EventID, &s.DayNumber, &s.URL, &s.Label, &s.CoverageSlug, &s.YoutubeURL, &s.CreatedAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return EventStream{}, ErrEventStreamNotFound
+	if err != nil {
+		return EventData{}, err
 	}
-	return s, err
+	ed.StreamURLs = decodeStreamURLs(raw)
+	return ed, nil
 }
 
-func (r *Repository) ListEventStreamComments(ctx context.Context, streamID int) ([]EventStreamComment, error) {
+func (r *Repository) ListActiveEventData(ctx context.Context, now time.Time) ([]EventData, error) {
 	rows, err := r.pool.Query(ctx, `
-SELECT c.id, c.event_stream_id, c.user_id, c.comment, c.created_at, u.username, u.email
-FROM event_stream_comments c
-JOIN users u ON u.id = c.user_id
-WHERE c.event_stream_id = $1
-ORDER BY c.created_at ASC`, streamID)
+SELECT id, event_id, event_type, start_date, end_date, coverage_slug, coverage_url, label, stream_urls, created_at
+FROM event_data
+WHERE start_date <= $1 AND end_date >= $1
+ORDER BY id ASC`, now)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []EventStreamComment
+	var out []EventData
 	for rows.Next() {
-		var c EventStreamComment
-		if err := rows.Scan(&c.ID, &c.EventStreamID, &c.UserID, &c.Comment, &c.CreatedAt, &c.OwnerUsername, &c.OwnerEmail); err != nil {
+		var ed EventData
+		var raw []byte
+		if err := rows.Scan(&ed.ID, &ed.EventID, &ed.EventType, &ed.StartDate, &ed.EndDate,
+			&ed.CoverageSlug, &ed.CoverageURL, &ed.Label, &raw, &ed.CreatedAt); err != nil {
+			return nil, err
+		}
+		ed.StreamURLs = decodeStreamURLs(raw)
+		out = append(out, ed)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) CreateEventData(ctx context.Context, p CreateEventDataParams) (EventData, error) {
+	raw, err := json.Marshal(p.StreamURLs)
+	if err != nil {
+		return EventData{}, err
+	}
+	var ed EventData
+	var stored []byte
+	err = r.pool.QueryRow(ctx, `
+INSERT INTO event_data (event_id, event_type, start_date, end_date, coverage_slug, coverage_url, label, stream_urls)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+RETURNING id, event_id, event_type, start_date, end_date, coverage_slug, coverage_url, label, stream_urls, created_at`,
+		p.EventID, p.EventType, p.StartDate, p.EndDate, p.CoverageSlug, p.CoverageURL, p.Label, raw,
+	).Scan(&ed.ID, &ed.EventID, &ed.EventType, &ed.StartDate, &ed.EndDate,
+		&ed.CoverageSlug, &ed.CoverageURL, &ed.Label, &stored, &ed.CreatedAt)
+	if err != nil {
+		return EventData{}, err
+	}
+	ed.StreamURLs = decodeStreamURLs(stored)
+	return ed, nil
+}
+
+func (r *Repository) UpdateEventDataStreamURLs(ctx context.Context, id int, urls []string) (EventData, error) {
+	raw, err := json.Marshal(urls)
+	if err != nil {
+		return EventData{}, err
+	}
+	var ed EventData
+	var stored []byte
+	err = r.pool.QueryRow(ctx, `
+UPDATE event_data SET stream_urls = $2::jsonb WHERE id = $1
+RETURNING id, event_id, event_type, start_date, end_date, coverage_slug, coverage_url, label, stream_urls, created_at`,
+		id, raw,
+	).Scan(&ed.ID, &ed.EventID, &ed.EventType, &ed.StartDate, &ed.EndDate,
+		&ed.CoverageSlug, &ed.CoverageURL, &ed.Label, &stored, &ed.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return EventData{}, ErrEventDataNotFound
+	}
+	if err != nil {
+		return EventData{}, err
+	}
+	ed.StreamURLs = decodeStreamURLs(stored)
+	return ed, nil
+}
+
+func (r *Repository) ListEventRoundNumbers(ctx context.Context, eventDataID int) ([]int, error) {
+	rows, err := r.pool.Query(ctx, `
+SELECT round_number FROM event_rounds WHERE event_data_id = $1 ORDER BY round_number ASC`, eventDataID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []int
+	for rows.Next() {
+		var n int
+		if err := rows.Scan(&n); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) ListEventRoundsByEventDataID(ctx context.Context, eventDataID int) ([]EventRound, error) {
+	rows, err := r.pool.Query(ctx, `
+SELECT id, event_data_id, round_number, round_label, pairings, results, standings, synced_at
+FROM event_rounds
+WHERE event_data_id = $1
+ORDER BY round_number ASC`, eventDataID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []EventRound
+	for rows.Next() {
+		var er EventRound
+		if err := rows.Scan(&er.ID, &er.EventDataID, &er.RoundNumber, &er.RoundLabel,
+			&er.Pairings, &er.Results, &er.Standings, &er.SyncedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, er)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) GetEventRound(ctx context.Context, eventDataID, roundNumber int) (EventRound, error) {
+	var er EventRound
+	err := r.pool.QueryRow(ctx, `
+SELECT id, event_data_id, round_number, round_label, pairings, results, standings, synced_at
+FROM event_rounds
+WHERE event_data_id = $1 AND round_number = $2`, eventDataID, roundNumber).
+		Scan(&er.ID, &er.EventDataID, &er.RoundNumber, &er.RoundLabel,
+			&er.Pairings, &er.Results, &er.Standings, &er.SyncedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return EventRound{}, ErrEventRoundNotFound
+	}
+	return er, err
+}
+
+func (r *Repository) CreateEventRound(ctx context.Context, p CreateEventRoundParams) (EventRound, error) {
+	var er EventRound
+	err := r.pool.QueryRow(ctx, `
+INSERT INTO event_rounds (event_data_id, round_number, round_label, pairings, results, standings)
+VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb)
+RETURNING id, event_data_id, round_number, round_label, pairings, results, standings, synced_at`,
+		p.EventDataID, p.RoundNumber, p.RoundLabel, p.Pairings, p.Results, p.Standings,
+	).Scan(&er.ID, &er.EventDataID, &er.RoundNumber, &er.RoundLabel,
+		&er.Pairings, &er.Results, &er.Standings, &er.SyncedAt)
+	return er, err
+}
+
+func (r *Repository) ListEventDataComments(ctx context.Context, eventDataID int) ([]EventDataComment, error) {
+	rows, err := r.pool.Query(ctx, `
+SELECT c.id, c.event_data_id, c.user_id, c.comment, c.created_at, u.username, u.email
+FROM event_data_comments c
+JOIN users u ON u.id = c.user_id
+WHERE c.event_data_id = $1
+ORDER BY c.created_at ASC`, eventDataID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []EventDataComment
+	for rows.Next() {
+		var c EventDataComment
+		if err := rows.Scan(&c.ID, &c.EventDataID, &c.UserID, &c.Comment, &c.CreatedAt, &c.OwnerUsername, &c.OwnerEmail); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -193,16 +352,16 @@ ORDER BY c.created_at ASC`, streamID)
 	return out, rows.Err()
 }
 
-func (r *Repository) CreateEventStreamComment(ctx context.Context, streamID, userID int, comment string) (EventStreamComment, error) {
-	var c EventStreamComment
+func (r *Repository) CreateEventDataComment(ctx context.Context, eventDataID, userID int, comment string) (EventDataComment, error) {
+	var c EventDataComment
 	err := r.pool.QueryRow(ctx, `
-INSERT INTO event_stream_comments (event_stream_id, user_id, comment)
+INSERT INTO event_data_comments (event_data_id, user_id, comment)
 VALUES ($1, $2, $3)
-RETURNING id, event_stream_id, user_id, comment, created_at`,
-		streamID, userID, comment,
-	).Scan(&c.ID, &c.EventStreamID, &c.UserID, &c.Comment, &c.CreatedAt)
+RETURNING id, event_data_id, user_id, comment, created_at`,
+		eventDataID, userID, comment,
+	).Scan(&c.ID, &c.EventDataID, &c.UserID, &c.Comment, &c.CreatedAt)
 	if err != nil {
-		return EventStreamComment{}, err
+		return EventDataComment{}, err
 	}
 	err = r.pool.QueryRow(ctx, `SELECT username, email FROM users WHERE id = $1`, userID).
 		Scan(&c.OwnerUsername, &c.OwnerEmail)
