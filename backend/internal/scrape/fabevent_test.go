@@ -3,10 +3,37 @@ package scrape_test
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"righteous-gaming/backend/internal/scrape"
 )
+
+func TestParseEventPageMemphisDates(t *testing.T) {
+	html := `<div class="quick-details">
+		<strong>Date:</strong> January 31 – February 2nd, 2025
+		<strong>Venue:</strong> Renasant Convention Center, Memphis, TN
+	</div>
+	<a href="https://fabtcg.com/en/coverage/calling-memphis-a/"><h3>Calling</h3></a>`
+	parsed := scrape.ParseEventPage(html)
+	if parsed.DateText != "January 31 – February 2nd, 2025" {
+		t.Fatalf("date_text: %q", parsed.DateText)
+	}
+	if parsed.Venue == "" || !strings.Contains(parsed.Venue, "Renasant") {
+		t.Fatalf("venue: %q", parsed.Venue)
+	}
+}
+
+func TestParseEventPageMemphisPlainDate(t *testing.T) {
+	html := `Date: January 31 – February 2nd, 2025Venue: Renasant Convention Center`
+	parsed := scrape.ParseEventPage(html)
+	if parsed.DateText == "" {
+		t.Fatal("expected date_text from plain Date: line")
+	}
+	if !strings.Contains(parsed.DateText, "January 31") {
+		t.Fatalf("date_text: %q", parsed.DateText)
+	}
+}
 
 func TestParseEventPageYokohama(t *testing.T) {
 	html, err := os.ReadFile("/tmp/fab-event.html")

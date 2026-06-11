@@ -5,12 +5,16 @@ import (
 	"encoding/json"
 	"time"
 
+	"righteous-gaming/backend/internal/eventusers"
 	"righteous-gaming/backend/internal/repository"
 	"righteous-gaming/backend/internal/scrape"
 	"righteous-gaming/backend/log"
 )
 
-const syncInterval = time.Minute
+const (
+	syncInterval      = time.Minute
+	CreateSyncTimeout = 15 * time.Minute
+)
 
 // Runner periodically syncs FabTCG coverage for active event_data rows.
 type Runner struct {
@@ -79,67 +83,78 @@ func SyncEventData(ctx context.Context, repo *repository.Repository, client *scr
 		have[n] = struct{}{}
 	}
 	covReferer := scrape.CoveragePageURL(ed.CoverageSlug)
+	var roundErr error
 	for _, rl := range roundLinks {
 		if _, ok := have[rl.Number]; ok {
 			continue
 		}
-		pairHTML, _ := client.FetchHTMLReferer(ctx, rl.Pairings, covReferer)
-		resHTML, _ := client.FetchHTMLReferer(ctx, rl.Results, covReferer)
-		stHTML, _ := client.FetchHTMLReferer(ctx, rl.Standings, covReferer)
-
-		pairings, err := encodePairings(scrape.ParsePairings(pairHTML))
-		if err != nil {
-			return err
-		}
-		results, err := encodeResults(scrape.ParseResults(resHTML))
-		if err != nil {
-			return err
-		}
-		standings, err := encodeStandings(scrape.ParseStandings(stHTML))
-		if err != nil {
-			return err
-		}
-		var label *string
-		if rl.Label != "" {
-			label = &rl.Label
-		}
-		if _, err := repo.CreateEventRound(ctx, repository.CreateEventRoundParams{
-			EventDataID: ed.ID,
-			RoundNumber: rl.Number,
-			RoundLabel:  label,
-			Pairings:    pairings,
-			Results:     results,
-			Standings:   standings,
-		}); err != nil {
-			return err
+		if err := storeRound(ctx, repo, client, ed, rl, covReferer); err != nil {
+			log.Error("event sync round", "event_data_id", ed.ID, "round", rl.Number, "error", err)
+			if roundErr == nil {
+				roundErr = err
+			}
+			continue
 		}
 		log.Info("event sync stored round", "event_data_id", ed.ID, "round", rl.Number)
+	}
+	return roundErr
+}
+
+func storeRound(ctx context.Context, repo *repository.Repository, client *scrape.Client, ed repository.EventData, rl scrape.RoundLinks, covReferer string) error {
+	pairHTML, _ := client.FetchHTMLReferer(ctx, rl.Pairings, covReferer)
+	resHTML, _ := client.FetchHTMLReferer(ctx, rl.Results, covReferer)
+	stHTML, _ := client.FetchHTMLReferer(ctx, rl.Standings, covReferer)
+
+	pairings, err := encodePairings(scrape.ParsePairings(pairHTML))
+	if err != nil {
+		return err
+	}
+	results, err := encodeResults(scrape.ParseResults(resHTML))
+	if err != nil {
+		return err
+	}
+	standings, err := encodeStandings(scrape.ParseStandings(stHTML))
+	if err != nil {
+		return err
+	}
+	var label *string
+	if rl.Label != "" {
+		label = &rl.Label
+	}
+	er, err := repo.CreateEventRound(ctx, repository.CreateEventRoundParams{
+		EventDataID: ed.ID,
+		RoundNumber: rl.Number,
+		RoundLabel:  label,
+		Pairings:    pairings,
+		Results:     results,
+		Standings:   standings,
+	})
+	if err != nil {
+		return err
+	}
+	if err := eventusers.IndexRound(ctx, repo, er); err != nil {
+		log.Error("event users index round", "event_round_id", er.ID, "error", err)
 	}
 	return nil
 }
 
-// SyncEventIfActive runs an initial sync for all event_data on an event when it is current or past.
-func SyncEventIfActive(ctx context.Context, repo *repository.Repository, client *scrape.Client, eventID int) {
-	e, err := repo.GetEventByID(ctx, eventID)
-	if err != nil {
-		return
-	}
-	now := time.Now().UTC()
-	if e.StartDate == nil || e.EndDate == nil {
-		return
-	}
-	if now.Before(*e.StartDate) {
-		return
-	}
+// SyncEvent scrapes all available rounds for every event_data row on an event.
+// Used on create so coverage is fully populated before the client opens the event.
+func SyncEvent(ctx context.Context, repo *repository.Repository, client *scrape.Client, eventID int) error {
 	dataRows, err := repo.ListEventDataByEventID(ctx, eventID)
 	if err != nil {
-		return
+		return err
 	}
+	var firstErr error
 	for _, ed := range dataRows {
 		if err := SyncEventData(ctx, repo, client, ed); err != nil {
-			log.Error("event initial sync", "event_data_id", ed.ID, "error", err)
+			log.Error("event sync segment", "event_data_id", ed.ID, "error", err)
+			if firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
+	return firstErr
 }
 
 func encodePairings(rows []scrape.PairingRow) (json.RawMessage, error) {

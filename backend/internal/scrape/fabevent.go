@@ -16,8 +16,10 @@ import (
 const fabBrowserUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 var (
-	reDateLine       = regexp.MustCompile(`(?is)<b>Date:</b>\s*([^<]+)`)
-	reVenueLine      = regexp.MustCompile(`(?is)<b>Venue:</b>\s*([^<]+)`)
+	reDateLine       = regexp.MustCompile(`(?is)(?:<b>|<strong>)\s*Date:\s*</(?:b|strong)>\s*([^<]+)`)
+	reDateLinePlain  = regexp.MustCompile(`(?is)Date:\s*((?:January|February|March|April|May|June|July|August|September|October|November|December)[^<\n]*?\d{4})`)
+	reVenueLine      = regexp.MustCompile(`(?is)(?:<b>|<strong>)\s*Venue:\s*</(?:b|strong)>\s*([^<]+)`)
+	reVenueLinePlain = regexp.MustCompile(`(?is)Venue:\s*([^<\n]+)`)
 	reCoverageHref   = regexp.MustCompile(`(?is)<a[^>]+href=["'](https://fabtcg\.com(?:/en)?/coverage/[^"'#?]+/?)["'][^>]*>.*?<h3[^>]*>([^<]+)</h3>`)
 	reCoverageSlug   = regexp.MustCompile(`(?i)/coverage/([^/"'#?]+)`)
 	reRoundRow       = regexp.MustCompile(`(?is)<tr>\s*<td[^>]*class=["']rounds["'][^>]*>([^<]+)</td>.*?pairings/(\d+)/.*?results/(\d+)/.*?standings/(\d+)/`)
@@ -288,6 +290,32 @@ func (c *Client) fetchEventPageFromTournamentAPI(ctx context.Context, apiURL, re
 	return out, nil
 }
 
+func extractFabDateText(htmlText string) string {
+	for _, re := range []*regexp.Regexp{reDateLine, reDateLinePlain} {
+		if m := re.FindStringSubmatch(htmlText); len(m) > 1 {
+			if s := cleanInlineText(m[1]); s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func extractFabVenueText(htmlText string) string {
+	for _, re := range []*regexp.Regexp{reVenueLine, reVenueLinePlain} {
+		if m := re.FindStringSubmatch(htmlText); len(m) > 1 {
+			s := cleanInlineText(m[1])
+			if i := strings.Index(strings.ToLower(s), "event hall:"); i > 0 {
+				s = strings.TrimSpace(s[:i])
+			}
+			if s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
 func metaContent(htmlText, property string) string {
 	pat := regexp.MustCompile(`(?is)<meta\s+[^>]*property=["']` + property + `["'][^>]*content=["']([^"']+)["']`)
 	if m := pat.FindStringSubmatch(htmlText); len(m) > 1 {
@@ -307,12 +335,8 @@ func ParseEventPage(htmlText string) EventPageData {
 		out.Title = textFromFirstTag(htmlText, "h1")
 	}
 	out.ImageURL = metaContent(htmlText, "og:image")
-	if m := reDateLine.FindStringSubmatch(htmlText); len(m) > 1 {
-		out.DateText = cleanInlineText(m[1])
-	}
-	if m := reVenueLine.FindStringSubmatch(htmlText); len(m) > 1 {
-		out.Venue = cleanInlineText(m[1])
-	}
+	out.DateText = extractFabDateText(htmlText)
+	out.Venue = extractFabVenueText(htmlText)
 	seen := map[string]struct{}{}
 	for _, m := range reCoverageHref.FindAllStringSubmatch(htmlText, -1) {
 		if len(m) < 3 {

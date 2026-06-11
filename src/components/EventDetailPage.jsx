@@ -2,12 +2,44 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { youtubeEmbedSrc, youtubeVideoIdFromInput } from "../utils/youtube";
 
-/** @typedef {"streams" | "pairings" | "results" | "standings" | "team"} EventTab */
+/** @typedef {"team" | "pairings" | "results" | "standings" | "stream"} EventTab */
+
+/** @param {object} d */
+function segmentLabel(d) {
+  return d.label || d.event_type_name || `Segment ${d.id}`;
+}
 
 function TabSpinner() {
   return (
     <div className="flex min-h-[12rem] items-center justify-center" aria-busy="true">
       <div className="h-9 w-9 animate-spin rounded-full border-2 border-white/20 border-t-purple-300/90" />
+    </div>
+  );
+}
+
+const teamHeroArtFade =
+  "[mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)]";
+
+/**
+ * @param {{ src?: string | null, name?: string | null }} props
+ */
+function TeamMatchHeroArt({ src, name }) {
+  const label = name != null && String(name).trim() !== "" ? String(name).trim() : "Hero";
+  return (
+    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-white/10" aria-hidden>
+      {src ? (
+        <img
+          src={src}
+          alt=""
+          className={`h-full w-full object-cover object-top ${teamHeroArtFade}`}
+          draggable={false}
+        />
+      ) : (
+        <div
+          className={`h-full w-full bg-gradient-to-br from-purple-900/40 via-purple-800/20 to-black/30 ${teamHeroArtFade}`}
+          title={label}
+        />
+      )}
     </div>
   );
 }
@@ -25,17 +57,16 @@ function formatDateTime(iso) {
  *   isLight: boolean,
  *   active: boolean,
  *   eventId: string,
- *   onBack: () => void,
  * }} props
  */
-export function EventDetailPage({ isLight, active, eventId, onBack }) {
+export function EventDetailPage({ isLight, active, eventId }) {
   const { user } = useAuth();
   const [event, setEvent] = useState(/** @type {object | null} */ (null));
   const [eventData, setEventData] = useState(/** @type {object[]} */ ([]));
   const [metaLoading, setMetaLoading] = useState(false);
   const [metaError, setMetaError] = useState(/** @type {string | null} */ (null));
 
-  const [mainTab, setMainTab] = useState(/** @type {EventTab} */ ("streams"));
+  const [mainTab, setMainTab] = useState(/** @type {EventTab} */ ("team"));
   const [dataIdx, setDataIdx] = useState(0);
   const [streamTabIdx, setStreamTabIdx] = useState(0);
   const [round, setRound] = useState(1);
@@ -99,6 +130,7 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
         setEventData(Array.isArray(data.event_data) ? data.event_data : []);
         setDataIdx(0);
         setStreamTabIdx(0);
+        setMainTab("team");
       } catch (e) {
         if (!cancelled) setMetaError(e instanceof Error ? e.message : "Failed to load event");
       } finally {
@@ -239,12 +271,13 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
   }, [user, activeData]);
 
   useEffect(() => {
-    if (!active || mainTab !== "streams" || !activeData) return;
+    if (!active || mainTab !== "stream" || !activeData) return;
     void loadComments();
   }, [active, mainTab, activeData, loadComments]);
 
   useEffect(() => {
     setStreamTabIdx(0);
+    setMainTab("team");
   }, [dataIdx]);
 
   useEffect(() => {
@@ -320,9 +353,32 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
     [currentStreamURL],
   );
 
+  const segmentTeamMatches = useMemo(() => {
+    if (!activeData) return [];
+    return teamMatches.filter((m) => m.event_data_id === activeData.id);
+  }, [teamMatches, activeData]);
+
   const sectionCls = isLight
-    ? "rounded-xl border border-white/[0.14] bg-black/25 p-4"
-    : "rounded-xl border border-white/[0.12] bg-black/35 p-4";
+    ? "rounded-xl border border-white/[0.14] bg-black/30 p-4 backdrop-blur-[2px]"
+    : "rounded-xl border border-white/[0.12] bg-black/40 p-4 backdrop-blur-[2px]";
+
+  const segmentTabBtn = (idx, label) => {
+    const on = dataIdx === idx;
+    return (
+      <button
+        type="button"
+        key={idx}
+        className={`rounded-lg border px-4 py-2.5 text-[0.875rem] font-semibold transition ${
+          on
+            ? "border-amber-300/55 bg-amber-900/35 text-amber-50 shadow-[0_2px_12px_rgba(0,0,0,0.25)]"
+            : "border-white/[0.14] bg-black/25 text-[#f4f0fa]/75 hover:border-white/28 hover:bg-black/35"
+        }`}
+        onClick={() => setDataIdx(idx)}
+      >
+        {label}
+      </button>
+    );
+  };
 
   if (metaLoading) {
     return <TabSpinner />;
@@ -330,67 +386,60 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
   if (metaError || !event) {
     return (
       <div className="px-2 py-4">
-        <button type="button" className="mb-4 text-[0.85rem] text-purple-200/90 underline" onClick={onBack}>
-          ← Back to events
-        </button>
         <p className="text-red-200/90">{metaError || "Event not found"}</p>
       </div>
     );
   }
 
   return (
-    <div className="flex w-full flex-1 flex-col gap-4 px-1 py-2 sm:px-2">
-      <button type="button" className="self-start text-[0.85rem] text-purple-200/90 underline" onClick={onBack}>
-        ← Back to events
-      </button>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-5">
-        {event.image_url ? (
-          <img src={event.image_url} alt="" className="w-full max-w-xs rounded-xl border border-white/10 object-cover sm:shrink-0" />
-        ) : null}
-        <div className="min-w-0">
-          <h2 className="m-0 text-xl font-semibold text-[#f4f0fa]">{event.title}</h2>
-          {event.date_text ? <p className="m-0 mt-1 text-[0.9rem] text-[#f4f0fa]/70">{event.date_text}</p> : null}
-          {event.venue ? <p className="m-0 mt-1 text-[0.85rem] text-[#f4f0fa]/55">{event.venue}</p> : null}
-          <a
-            href={event.event_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-2 inline-block text-[0.82rem] text-purple-200/90 underline"
-          >
-            FabTCG event page
-          </a>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {tabBtn("streams", "Streams")}
-        {tabBtn("pairings", "Pairings")}
-        {tabBtn("results", "Results")}
-        {tabBtn("standings", "Standings")}
-        {tabBtn("team", "Team")}
-      </div>
-
-      {eventData.length > 1 && mainTab !== "team" ? (
-        <div className="flex flex-wrap gap-2">
-          {eventData.map((d, idx) => (
-            <button
-              key={d.id}
-              type="button"
-              className={`rounded-md border px-2.5 py-1.5 text-[0.78rem] font-semibold ${
-                dataIdx === idx
-                  ? "border-amber-300/50 bg-amber-900/30 text-amber-100"
-                  : "border-white/15 bg-black/20 text-[#f4f0fa]/70"
-              }`}
-              onClick={() => setDataIdx(idx)}
-            >
-              {d.event_type_name || d.label || `Segment ${idx + 1}`}
-            </button>
-          ))}
+    <div className="flex w-full flex-1 flex-col gap-3 px-1 py-2 sm:px-2">
+      {eventData.length > 0 ? (
+        <div className="flex flex-wrap gap-2 border-b border-white/[0.08] pb-3">
+          {eventData.map((d, idx) => segmentTabBtn(idx, segmentLabel(d)))}
         </div>
       ) : null}
 
-      {mainTab === "streams" && activeData ? (
+      <div className="min-w-0 px-0.5">
+        <h2 className="m-0 text-xl font-semibold tracking-tight text-[#f4f0fa]">{event.title}</h2>
+        {event.date_text ? <p className="m-0 mt-1 text-[0.9rem] text-[#f4f0fa]/70">{event.date_text}</p> : null}
+        {event.venue ? <p className="m-0 mt-0.5 text-[0.85rem] text-[#f4f0fa]/55">{event.venue}</p> : null}
+        <a
+          href={event.event_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-1.5 inline-block text-[0.82rem] text-purple-200/90 underline"
+        >
+          FabTCG event page
+        </a>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {tabBtn("team", "Team")}
+        {tabBtn("pairings", "Pairings")}
+        {tabBtn("results", "Results")}
+        {tabBtn("standings", "Standings")}
+        {tabBtn("stream", "Stream")}
+      </div>
+
+      <div className="relative min-h-[min(50vh,24rem)] flex-1 overflow-hidden rounded-xl border border-white/[0.1]">
+        {event.image_url ? (
+          <>
+            <div
+              className="pointer-events-none absolute inset-0 scale-105 bg-cover bg-center opacity-[0.14] blur-[1px]"
+              style={{ backgroundImage: `url(${event.image_url})` }}
+              aria-hidden
+            />
+            <div
+              className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#0c0616]/55 via-[#0c0616]/82 to-[#0c0616]/95"
+              aria-hidden
+            />
+          </>
+        ) : (
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/40 to-black/60" aria-hidden />
+        )}
+
+        <div className="relative z-10 flex flex-col gap-4 p-3 sm:p-4">
+      {mainTab === "stream" && activeData ? (
         <section className={sectionCls}>
           {streamTabs.length > 1 ? (
             <div className="mb-4 flex flex-wrap gap-2">
@@ -602,34 +651,41 @@ export function EventDetailPage({ isLight, active, eventId, onBack }) {
         </section>
       ) : null}
 
-      {mainTab === "team" ? (
+      {mainTab === "team" && activeData ? (
         <section className={sectionCls}>
           <p className="m-0 text-[0.85rem] text-[#f4f0fa]/65">
-            Matches for users with first and last name set (from latest synced round per segment).
+            Righteous players in {segmentLabel(activeData)} (indexed from all synced rounds).
           </p>
           {teamLoading ? <TabSpinner /> : null}
-          {!teamLoading && teamMatches.length === 0 ? (
-            <p className="mt-3 text-[#f4f0fa]/60">No team matches found.</p>
+          {!teamLoading && segmentTeamMatches.length === 0 ? (
+            <p className="mt-3 text-[#f4f0fa]/60">No team matches found for this segment.</p>
           ) : null}
-          {!teamLoading && teamMatches.length > 0 ? (
+          {!teamLoading && segmentTeamMatches.length > 0 ? (
             <ul className="mt-4 flex flex-col gap-2">
-              {teamMatches.map((m, idx) => (
-                <li key={idx} className="rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-[0.85rem]">
-                  <span className="font-semibold text-[#f4f0fa]">
-                    {m.first_name} {m.last_name}
-                  </span>
-                  <span className="text-[#f4f0fa]/55">
-                    {" "}
-                    · {m.event_type_name}
-                    {m.stream_label ? ` (${m.stream_label})` : ""} · Round {m.round} · {m.kind}
-                  </span>
-                  <div className="mt-0.5 text-[#f4f0fa]/75">{m.detail}</div>
+              {segmentTeamMatches.map((m, idx) => (
+                <li
+                  key={idx}
+                  className="flex items-stretch gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-[0.85rem]"
+                >
+                  <TeamMatchHeroArt src={m.hero_art_image_url} name={m.hero_name} />
+                  <div className="min-w-0 flex-1">
+                    <span className="font-semibold text-[#f4f0fa]">
+                      {m.first_name} {m.last_name}
+                    </span>
+                    <span className="text-[#f4f0fa]/55">
+                      {" "}
+                      · Round {m.round} · {m.kind}
+                    </span>
+                    <div className="mt-0.5 text-[#f4f0fa]/75">{m.detail}</div>
+                  </div>
                 </li>
               ))}
             </ul>
           ) : null}
         </section>
       ) : null}
+        </div>
+      </div>
     </div>
   );
 }

@@ -69,15 +69,20 @@ export function EventsAdmin({ isLight, active, onOpenEvent }) {
         body: JSON.stringify({ event_url: url }),
       });
       if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
+      const data = await res.json();
+      const eventId = data?.event?.id;
       setModalOpen(false);
       setEventUrl("");
       setReloadSeq((n) => n + 1);
+      if (onOpenEvent && typeof eventId === "number" && eventId > 0) {
+        onOpenEvent(eventId);
+      }
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : "Failed to create event");
     } finally {
       setCreating(false);
     }
-  }, [user, creating, eventUrl]);
+  }, [user, creating, eventUrl, onOpenEvent]);
 
   const tableChromeBorder = isLight ? "border-white/[0.12]" : "border-white/[0.24] ring-1 ring-white/[0.05]";
   const tableHeadBorder = isLight ? "border-white/12" : "border-white/[0.20]";
@@ -157,6 +162,27 @@ export function EventsAdmin({ isLight, active, onOpenEvent }) {
         </table>
       </div>
 
+      {creating
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[700] flex flex-col items-center justify-center gap-3 bg-black/75 p-4 backdrop-blur-[2px]"
+              role="status"
+              aria-live="polite"
+              aria-busy="true"
+            >
+              <div
+                className="h-10 w-10 animate-spin rounded-full border-2 border-[#f4f0fa]/20 border-t-purple-300/90"
+                aria-hidden
+              />
+              <p className="m-0 text-[0.95rem] font-semibold text-[#f4f0fa]">Syncing event coverage…</p>
+              <p className="m-0 max-w-[20rem] text-center text-[0.82rem] text-[#f4f0fa]/60">
+                Fetching dates, rounds, and team data from FabTCG. This may take a few minutes.
+              </p>
+            </div>,
+            document.body,
+          )
+        : null}
+
       {modalOpen
         ? createPortal(
             <div
@@ -171,7 +197,7 @@ export function EventsAdmin({ isLight, active, onOpenEvent }) {
                   Add event
                 </h3>
                 <p className="mt-2 text-[0.85rem] text-[#f4f0fa]/70">
-                  Paste the FabTCG organised-play event URL. Coverage segments and dates are scraped automatically.
+                  Paste the FabTCG organised-play event URL. Coverage segments, dates, and all available rounds are synced before the event is created.
                 </p>
                 <label className="mt-4 flex flex-col gap-1.5">
                   <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">Event URL</span>
@@ -195,7 +221,7 @@ export function EventsAdmin({ isLight, active, onOpenEvent }) {
                     Cancel
                   </button>
                   <button type="button" className={btnPrimary} disabled={creating} onClick={() => void onCreate()}>
-                    {creating ? "Creating…" : "Create"}
+                    {creating ? "Syncing coverage…" : "Create"}
                   </button>
                 </div>
               </div>

@@ -1285,12 +1285,6 @@ export default function Dashboard({ onNavigate }) {
     pushDashboardUrl(RESOURCES_TAB_ID, "events", null, null, null, null, null, null, null, null, null, null, eid);
   }, []);
 
-  const closeEventDetail = useCallback(() => {
-    setResourcesChild("events");
-    setResourcesEventId(null);
-    pushDashboardUrl(RESOURCES_TAB_ID, "events", null, null, null, null, null, null, null, null, null, null, null);
-  }, []);
-
   const openDataCardRaterAnalytics = useCallback((raterId) => {
     const sid = String(raterId).trim();
     if (!/^\d+$/.test(sid)) return;
@@ -2041,7 +2035,6 @@ export default function Dashboard({ onNavigate }) {
                     resourcesChild === "events" &&
                     Boolean(resourcesEventId)
                   }
-                  onBack={closeEventDetail}
                 />
               ) : resourcesChild === "events" ? (
                 <EventsList

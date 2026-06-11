@@ -13,6 +13,7 @@ import (
 	"righteous-gaming/backend/internal/domain"
 	evt "righteous-gaming/backend/internal/events"
 	"righteous-gaming/backend/internal/eventsync"
+	"righteous-gaming/backend/internal/eventusers"
 	"righteous-gaming/backend/internal/repository"
 	"righteous-gaming/backend/internal/scrape"
 	"righteous-gaming/backend/internal/service"
@@ -339,8 +340,11 @@ func (h *eventsHTTP) adminCreateEvent(w http.ResponseWriter, r *http.Request) {
 		dataOut = append(dataOut, eventDataToJSON(ed))
 	}
 
-	eventID := e.ID
-	go eventsync.SyncEventIfActive(context.Background(), h.app.Repo, h.scrape, eventID)
+	syncCtx, cancel := context.WithTimeout(r.Context(), eventsync.CreateSyncTimeout)
+	defer cancel()
+	if err := eventsync.SyncEvent(syncCtx, h.app.Repo, h.scrape, e.ID); err != nil {
+		log.Error("event create sync", "event_id", e.ID, "error", err)
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -445,15 +449,18 @@ func (h *eventsHTTP) getEventStandings(w http.ResponseWriter, r *http.Request) {
 }
 
 type teamMatchJSON struct {
-	UserID        int    `json:"user_id"`
-	FirstName     string `json:"first_name"`
-	LastName      string `json:"last_name"`
-	EventDataID   int    `json:"event_data_id"`
-	EventTypeName string `json:"event_type_name"`
-	StreamLabel   string `json:"stream_label,omitempty"`
-	Round         int    `json:"round"`
-	Kind          string `json:"kind"`
-	Detail        string `json:"detail"`
+	UserID          int     `json:"user_id"`
+	FirstName       string  `json:"first_name"`
+	LastName        string  `json:"last_name"`
+	EventDataID     int     `json:"event_data_id"`
+	EventTypeName   string  `json:"event_type_name"`
+	StreamLabel     string  `json:"stream_label,omitempty"`
+	Round           int     `json:"round"`
+	Kind            string  `json:"kind"`
+	Detail          string  `json:"detail"`
+	HeroID          *int    `json:"hero_id,omitempty"`
+	HeroName        *string `json:"hero_name,omitempty"`
+	HeroArtImageURL *string `json:"hero_art_image_url,omitempty"`
 }
 
 func (h *eventsHTTP) getEventTeamSummary(w http.ResponseWriter, r *http.Request) {
@@ -473,105 +480,25 @@ func (h *eventsHTTP) getEventTeamSummary(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	users, err := h.app.Repo.ListUsersWithNames(r.Context())
-	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	dataRows, err := h.app.Repo.ListEventDataByEventID(r.Context(), eventID)
+	rows, err := h.app.Repo.ListEventDataUsersByEventID(r.Context(), eventID)
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	matches := make([]teamMatchJSON, 0)
-	for _, ed := range dataRows {
+	matches := make([]teamMatchJSON, 0, len(rows))
+	for _, row := range rows {
 		label := ""
-		if ed.Label != nil {
-			label = *ed.Label
+		if row.StreamLabel != nil {
+			label = *row.StreamLabel
 		}
-		typeName := domain.EventType(ed.EventType).String()
-		rounds, err := h.app.Repo.ListEventRoundsByEventDataID(r.Context(), ed.ID)
-		if err != nil || len(rounds) == 0 {
-			continue
-		}
-		latest := rounds[len(rounds)-1]
-
-		var standings []struct {
-			Rank   int    `json:"rank"`
-			Player string `json:"player"`
-			Hero   string `json:"hero"`
-			Wins   int    `json:"wins"`
-		}
-		_ = json.Unmarshal(latest.Standings, &standings)
-		for _, row := range standings {
-			for _, u := range users {
-				if scrape.NameMatches(u.FirstName, u.LastName, row.Player) {
-					matches = append(matches, teamMatchJSON{
-						UserID: u.ID, FirstName: u.FirstName, LastName: u.LastName,
-						EventDataID: ed.ID, EventTypeName: typeName, StreamLabel: label,
-						Round: latest.RoundNumber, Kind: "standing",
-						Detail: "Rank " + strconv.Itoa(row.Rank) + " · " + row.Hero + " · " + strconv.Itoa(row.Wins) + " wins",
-					})
-				}
-			}
-		}
-
-		var pairings []struct {
-			Table   int    `json:"table"`
-			Player1 string `json:"player1"`
-			Player2 string `json:"player2"`
-			Hero1   string `json:"hero1"`
-			Hero2   string `json:"hero2"`
-		}
-		_ = json.Unmarshal(latest.Pairings, &pairings)
-		for _, row := range pairings {
-			for _, u := range users {
-				if scrape.NameMatches(u.FirstName, u.LastName, row.Player1) || scrape.NameMatches(u.FirstName, u.LastName, row.Player2) {
-					opp := row.Player2
-					hero := row.Hero1
-					if scrape.NameMatches(u.FirstName, u.LastName, row.Player2) {
-						opp = row.Player1
-						hero = row.Hero2
-					}
-					matches = append(matches, teamMatchJSON{
-						UserID: u.ID, FirstName: u.FirstName, LastName: u.LastName,
-						EventDataID: ed.ID, EventTypeName: typeName, StreamLabel: label,
-						Round: latest.RoundNumber, Kind: "pairing",
-						Detail: "Table " + strconv.Itoa(row.Table) + " vs " + opp + " · " + hero,
-					})
-				}
-			}
-		}
-
-		var results []struct {
-			Player1    string `json:"player1"`
-			Player2    string `json:"player2"`
-			WinnerSide string `json:"winner_side"`
-			WinnerName string `json:"winner_name"`
-		}
-		_ = json.Unmarshal(latest.Results, &results)
-		for _, row := range results {
-			for _, u := range users {
-				inMatch := scrape.NameMatches(u.FirstName, u.LastName, row.Player1) || scrape.NameMatches(u.FirstName, u.LastName, row.Player2)
-				if !inMatch {
-					continue
-				}
-				won := scrape.NameMatches(u.FirstName, u.LastName, row.WinnerName)
-				result := "Loss"
-				if won {
-					result = "Win"
-				} else if row.WinnerName == "" {
-					result = row.WinnerSide
-				}
-				matches = append(matches, teamMatchJSON{
-					UserID: u.ID, FirstName: u.FirstName, LastName: u.LastName,
-					EventDataID: ed.ID, EventTypeName: typeName, StreamLabel: label,
-					Round: latest.RoundNumber, Kind: "result",
-					Detail: result + " · " + row.WinnerSide,
-				})
-			}
-		}
+		matches = append(matches, teamMatchJSON{
+			UserID: row.UserID, FirstName: row.FirstName, LastName: row.LastName,
+			EventDataID: row.EventDataID, EventTypeName: domain.EventType(row.EventType).String(),
+			StreamLabel: label, Round: row.RoundNumber, Kind: row.Kind,
+			Detail: eventusers.FormatDetail(row.Kind, row.Payload),
+			HeroID: row.HeroID, HeroName: row.HeroName, HeroArtImageURL: row.HeroArtImageURL,
+		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")

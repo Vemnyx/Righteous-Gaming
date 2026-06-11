@@ -116,6 +116,37 @@ LIMIT 1`
 	return id, nil
 }
 
+// HeroMatchRow is a minimal heroes row for FabTCG name matching.
+type HeroMatchRow struct {
+	ID    int
+	Name  string
+	Young bool
+}
+
+// ListHeroesForMatch returns all heroes for event coverage name resolution.
+func (r *Repository) ListHeroesForMatch(ctx context.Context) ([]HeroMatchRow, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	rows, err := r.pool.Query(ctx, `
+SELECT id, name, young
+FROM heroes
+ORDER BY young ASC, char_length(name) DESC, id ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list heroes for match: %w", err)
+	}
+	defer rows.Close()
+	var out []HeroMatchRow
+	for rows.Next() {
+		var h HeroMatchRow
+		if err := rows.Scan(&h.ID, &h.Name, &h.Young); err != nil {
+			return nil, fmt.Errorf("repository: scan hero for match: %w", err)
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
 // HeroLegalInFormat reports whether the hero's linked catalog card includes the format.
 func (r *Repository) HeroLegalInFormat(ctx context.Context, heroID int, format int16) (bool, error) {
 	if r.pool == nil {
