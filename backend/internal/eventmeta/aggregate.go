@@ -122,36 +122,55 @@ func buildOverallMetaShare(
 		return out
 	}
 
-	var latest *repository.EventRound
-	for i := range rounds {
-		rr := &rounds[i]
-		if latest == nil || rr.RoundNumber > latest.RoundNumber {
-			latest = rr
+	sorted := append([]repository.EventRound(nil), rounds...)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].RoundNumber < sorted[j].RoundNumber
+	})
+
+	// Each player counted once using their hero from their latest standings appearance.
+	type playerEntry struct {
+		round int
+		key   fieldKey
+	}
+	playerLatest := map[string]playerEntry{}
+	maxRound := 0
+
+	for _, rr := range sorted {
+		if rr.RoundNumber > maxRound {
+			maxRound = rr.RoundNumber
+		}
+		var rows []standingRow
+		_ = json.Unmarshal(rr.Standings, &rows)
+		for _, row := range rows {
+			player := normalizePlayer(row.Player)
+			if player == "" {
+				continue
+			}
+			key := canonicalFieldKey(row.Hero, matcher, catalog)
+			if key.name == "" {
+				continue
+			}
+			prev, ok := playerLatest[player]
+			if !ok || rr.RoundNumber >= prev.round {
+				playerLatest[player] = playerEntry{round: rr.RoundNumber, key: key}
+			}
 		}
 	}
-	if latest == nil {
-		return out
+
+	out.SourceRound = maxRound
+	for _, rr := range sorted {
+		if rr.RoundNumber == maxRound {
+			out.SourceRoundLabel = rr.RoundLabel
+			break
+		}
 	}
-
-	out.SourceRound = latest.RoundNumber
-	out.SourceRoundLabel = latest.RoundLabel
-
-	var rows []standingRow
-	_ = json.Unmarshal(latest.Standings, &rows)
 
 	counts := map[fieldKey]int{}
-	for _, row := range rows {
-		key := fieldKeyForHero(row.Hero, matcher)
-		if key.name == "" {
-			continue
-		}
-		counts[key]++
+	for _, entry := range playerLatest {
+		counts[entry.key]++
 	}
 
-	total := 0
-	for _, c := range counts {
-		total += c
-	}
+	total := len(playerLatest)
 	out.TotalDecks = total
 	if total == 0 {
 		return out
@@ -197,7 +216,7 @@ func buildWinRatesAndMatchups(
 		var rows []resultRow
 		_ = json.Unmarshal(rr.Results, &rows)
 		for _, row := range rows {
-			winner, loser := resultWinnerKeys(row, matcher)
+			winner, loser := resultWinnerKeys(row, matcher, catalog)
 			if winner.name == "" || loser.name == "" {
 				continue
 			}
@@ -296,9 +315,9 @@ func buildMatchupMatrix(
 	return refs, matrix
 }
 
-func resultWinnerKeys(row resultRow, matcher *eventusers.HeroMatcher) (winner, loser recordKey) {
-	h1 := fieldKeyForHero(row.Hero1, matcher)
-	h2 := fieldKeyForHero(row.Hero2, matcher)
+func resultWinnerKeys(row resultRow, matcher *eventusers.HeroMatcher, catalog map[int]HeroCatalog) (winner, loser recordKey) {
+	h1 := canonicalFieldKey(row.Hero1, matcher, catalog)
+	h2 := canonicalFieldKey(row.Hero2, matcher, catalog)
 	if h1.name == "" || h2.name == "" {
 		return recordKey{}, recordKey{}
 	}
@@ -326,17 +345,25 @@ func resultWinnerKeys(row resultRow, matcher *eventusers.HeroMatcher) (winner, l
 	return recordKey{}, recordKey{}
 }
 
-func fieldKeyForHero(raw string, matcher *eventusers.HeroMatcher) fieldKey {
+func canonicalFieldKey(raw string, matcher *eventusers.HeroMatcher, catalog map[int]HeroCatalog) fieldKey {
 	name := strings.TrimSpace(scrape.CleanHeroName(raw))
 	if name == "" {
 		return fieldKey{}
 	}
 	if matcher != nil {
-		if id := matcher.Match(name); id != nil {
-			return fieldKey{id: *id, name: name}
+		if id := matcher.MatchExactFirst(name); id != nil && *id > 0 {
+			display := name
+			if cat, ok := catalog[*id]; ok && cat.Name != "" {
+				display = cat.Name
+			}
+			return fieldKey{id: *id, name: display}
 		}
 	}
 	return fieldKey{id: 0, name: name}
+}
+
+func fieldKeyForHero(raw string, matcher *eventusers.HeroMatcher, catalog map[int]HeroCatalog) fieldKey {
+	return canonicalFieldKey(raw, matcher, catalog)
 }
 
 func heroRef(k fieldKey, catalog map[int]HeroCatalog) HeroRef {

@@ -32,6 +32,24 @@ func TestHeroMatcherFullAndBase(t *testing.T) {
 	}
 }
 
+func TestHeroMatcherExactFirstPrefersFullName(t *testing.T) {
+	rows := []repository.HeroMatchRow{
+		{ID: 30, Name: "Arakni, Marionette", Young: false},
+		{ID: 31, Name: "Arakni, 5L!p3d 7hRu 7h3 cR4X", Young: false},
+	}
+	m := NewHeroMatcher(rows, nil)
+	if got := m.MatchExactFirst("Arakni, Marionette"); got == nil || *got != 30 {
+		t.Fatalf("MatchExactFirst(Marionette) = %v, want 30", got)
+	}
+	if got := m.MatchExactFirst("Arakni, 5L!p3d 7hRu 7h3 cR4X"); got == nil || *got != 31 {
+		t.Fatalf("MatchExactFirst(Slip) = %v, want 31", got)
+	}
+	// Base-only label still resolves via fallback.
+	if got := m.Match("Arakni"); got == nil {
+		t.Fatal("Match(Arakni) expected id")
+	}
+}
+
 func TestHeroMatcherUnknown(t *testing.T) {
 	m := NewHeroMatcher(nil, nil)
 	if m.Match("Unknown Hero") != nil {

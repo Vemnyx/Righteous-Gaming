@@ -26,7 +26,8 @@ const heroArtFadeToLeft =
   "[mask-image:linear-gradient(to_left,black_0%,black_78%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_78%,transparent_100%)]";
 const heroArtFadeLeft =
   "[mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)]";
-const matchRowsWrapCls = "mx-auto flex w-full max-w-[52rem] flex-col gap-2.5";
+const matchRowsWrapCls = "mx-auto flex w-full max-w-[58rem] flex-col gap-2.5";
+const matchHeroArtEdgeWidth = "w-[9.5rem] sm:w-[11rem]";
 
 function TabSpinner() {
   return (
@@ -176,10 +177,8 @@ function orientMatchRowForTeam(row, members) {
   };
 }
 
-const matchHeroArtWidth = "w-[7.25rem] shrink-0 sm:w-[8.25rem]";
-
 /**
- * Hero art panel — full image width visible, fading toward the card center.
+ * Hero art flush to the card edge, full row height, full image width via object-contain.
  * @param {{ align: "left" | "right", src?: string | null, name?: string | null, isWinner?: boolean }} props
  */
 function MatchHeroArtStrip({ align, src, name, isWinner = false }) {
@@ -187,10 +186,11 @@ function MatchHeroArtStrip({ align, src, name, isWinner = false }) {
   const winnerCls = isWinner ? "ring-2 ring-inset ring-amber-400/75" : "";
   const fadeCls = align === "left" ? heroArtFadeToRight : heroArtFadeToLeft;
   const objectCls = align === "left" ? "object-left" : "object-right";
+  const edgeCls = align === "left" ? "left-0" : "right-0";
 
   return (
     <div
-      className={`relative flex items-center justify-center self-stretch overflow-hidden bg-black/15 ${matchHeroArtWidth} ${winnerCls}`}
+      className={`absolute inset-y-0 z-0 overflow-hidden bg-black/15 ${matchHeroArtEdgeWidth} ${edgeCls} ${winnerCls}`}
       aria-hidden={!src}
     >
       {src ? (
@@ -219,12 +219,11 @@ function MatchHeroArtStrip({ align, src, name, isWinner = false }) {
  *   align: "left" | "right",
  *   player: string,
  *   hero?: string | null,
- *   artSrc?: string | null,
  *   isWinner?: boolean,
  *   onPlayerClick?: (name: string) => void,
  * }} props
  */
-function MatchPlayerSide({ align, player, hero, artSrc, isWinner = false, onPlayerClick }) {
+function MatchPlayerTextBlock({ align, player, hero, isWinner = false, onPlayerClick }) {
   const isLeft = align === "left";
   const playerNameCls = isWinner ? "text-amber-50" : "text-[#f4f0fa]";
   const heroNameCls = isWinner ? "text-amber-100/85" : "text-[#f4f0fa]/68";
@@ -233,32 +232,29 @@ function MatchPlayerSide({ align, player, hero, artSrc, isWinner = false, onPlay
     : "justify-end pt-2 pb-2.5 pl-1 pr-2 text-right items-end";
 
   return (
-    <div className={`flex min-w-0 flex-1 items-stretch gap-0 ${isLeft ? "" : "flex-row-reverse"}`}>
-      <MatchHeroArtStrip align={align} src={artSrc} name={hero} isWinner={isWinner} />
-      <div className={`flex min-w-0 flex-1 flex-col ${textPosCls}`}>
-        <div
-          className={`max-w-full ${
-            isWinner
-              ? "rounded-md px-1.5 py-1 shadow-[inset_0_0_20px_rgba(251,191,36,0.12)] ring-1 ring-amber-400/55"
-              : ""
-          }`}
-          aria-label={isWinner ? `Winner: ${player}` : undefined}
-        >
-          <PlayerNameButton
-            name={player}
-            onPlayerClick={onPlayerClick}
-            align={isLeft ? "left" : "right"}
-            className={`text-[0.85rem] font-semibold leading-tight ${playerNameCls}`}
-          />
-          {hero ? (
-            <p className={`m-0 max-w-full truncate text-[0.72rem] leading-tight ${heroNameCls}`}>{hero}</p>
-          ) : null}
-          {isWinner ? (
-            <span className="mt-0.5 inline-block rounded-full bg-amber-400/90 px-1.5 py-0.5 text-[0.58rem] font-bold uppercase tracking-wide text-amber-950">
-              Win
-            </span>
-          ) : null}
-        </div>
+    <div className={`flex min-h-full min-w-0 flex-1 flex-col ${textPosCls}`}>
+      <div
+        className={`max-w-full ${
+          isWinner
+            ? "rounded-md px-1.5 py-1 shadow-[inset_0_0_20px_rgba(251,191,36,0.12)] ring-1 ring-amber-400/55"
+            : ""
+        }`}
+        aria-label={isWinner ? `Winner: ${player}` : undefined}
+      >
+        <PlayerNameButton
+          name={player}
+          onPlayerClick={onPlayerClick}
+          align={isLeft ? "left" : "right"}
+          className={`text-[0.85rem] font-semibold leading-tight ${playerNameCls}`}
+        />
+        {hero ? (
+          <p className={`m-0 max-w-full truncate text-[0.72rem] leading-tight ${heroNameCls}`}>{hero}</p>
+        ) : null}
+        {isWinner ? (
+          <span className="mt-0.5 inline-block rounded-full bg-amber-400/90 px-1.5 py-0.5 text-[0.58rem] font-bold uppercase tracking-wide text-amber-950">
+            Win
+          </span>
+        ) : null}
       </div>
     </div>
   );
@@ -279,28 +275,33 @@ function MatchPlayerSide({ align, player, hero, artSrc, isWinner = false, onPlay
  */
 function MatchRowContent({ player1, hero1, player2, hero2, hero1Art, hero2Art, table, winner = null, onPlayerClick }) {
   return (
-    <div className={`flex items-stretch ${MATCH_ROW_MIN_H}`}>
-      <MatchPlayerSide
-        align="left"
-        player={player1}
-        hero={hero1}
-        artSrc={hero1Art}
-        isWinner={winner === 1}
-        onPlayerClick={onPlayerClick}
-      />
-      <div className="flex shrink-0 flex-col items-center justify-center px-2 sm:px-3">
+    <div className={`relative flex items-stretch ${MATCH_ROW_MIN_H}`}>
+      <MatchHeroArtStrip align="left" src={hero1Art} name={hero1} isWinner={winner === 1} />
+      <MatchHeroArtStrip align="right" src={hero2Art} name={hero2} isWinner={winner === 2} />
+
+      <div className="relative z-[1] flex min-w-0 flex-1 pl-[9.5rem] sm:pl-[11rem]">
+        <MatchPlayerTextBlock
+          align="left"
+          player={player1}
+          hero={hero1}
+          isWinner={winner === 1}
+          onPlayerClick={onPlayerClick}
+        />
+      </div>
+      <div className="relative z-[1] flex shrink-0 flex-col items-center justify-center px-2 sm:px-3">
         {table != null && table > 0 ? (
           <p className="m-0 whitespace-nowrap text-[0.68rem] font-semibold text-[#f4f0fa]/48">Table {table}</p>
         ) : null}
       </div>
-      <MatchPlayerSide
-        align="right"
-        player={player2}
-        hero={hero2}
-        artSrc={hero2Art}
-        isWinner={winner === 2}
-        onPlayerClick={onPlayerClick}
-      />
+      <div className="relative z-[1] flex min-w-0 flex-1 pr-[9.5rem] sm:pr-[11rem]">
+        <MatchPlayerTextBlock
+          align="right"
+          player={player2}
+          hero={hero2}
+          isWinner={winner === 2}
+          onPlayerClick={onPlayerClick}
+        />
+      </div>
     </div>
   );
 }
@@ -1078,41 +1079,41 @@ export function EventDetailPage({ isLight, active, eventId }) {
 
       {showCoverage && activeData ? (
         <>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="inline-flex flex-wrap gap-0.5 rounded-lg bg-black/15 p-0.5" role="tablist">
-              {mainTab === "team" ? coverageTabBtn("snapshot", "Snapshot") : null}
-              {coverageTabBtn("pairings", "Pairings")}
-              {coverageTabBtn("results", "Results")}
-              {coverageTabBtn("standings", "Standings")}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <div className="inline-flex flex-wrap gap-0.5 rounded-lg bg-black/15 p-0.5" role="tablist">
+                {mainTab === "team" ? coverageTabBtn("snapshot", "Snapshot") : null}
+                {coverageTabBtn("pairings", "Pairings")}
+                {coverageTabBtn("results", "Results")}
+                {coverageTabBtn("standings", "Standings")}
+              </div>
+              {coverageTab !== "snapshot" ? (
+                <input
+                  type="search"
+                  value={nameFilter}
+                  onChange={(e) => setNameFilter(e.target.value)}
+                  placeholder="Search players…"
+                  aria-label="Search players"
+                  className="min-w-[10rem] max-w-xs rounded-md border border-white/15 bg-black/25 px-3 py-1.5 text-[0.8125rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/45 sm:w-48"
+                />
+              ) : null}
             </div>
             {roundsLoading ? (
-              <span className="text-[0.8rem] text-[#f4f0fa]/55">Loading rounds…</span>
+              <span className="shrink-0 text-[0.8rem] text-[#f4f0fa]/55">Loading rounds…</span>
             ) : (
-              <label className="flex items-center gap-2 text-[0.8125rem] text-[#f4f0fa]/70">
-                Round
-                <select
-                  className="rg-select rounded-md border border-white/15 bg-black/25 py-1.5 pl-2.5 text-[0.8125rem] text-[#f4f0fa] outline-none focus:border-purple-400/45"
-                  value={round}
-                  onChange={(e) => setRound(Number(e.target.value))}
-                >
-                  {rounds.map((r) => (
-                    <option key={r.id ?? r.round_number} value={r.round_number}>
-                      {r.round_label || `Round ${r.round_number}`}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <select
+                className="rg-select shrink-0 rounded-md border border-white/15 bg-black/25 py-1.5 pl-2.5 text-[0.8125rem] text-[#f4f0fa] outline-none focus:border-purple-400/45"
+                value={round}
+                aria-label="Round"
+                onChange={(e) => setRound(Number(e.target.value))}
+              >
+                {rounds.map((r) => (
+                  <option key={r.id ?? r.round_number} value={r.round_number}>
+                    {r.round_label || `Round ${r.round_number}`}
+                  </option>
+                ))}
+              </select>
             )}
-            {coverageTab !== "snapshot" ? (
-              <input
-                type="search"
-                value={nameFilter}
-                onChange={(e) => setNameFilter(e.target.value)}
-                placeholder="Search players…"
-                aria-label="Search players"
-                className="min-w-[10rem] max-w-xs flex-1 rounded-md border border-white/15 bg-black/25 px-3 py-1.5 text-[0.8125rem] text-[#f4f0fa] outline-none placeholder:text-[#f4f0fa]/40 focus:border-purple-400/45 sm:w-48 sm:flex-none"
-              />
-            ) : null}
           </div>
 
           {mainTab === "team" &&

@@ -89,6 +89,32 @@ func heroBaseName(s string) string {
 	return strings.TrimSpace(s)
 }
 
+// MatchExactFirst resolves a FabTCG label, preferring the full hero name before base-name fallback.
+// Use for meta aggregation when multiple heroes share a base name (e.g. Arakni variants).
+func (m *HeroMatcher) MatchExactFirst(fabHeroName string) *int {
+	if m == nil {
+		return nil
+	}
+	fabHeroName = strings.TrimSpace(fabHeroName)
+	if fabHeroName == "" {
+		return nil
+	}
+	full := normalizeHeroName(fabHeroName)
+	if full == "" {
+		return nil
+	}
+	if id, ok := m.byFull[full]; ok {
+		return &id
+	}
+	base := normalizeHeroName(heroBaseName(fabHeroName))
+	if base != "" {
+		if id, ok := m.byBase[base]; ok {
+			return &id
+		}
+	}
+	return nil
+}
+
 // Match returns heroes.id for a FabTCG hero label, or nil when unknown.
 func (m *HeroMatcher) Match(fabHeroName string) *int {
 	if m == nil {

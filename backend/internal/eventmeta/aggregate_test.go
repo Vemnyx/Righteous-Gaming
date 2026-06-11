@@ -64,3 +64,25 @@ func TestBuildMetaShareAndWinRates(t *testing.T) {
 		t.Fatalf("Fai vs Dromai win rate = %v, want 50", snap.MatchupMatrix[0][1])
 	}
 }
+
+func TestBuildMetaShareSeparatesArakniVariants(t *testing.T) {
+	standings, _ := json.Marshal([]map[string]any{
+		{"rank": 1, "player": "P1", "hero": "Arakni, Marionette", "wins": 3},
+		{"rank": 2, "player": "P2", "hero": "Arakni, 5L!p3d 7hRu 7h3 cR4X", "wins": 2},
+	})
+	rounds := []repository.EventRound{{RoundNumber: 5, Standings: standings}}
+
+	matcher := eventusers.NewHeroMatcher([]repository.HeroMatchRow{
+		{ID: 30, Name: "Arakni, Marionette", Young: false},
+		{ID: 31, Name: "Arakni, 5L!p3d 7hRu 7h3 cR4X", Young: false},
+	}, nil)
+	catalog := map[int]HeroCatalog{
+		30: {Name: "Arakni, Marionette"},
+		31: {Name: "Arakni, 5L!p3d 7hRu 7h3 cR4X"},
+	}
+
+	snap := Build(rounds, 5, nil, catalog, matcher)
+	if len(snap.Overall.Heroes) != 2 {
+		t.Fatalf("meta heroes = %d, want 2 distinct Arakni variants", len(snap.Overall.Heroes))
+	}
+}
