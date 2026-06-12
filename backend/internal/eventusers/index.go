@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"righteous-gaming/backend/internal/repository"
 	"righteous-gaming/backend/internal/scrape"
@@ -45,6 +46,9 @@ func cleanHero(s string) string {
 
 // IndexRound scans synced round JSON and stores rows for users whose names match players.
 func IndexRound(ctx context.Context, repo *repository.Repository, round repository.EventRound) error {
+	if err := repo.DeleteEventDataUsersByEventRoundID(ctx, round.ID); err != nil {
+		return err
+	}
 	users, err := repo.ListUsersWithNames(ctx)
 	if err != nil {
 		return err
@@ -115,6 +119,13 @@ func IndexRound(ctx context.Context, repo *repository.Repository, round reposito
 		if !scrape.ValidMatchPlayers(row.Player1, row.Player2) {
 			continue
 		}
+		if !scrape.ResultRowDecided(scrape.ResultRow{
+			Player1: row.Player1, Player2: row.Player2,
+			Hero1: row.Hero1, Hero2: row.Hero2,
+			WinnerSide: row.WinnerSide, WinnerName: row.WinnerName,
+		}) {
+			continue
+		}
 		hero1 := cleanHero(row.Hero1)
 		hero2 := cleanHero(row.Hero2)
 		for _, u := range users {
@@ -133,7 +144,12 @@ func IndexRound(ctx context.Context, repo *repository.Repository, round reposito
 			if scrape.NameMatches(u.FirstName, u.LastName, row.WinnerName) {
 				outcome = "win"
 			} else if row.WinnerName == "" {
-				outcome = row.WinnerSide
+				lower := strings.ToLower(strings.TrimSpace(row.WinnerSide))
+				if strings.Contains(lower, "player 1") && scrape.NameMatches(u.FirstName, u.LastName, row.Player1) {
+					outcome = "win"
+				} else if strings.Contains(lower, "player 2") && scrape.NameMatches(u.FirstName, u.LastName, row.Player2) {
+					outcome = "win"
+				}
 			}
 			payload, err := json.Marshal(map[string]any{
 				"outcome":     outcome,

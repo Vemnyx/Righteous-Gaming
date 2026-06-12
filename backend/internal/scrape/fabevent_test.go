@@ -55,6 +55,20 @@ func TestValidPlayerName(t *testing.T) {
 	}
 }
 
+func TestFilterResultRowsSkipsUndecided(t *testing.T) {
+	rows := []scrape.ResultRow{
+		{Player1: "Alice", Player2: "Bob"},
+		{Player1: "Cara", Player2: "Dan", WinnerSide: "Player 1", WinnerName: "Cara"},
+	}
+	filtered := scrape.FilterResultRows(rows)
+	if len(filtered) != 1 {
+		t.Fatalf("filtered: %d, want 1", len(filtered))
+	}
+	if filtered[0].Player1 != "Cara" {
+		t.Fatalf("player1: %q", filtered[0].Player1)
+	}
+}
+
 func TestParseResultsSkipsNAPlayers(t *testing.T) {
 	html := `<tr class="match-row">
 		<td><div class="player-text"><strong>N/A</strong><br>Fai, Rising Rebellion</div></td>

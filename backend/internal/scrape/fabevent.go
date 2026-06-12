@@ -635,14 +635,23 @@ func ValidMatchPlayers(player1, player2 string) bool {
 	return ValidPlayerName(player1) && ValidPlayerName(player2)
 }
 
-// FilterResultRows drops result rows with placeholder player names (e.g. N/A).
+// ResultRowDecided reports whether a result row has a declared winner.
+func ResultRowDecided(row ResultRow) bool {
+	if strings.TrimSpace(row.WinnerName) != "" {
+		return true
+	}
+	lower := strings.ToLower(strings.TrimSpace(row.WinnerSide))
+	return strings.Contains(lower, "player 1") || strings.Contains(lower, "player 2")
+}
+
+// FilterResultRows drops placeholder player names and undecided matches.
 func FilterResultRows(rows []ResultRow) []ResultRow {
 	if len(rows) == 0 {
 		return rows
 	}
 	out := make([]ResultRow, 0, len(rows))
 	for _, row := range rows {
-		if ValidMatchPlayers(row.Player1, row.Player2) {
+		if ValidMatchPlayers(row.Player1, row.Player2) && ResultRowDecided(row) {
 			out = append(out, row)
 		}
 	}

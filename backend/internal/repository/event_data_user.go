@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -64,6 +65,17 @@ func scanEventDataUser(row interface {
 		&r.FirstName, &r.LastName, &r.EventType, &r.StreamLabel,
 	)
 	return r, err
+}
+
+func (r *Repository) DeleteEventDataUsersByEventRoundID(ctx context.Context, eventRoundID int) error {
+	if r.pool == nil {
+		return fmt.Errorf("repository: pool is closed")
+	}
+	if eventRoundID <= 0 {
+		return fmt.Errorf("repository: invalid event round id")
+	}
+	_, err := r.pool.Exec(ctx, `DELETE FROM event_data_users WHERE event_round_id = $1`, eventRoundID)
+	return err
 }
 
 func (r *Repository) UpsertEventDataUser(ctx context.Context, p UpsertEventDataUserParams) error {

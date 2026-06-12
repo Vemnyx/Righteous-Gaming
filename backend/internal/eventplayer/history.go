@@ -84,6 +84,12 @@ func rowFromResults(rr repository.EventRound, query string) *HistoryRow {
 		if !scrape.ValidMatchPlayers(row.Player1, row.Player2) {
 			continue
 		}
+		if !scrape.ResultRowDecided(scrape.ResultRow{
+			Player1: row.Player1, Player2: row.Player2,
+			WinnerSide: row.WinnerSide, WinnerName: row.WinnerName,
+		}) {
+			continue
+		}
 		side := playerSide(row.Player1, row.Player2, query)
 		if side == 0 {
 			continue
