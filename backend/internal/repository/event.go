@@ -376,6 +376,22 @@ RETURNING id, event_data_id, round_number, round_label, pairings, results, stand
 	return er, err
 }
 
+func (r *Repository) UpdateEventRound(ctx context.Context, p CreateEventRoundParams) (EventRound, error) {
+	var er EventRound
+	err := r.pool.QueryRow(ctx, `
+UPDATE event_rounds
+SET round_label = $3, pairings = $4::jsonb, results = $5::jsonb, standings = $6::jsonb, synced_at = NOW()
+WHERE event_data_id = $1 AND round_number = $2
+RETURNING id, event_data_id, round_number, round_label, pairings, results, standings, synced_at`,
+		p.EventDataID, p.RoundNumber, p.RoundLabel, p.Pairings, p.Results, p.Standings,
+	).Scan(&er.ID, &er.EventDataID, &er.RoundNumber, &er.RoundLabel,
+		&er.Pairings, &er.Results, &er.Standings, &er.SyncedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return EventRound{}, ErrEventRoundNotFound
+	}
+	return er, err
+}
+
 func (r *Repository) ListEventDataComments(ctx context.Context, eventDataID int) ([]EventDataComment, error) {
 	rows, err := r.pool.Query(ctx, `
 SELECT c.id, c.event_data_id, c.user_id, c.comment, c.created_at, u.username, u.email

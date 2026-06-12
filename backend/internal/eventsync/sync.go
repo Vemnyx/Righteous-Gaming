@@ -84,7 +84,7 @@ func (r *Runner) tick(ctx context.Context) {
 	}
 }
 
-// SyncEventData scrapes coverage pages and stores any new rounds.
+// SyncEventData scrapes coverage pages, stores new rounds, and refreshes incomplete or live rounds.
 func SyncEventData(ctx context.Context, repo *repository.Repository, client *scrape.Client, ed repository.EventData) error {
 	covHTML, err := client.FetchHTMLReferer(ctx, ed.CoverageURL, "https://fabtcg.com/")
 	if err != nil {
@@ -94,18 +94,30 @@ func SyncEventData(ctx context.Context, repo *repository.Repository, client *scr
 	if len(roundLinks) == 0 {
 		return nil
 	}
-	existing, err := repo.ListEventRoundNumbers(ctx, ed.ID)
+	existingRounds, err := repo.ListEventRoundsByEventDataID(ctx, ed.ID)
 	if err != nil {
 		return err
 	}
-	have := map[int]struct{}{}
-	for _, n := range existing {
-		have[n] = struct{}{}
+	byNumber := make(map[int]repository.EventRound, len(existingRounds))
+	for _, er := range existingRounds {
+		byNumber[er.RoundNumber] = er
 	}
+	latestRound := scrape.LatestRound(roundLinks)
 	covReferer := scrape.CoveragePageURL(ed.CoverageSlug)
 	var roundErr error
 	for _, rl := range roundLinks {
-		if _, ok := have[rl.Number]; ok {
+		if er, ok := byNumber[rl.Number]; ok {
+			if !roundNeedsRefresh(er, rl.Number == latestRound) {
+				continue
+			}
+			if err := refreshRound(ctx, repo, client, ed, rl, covReferer); err != nil {
+				log.Error("event sync refresh round", "event_data_id", ed.ID, "round", rl.Number, "error", err)
+				if roundErr == nil {
+					roundErr = err
+				}
+				continue
+			}
+			log.Info("event sync refreshed round", "event_data_id", ed.ID, "round", rl.Number)
 			continue
 		}
 		if err := storeRound(ctx, repo, client, ed, rl, covReferer); err != nil {
@@ -120,35 +132,59 @@ func SyncEventData(ctx context.Context, repo *repository.Repository, client *scr
 	return roundErr
 }
 
-func storeRound(ctx context.Context, repo *repository.Repository, client *scrape.Client, ed repository.EventData, rl scrape.RoundLinks, covReferer string) error {
+func scrapeRoundPayloads(ctx context.Context, client *scrape.Client, rl scrape.RoundLinks, covReferer string) (repository.CreateEventRoundParams, error) {
 	pairHTML, _ := client.FetchHTMLReferer(ctx, rl.Pairings, covReferer)
 	resHTML, _ := client.FetchHTMLReferer(ctx, rl.Results, covReferer)
 	stHTML, _ := client.FetchHTMLReferer(ctx, rl.Standings, covReferer)
 
 	pairings, err := encodePairings(scrape.ParsePairings(pairHTML))
 	if err != nil {
-		return err
+		return repository.CreateEventRoundParams{}, err
 	}
 	results, err := encodeResults(scrape.ParseResults(resHTML))
 	if err != nil {
-		return err
+		return repository.CreateEventRoundParams{}, err
 	}
 	standings, err := encodeStandings(scrape.ParseStandings(stHTML))
 	if err != nil {
-		return err
+		return repository.CreateEventRoundParams{}, err
 	}
 	var label *string
 	if rl.Label != "" {
 		label = &rl.Label
 	}
-	er, err := repo.CreateEventRound(ctx, repository.CreateEventRoundParams{
-		EventDataID: ed.ID,
+	return repository.CreateEventRoundParams{
 		RoundNumber: rl.Number,
 		RoundLabel:  label,
 		Pairings:    pairings,
 		Results:     results,
 		Standings:   standings,
-	})
+	}, nil
+}
+
+func storeRound(ctx context.Context, repo *repository.Repository, client *scrape.Client, ed repository.EventData, rl scrape.RoundLinks, covReferer string) error {
+	p, err := scrapeRoundPayloads(ctx, client, rl, covReferer)
+	if err != nil {
+		return err
+	}
+	p.EventDataID = ed.ID
+	er, err := repo.CreateEventRound(ctx, p)
+	if err != nil {
+		return err
+	}
+	if err := eventusers.IndexRound(ctx, repo, er); err != nil {
+		log.Error("event users index round", "event_round_id", er.ID, "error", err)
+	}
+	return nil
+}
+
+func refreshRound(ctx context.Context, repo *repository.Repository, client *scrape.Client, ed repository.EventData, rl scrape.RoundLinks, covReferer string) error {
+	p, err := scrapeRoundPayloads(ctx, client, rl, covReferer)
+	if err != nil {
+		return err
+	}
+	p.EventDataID = ed.ID
+	er, err := repo.UpdateEventRound(ctx, p)
 	if err != nil {
 		return err
 	}

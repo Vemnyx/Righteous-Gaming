@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { EventTeamSnapshot } from "./EventTeamSnapshot";
 import { EventMetaTab } from "./EventMetaTab";
@@ -248,9 +248,9 @@ function MatchPlayerTextBlock({ align, player, hero, isWinner = false, onPlayerC
     : "justify-end pt-1.5 pb-2 pl-1 pr-2 text-right items-end";
 
   return (
-    <div className={`flex min-w-0 flex-col ${textPosCls}`}>
+    <div className={`flex min-w-0 w-full flex-col ${textPosCls}`}>
       <div
-        className={`max-w-full ${
+        className={`max-w-full ${isLeft ? "" : "ml-auto"} ${
           isWinner
             ? "rounded-md px-1.5 py-1 shadow-[inset_0_0_20px_rgba(251,191,36,0.12)] ring-1 ring-amber-400/55"
             : ""
@@ -400,7 +400,7 @@ function MatchRowContent({ player1, hero1, player2, hero2, hero1Art, hero2Art, t
             <p className="m-0 whitespace-nowrap text-[0.875rem] font-semibold text-[#f4f0fa]/55">Table {table}</p>
           ) : null}
         </div>
-        <div className={`relative z-[1] flex min-w-0 flex-1 ${matchHeroArtTextInsetRight}`}>
+        <div className={`relative z-[1] flex min-w-0 flex-1 justify-end ${matchHeroArtTextInsetRight}`}>
           <MatchPlayerTextBlock
             align="right"
             player={player2}
@@ -639,6 +639,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
   const [metaRound, setMetaRound] = useState(1);
   const [metaDay, setMetaDay] = useState(/** @type {import("../utils/eventMetaDay.js").MetaDay} */ ("day1"));
   const [metaSubTab, setMetaSubTab] = useState(/** @type {"share" | "round-stats" | "matchups"} */ ("share"));
+  const roundsInitializedRef = useRef(false);
   const [metaSharePhase, setMetaSharePhase] = useState(
     /** @type {import("../utils/eventMetaDay.js").MetaSharePhase} */ ("cc"),
   );
@@ -795,6 +796,10 @@ export function EventDetailPage({ isLight, active, eventId }) {
     };
   }, [active, user, eventId, event]);
 
+  useEffect(() => {
+    roundsInitializedRef.current = false;
+  }, [activeData?.id]);
+
   const loadRounds = useCallback(async () => {
     if (!user || !activeData) return;
     setRoundsLoading(true);
@@ -810,7 +815,14 @@ export function EventDetailPage({ isLight, active, eventId }) {
       setRounds(list);
       if (list.length > 0) {
         const max = list.reduce((m, r) => (r.round_number > m ? r.round_number : m), list[0].round_number ?? 1);
-        setRound(max);
+        setRound((prev) => {
+          if (!roundsInitializedRef.current) {
+            roundsInitializedRef.current = true;
+            return max;
+          }
+          if (prev > 0 && list.some((r) => r.round_number === prev)) return prev;
+          return max;
+        });
         const day = defaultMetaDay(max);
         setMetaDay(day);
         const dayList = metaDayRounds(day, list);
@@ -830,6 +842,14 @@ export function EventDetailPage({ isLight, active, eventId }) {
   useEffect(() => {
     if (!active || !activeData || (!showCoverage && !showMeta)) return;
     void loadRounds();
+  }, [active, activeData, showCoverage, showMeta, loadRounds]);
+
+  useEffect(() => {
+    if (!active || !activeData || (!showCoverage && !showMeta)) return undefined;
+    const timer = setInterval(() => {
+      void loadRounds();
+    }, 60_000);
+    return () => clearInterval(timer);
   }, [active, activeData, showCoverage, showMeta, loadRounds]);
 
   const loadEventMeta = useCallback(async () => {
