@@ -85,9 +85,11 @@ func Build(
 	rounds []repository.EventRound,
 	fromRound int,
 	throughRound int,
-	format *int16,
+	sharePhase MetaSharePhase,
+	nationals bool,
 	catalog map[int]HeroCatalog,
-	matcher *eventusers.HeroMatcher,
+	shareMatcher *eventusers.HeroMatcher,
+	matchupMatcher *eventusers.HeroMatcher,
 ) Snapshot {
 	if fromRound <= 0 {
 		fromRound = 1
@@ -98,8 +100,8 @@ func Build(
 	if fromRound > throughRound {
 		fromRound = throughRound
 	}
-	overall := buildOverallMetaShare(rounds, fromRound, throughRound, matcher, catalog)
-	winRates, directed := buildWinRatesAndMatchups(rounds, fromRound, throughRound, matcher, catalog)
+	overall := buildOverallMetaShare(rounds, fromRound, nationals, sharePhase, shareMatcher, catalog)
+	winRates, directed := buildWinRatesAndMatchups(rounds, fromRound, throughRound, matchupMatcher, catalog)
 
 	matchupHeroes, matrix := buildMatchupMatrix(directed, catalog)
 
@@ -128,7 +130,10 @@ const (
 	metaShareDay2PairingsRound = 9
 )
 
-func metaSharePairingsRound(fromRound int) int {
+func metaSharePairingsRound(fromRound int, nationals bool, sharePhase MetaSharePhase) int {
+	if nationals {
+		return NationalsMetaSharePairingsRound(fromRound, sharePhase)
+	}
 	if fromRound >= metaShareDay2PairingsRound {
 		return metaShareDay2PairingsRound
 	}
@@ -138,7 +143,8 @@ func metaSharePairingsRound(fromRound int) int {
 func buildOverallMetaShare(
 	rounds []repository.EventRound,
 	fromRound int,
-	throughRound int,
+	nationals bool,
+	sharePhase MetaSharePhase,
 	matcher *eventusers.HeroMatcher,
 	catalog map[int]HeroCatalog,
 ) OverallMetaShare {
@@ -147,7 +153,7 @@ func buildOverallMetaShare(
 		return out
 	}
 
-	sourceRound := metaSharePairingsRound(fromRound)
+	sourceRound := metaSharePairingsRound(fromRound, nationals, sharePhase)
 	var source *repository.EventRound
 	for i := range rounds {
 		if rounds[i].RoundNumber == sourceRound {

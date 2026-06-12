@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 /** @typedef {"share" | "round-stats" | "matchups"} MetaSubTab */
 /** @typedef {import("../utils/eventMetaDay.js").MetaDay} MetaDay */
+/** @typedef {import("../utils/eventMetaDay.js").MetaSharePhase} MetaSharePhase */
 
 /**
  * @param {{
@@ -14,6 +15,9 @@ import { useEffect, useMemo, useState } from "react";
  *   showMetaDaySplit?: boolean,
  *   metaDay?: MetaDay,
  *   onMetaDayChange?: (day: MetaDay) => void,
+ *   showNationalsFormatSplit?: boolean,
+ *   metaSharePhase?: MetaSharePhase,
+ *   onMetaSharePhaseChange?: (phase: MetaSharePhase) => void,
  *   maxRound?: number,
  *   loading: boolean,
  *   isLight: boolean,
@@ -30,6 +34,9 @@ export function EventMetaTab({
   showMetaDaySplit = false,
   metaDay = "day1",
   onMetaDayChange,
+  showNationalsFormatSplit = false,
+  metaSharePhase = "cc",
+  onMetaSharePhaseChange,
   maxRound = 0,
   loading,
   isLight,
@@ -65,9 +72,11 @@ export function EventMetaTab({
 
   useEffect(() => {
     setFocusedMatchupHeroId(null);
-  }, [metaSubTab, metaRound, throughRound, metaDay]);
+  }, [metaSubTab, metaRound, throughRound, metaDay, metaSharePhase]);
 
   const dayLabel = metaDay === "day2" ? "Day 2" : "Day 1";
+  const sharePhaseLabel =
+    metaSharePhase === "draft" ? "Draft" : "CC";
   const metaShareRoundLabel =
     snapshot?.overall?.source_round_label ||
     (snapshot?.overall?.source_round ? `Round ${snapshot.overall.source_round}` : "");
@@ -98,6 +107,19 @@ export function EventMetaTab({
             {r.round_label || `Round ${r.round_number}`}
           </option>
         ))}
+      </select>
+    ) : null;
+
+  const formatSelect =
+    showNationalsFormatSplit && metaSubTab === "share" ? (
+      <select
+        className="rg-select shrink-0 rounded-md border border-white/15 bg-black/25 py-1.5 pl-2.5 text-[0.8125rem] text-[#f4f0fa] outline-none focus:border-purple-400/45"
+        value={metaSharePhase}
+        aria-label="Format"
+        onChange={(e) => onMetaSharePhaseChange?.(/** @type {MetaSharePhase} */ (e.target.value))}
+      >
+        <option value="cc">CC</option>
+        <option value="draft">Draft</option>
       </select>
     ) : null;
 
@@ -156,6 +178,7 @@ export function EventMetaTab({
             {subTabBtn("matchups", "Matchups")}
           </div>
           {daySelect}
+          {formatSelect}
         </div>
         {roundSelect}
       </div>
@@ -164,7 +187,12 @@ export function EventMetaTab({
         <section>
           <h3 className={`m-0 mb-1 ${sectionTitle}`}>Field meta share</h3>
           <p className="m-0 mb-4 text-[0.82rem] text-[#f4f0fa]/60">
-            {overall.total_decks} decks{showMetaDaySplit ? ` on ${dayLabel}` : " across the full event"}
+            {overall.total_decks} decks
+            {showNationalsFormatSplit && metaSubTab === "share"
+              ? ` on ${dayLabel} (${sharePhaseLabel})`
+              : showMetaDaySplit
+                ? ` on ${dayLabel}`
+                : " across the full event"}
             {overall.source_round > 0
               ? ` · each player counted once (${metaShareRoundLabel || `round ${overall.source_round}`} pairings)`
               : ""}

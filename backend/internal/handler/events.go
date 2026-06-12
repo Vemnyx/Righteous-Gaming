@@ -549,7 +549,22 @@ func (h *eventsHTTP) getEventMeta(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-	matcher := eventusers.NewHeroMatcher(heroRows, ed.Format)
+	nationals := domain.EventType(ed.EventType) == domain.EventTypeNationals
+	sharePhase := eventmeta.ParseMetaSharePhase(r.URL.Query().Get("meta_share_phase"))
+	if !nationals {
+		sharePhase = ""
+	}
+
+	var shareFormat, matchupFormat *int16
+	if nationals {
+		shareFormat = eventmeta.MetaShareHeroFormat(sharePhase, fromRound)
+		matchupFormat = eventmeta.NationalsHeroFormatForRound(throughRound)
+	} else {
+		shareFormat = ed.Format
+		matchupFormat = ed.Format
+	}
+	shareMatcher := eventusers.NewHeroMatcher(heroRows, shareFormat)
+	matchupMatcher := eventusers.NewHeroMatcher(heroRows, matchupFormat)
 
 	displayRows, err := h.app.Repo.ListHeroDisplayRows(ctx)
 	if err != nil {
@@ -562,7 +577,7 @@ func (h *eventsHTTP) getEventMeta(w http.ResponseWriter, r *http.Request) {
 		catalog[row.ID] = eventmeta.HeroCatalog{Name: row.Name, ArtImageURL: row.ArtImageURL, CardImageURL: row.CardImageURL}
 	}
 
-	snap := eventmeta.Build(rounds, fromRound, throughRound, ed.Format, catalog, matcher)
+	snap := eventmeta.Build(rounds, fromRound, throughRound, sharePhase, nationals, catalog, shareMatcher, matchupMatcher)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(snap)

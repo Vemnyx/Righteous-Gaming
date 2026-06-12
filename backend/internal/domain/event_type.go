@@ -12,6 +12,21 @@ const (
 	EventTypeShowdown  EventType = 4
 )
 
+// Nationals Swiss: day 1 CC R1–5 / draft R6–8; day 2 draft R9–11 / CC R12–15.
+const (
+	NationalsCCMaxRound               = 5
+	NationalsDraftDay1FromRound        = 6
+	NationalsDraftDay1MaxRound          = 8
+	NationalsDraftDay2FromRound         = 9
+	NationalsDraftDay2MaxRound          = 11
+	NationalsCCDay2FromRound            = 12
+	NationalsCCDay2MaxRound             = 15
+	NationalsMetaShareCCPairings        = 1
+	NationalsMetaShareDraftDay1Pairings = 6
+	NationalsMetaShareDraftDay2Pairings = 9
+	NationalsMetaShareCCDay2Pairings    = 12
+)
+
 var eventTypeNames = map[EventType]string{
 	EventTypeProTour:   "Pro Tour",
 	EventTypeNationals: "Nationals",

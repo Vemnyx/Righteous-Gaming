@@ -6,9 +6,11 @@ import {
   defaultMetaDay,
   metaDayRounds,
   metaEffectiveFromRound,
+  metaEffectiveSharePhase,
   metaEffectiveThroughRound,
   metaMaxRoundNumber,
   showMetaDaySplit,
+  showNationalsFormatSplit,
 } from "../utils/eventMetaDay.js";
 import { EventPlayerHistoryModal, parsePlayerHistory } from "./EventPlayerHistoryModal";
 import { PlayerNameButton } from "./PlayerNameButton";
@@ -179,15 +181,6 @@ function orientMatchRowForTeam(row, members) {
   const p1Team = playerOnTeam(row.player1, members);
   const p2Team = playerOnTeam(row.player2, members);
   if (!p2Team || p1Team) return row;
-  const winnerName = row.winner_name;
-  let flippedWinnerName = winnerName;
-  if (winnerName) {
-    const w = normalizeHeroKey(winnerName);
-    const p1 = normalizeHeroKey(row.player1);
-    const p2 = normalizeHeroKey(row.player2);
-    if (w === p2) flippedWinnerName = row.player1;
-    else if (w === p1) flippedWinnerName = row.player2;
-  }
   return {
     ...row,
     player1: row.player2,
@@ -195,7 +188,7 @@ function orientMatchRowForTeam(row, members) {
     hero1: row.hero2,
     hero2: row.hero1,
     winner_side: flipWinnerSide(row.winner_side),
-    winner_name: flippedWinnerName,
+    // winner_name is the actual person who won — keep it unchanged when swapping sides.
   };
 }
 
@@ -424,13 +417,30 @@ function MatchRowContent({ player1, hero1, player2, hero2, hero1Art, hero2Art, t
  * @param {object} row
  * @returns {1 | 2 | null}
  */
+/** @param {string | undefined | null} a @param {string | undefined | null} b */
+function resultPlayerNamesMatch(a, b) {
+  const x = normalizeHeroKey(a);
+  const y = normalizeHeroKey(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  const xParts = x.split(" ");
+  const yParts = y.split(" ");
+  if (xParts.length >= 2 && yParts.length >= 2) {
+    const xFirst = xParts[0];
+    const xLast = xParts[xParts.length - 1];
+    const yFirst = yParts[0];
+    const yLast = yParts[yParts.length - 1];
+    if (xFirst === yFirst && (xLast === yLast || xLast.startsWith(yLast) || yLast.startsWith(xLast))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function matchRowWinnerSide(row) {
   if (row.winner_name) {
-    const w = normalizeHeroKey(row.winner_name);
-    const p1 = normalizeHeroKey(row.player1);
-    const p2 = normalizeHeroKey(row.player2);
-    if (w && p1 && w === p1) return 1;
-    if (w && p2 && w === p2) return 2;
+    if (resultPlayerNamesMatch(row.winner_name, row.player1)) return 1;
+    if (resultPlayerNamesMatch(row.winner_name, row.player2)) return 2;
   }
   const side = String(row.winner_side || "").toLowerCase();
   if (side.includes("player 1")) return 1;
@@ -627,6 +637,9 @@ export function EventDetailPage({ isLight, active, eventId }) {
   const [metaRound, setMetaRound] = useState(1);
   const [metaDay, setMetaDay] = useState(/** @type {import("../utils/eventMetaDay.js").MetaDay} */ ("day1"));
   const [metaSubTab, setMetaSubTab] = useState(/** @type {"share" | "round-stats" | "matchups"} */ ("share"));
+  const [metaSharePhase, setMetaSharePhase] = useState(
+    /** @type {import("../utils/eventMetaDay.js").MetaSharePhase} */ ("cc"),
+  );
 
   const [historyPlayer, setHistoryPlayer] = useState(/** @type {string | null} */ (null));
   const [playerHistory, setPlayerHistory] = useState(
@@ -822,14 +835,36 @@ export function EventDetailPage({ isLight, active, eventId }) {
     setEventMetaLoading(true);
     try {
       const token = await user.getIdToken();
-      const throughRound = metaEffectiveThroughRound(metaDay, metaSubTab, metaRound, rounds);
-      const fromRound = metaEffectiveFromRound(metaDay, metaSubTab, rounds);
+      const throughRound = metaEffectiveThroughRound(
+        metaDay,
+        metaSubTab,
+        metaRound,
+        rounds,
+        activeData.event_type,
+        metaSharePhase,
+      );
+      const fromRound = metaEffectiveFromRound(
+        metaDay,
+        metaSubTab,
+        rounds,
+        activeData.event_type,
+        metaSharePhase,
+      );
       const params = new URLSearchParams({
         event_data_id: String(activeData.id),
         through_round: String(throughRound),
       });
-      if (showMetaDaySplit(rounds)) {
+      if (showMetaDaySplit(rounds) || fromRound > 1) {
         params.set("from_round", String(fromRound));
+      }
+      const sharePhase = metaEffectiveSharePhase(
+        metaDay,
+        metaSharePhase,
+        activeData.event_type,
+        metaSubTab,
+      );
+      if (sharePhase) {
+        params.set("meta_share_phase", sharePhase);
       }
       const res = await fetch(`/api/events/${eventId}/meta?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -842,12 +877,12 @@ export function EventDetailPage({ isLight, active, eventId }) {
     } finally {
       setEventMetaLoading(false);
     }
-  }, [user, activeData, metaRound, metaDay, metaSubTab, rounds, eventId]);
+  }, [user, activeData, metaRound, metaDay, metaSubTab, metaSharePhase, rounds, eventId]);
 
   useEffect(() => {
     if (!active || !showMeta || !activeData || roundsLoading) return;
     void loadEventMeta();
-  }, [active, showMeta, activeData, metaRound, metaDay, metaSubTab, roundsLoading, loadEventMeta]);
+  }, [active, showMeta, activeData, metaRound, metaDay, metaSubTab, metaSharePhase, roundsLoading, loadEventMeta]);
 
   const metaDaySplitActive = showMetaDaySplit(rounds);
   const metaRoundOptions = useMemo(() => metaDayRounds(metaDay, rounds), [metaDay, rounds]);
@@ -1407,6 +1442,9 @@ export function EventDetailPage({ isLight, active, eventId }) {
           showMetaDaySplit={metaDaySplitActive}
           metaDay={metaDay}
           onMetaDayChange={onMetaDayChange}
+          showNationalsFormatSplit={showNationalsFormatSplit(activeData.event_type)}
+          metaSharePhase={metaSharePhase}
+          onMetaSharePhaseChange={setMetaSharePhase}
           maxRound={metaMaxRoundNumber(rounds)}
           loading={eventMetaLoading || roundsLoading}
           isLight={isLight}

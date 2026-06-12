@@ -1,7 +1,18 @@
 /** @typedef {"day1" | "day2"} MetaDay */
+/** @typedef {"cc" | "draft"} MetaSharePhase */
+
+/** @type {2} Nationals event_type from backend domain.EventTypeNationals */
+export const EVENT_TYPE_NATIONALS = 2;
 
 export const META_DAY1_MAX_ROUND = 8;
 export const META_DAY2_MIN_ROUND = 9;
+
+export const NATIONALS_CC_MAX_ROUND = 5;
+export const NATIONALS_DRAFT_DAY1_MIN_ROUND = 6;
+export const NATIONALS_DRAFT_DAY2_MIN_ROUND = 9;
+export const NATIONALS_DRAFT_DAY2_MAX_ROUND = 11;
+export const NATIONALS_CC_DAY2_MIN_ROUND = 12;
+export const NATIONALS_CC_DAY2_MAX_ROUND = 15;
 
 /** @param {{ round_number?: number }[]} rounds */
 export function metaMaxRoundNumber(rounds) {
@@ -15,6 +26,22 @@ export function metaMaxRoundNumber(rounds) {
 /** @param {{ round_number?: number }[]} rounds */
 export function showMetaDaySplit(rounds) {
   return metaMaxRoundNumber(rounds) > META_DAY1_MAX_ROUND;
+}
+
+/** @param {number | undefined | null} eventType */
+export function showNationalsFormatSplit(eventType) {
+  return Number(eventType) === EVENT_TYPE_NATIONALS;
+}
+
+/**
+ * @param {MetaDay} metaDay
+ * @param {MetaSharePhase} metaSharePhase
+ * @param {number | undefined | null} eventType
+ * @param {"share" | "round-stats" | "matchups"} metaSubTab
+ */
+export function metaEffectiveSharePhase(_metaDay, metaSharePhase, eventType, metaSubTab) {
+  if (metaSubTab !== "share" || !showNationalsFormatSplit(eventType)) return null;
+  return metaSharePhase;
 }
 
 /**
@@ -47,10 +74,16 @@ export function metaDayRounds(metaDay, rounds) {
  * @param {number} metaRound
  * @param {{ round_number?: number }[]} rounds
  */
-export function metaEffectiveThroughRound(metaDay, metaSubTab, metaRound, rounds) {
+export function metaEffectiveThroughRound(metaDay, metaSubTab, metaRound, rounds, eventType, metaSharePhase) {
   if (metaSubTab === "matchups") {
     return metaMaxRoundNumber(rounds) || metaRound;
   }
+  const sharePhase = metaEffectiveSharePhase(metaDay, metaSharePhase, eventType, metaSubTab);
+  if (sharePhase === "cc") {
+    return metaDay === "day2" ? NATIONALS_CC_DAY2_MAX_ROUND : NATIONALS_CC_MAX_ROUND;
+  }
+  if (sharePhase === "draft" && metaDay === "day1") return META_DAY1_MAX_ROUND;
+  if (sharePhase === "draft" && metaDay === "day2") return NATIONALS_DRAFT_DAY2_MAX_ROUND;
   if (!showMetaDaySplit(rounds)) return metaRound;
   const range = metaDayRoundRange(metaDay, rounds);
   if (metaSubTab === "share") return range.maxInDay;
@@ -62,8 +95,14 @@ export function metaEffectiveThroughRound(metaDay, metaSubTab, metaRound, rounds
  * @param {"share" | "round-stats" | "matchups"} metaSubTab
  * @param {{ round_number?: number }[]} rounds
  */
-export function metaEffectiveFromRound(metaDay, metaSubTab, rounds) {
+export function metaEffectiveFromRound(metaDay, metaSubTab, rounds, eventType, metaSharePhase) {
   if (metaSubTab === "matchups") return 1;
+  const sharePhase = metaEffectiveSharePhase(metaDay, metaSharePhase, eventType, metaSubTab);
+  if (sharePhase === "cc") {
+    return metaDay === "day2" ? NATIONALS_CC_DAY2_MIN_ROUND : 1;
+  }
+  if (sharePhase === "draft" && metaDay === "day1") return NATIONALS_DRAFT_DAY1_MIN_ROUND;
+  if (sharePhase === "draft" && metaDay === "day2") return NATIONALS_DRAFT_DAY2_MIN_ROUND;
   if (!showMetaDaySplit(rounds)) return 1;
   return metaDayRoundRange(metaDay, rounds).from;
 }

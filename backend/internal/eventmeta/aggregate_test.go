@@ -48,7 +48,7 @@ func TestBuildMetaShareAndWinRates(t *testing.T) {
 		2: {Name: "Dromai, Ash Artist"},
 	}
 
-	snap := Build(rounds, 1, 1, nil, catalog, matcher)
+	snap := Build(rounds, 1, 1, "", false, catalog, matcher, matcher)
 
 	if snap.Overall.TotalDecks != 4 {
 		t.Fatalf("total decks = %d, want 4", snap.Overall.TotalDecks)
@@ -91,7 +91,7 @@ func TestBuildMetaShareSeparatesArakniVariants(t *testing.T) {
 		31: {Name: "Arakni, 5L!p3d 7hRu 7h3 cR4X"},
 	}
 
-	snap := Build(rounds, 1, 5, nil, catalog, matcher)
+	snap := Build(rounds, 1, 5, "", false, catalog, matcher, matcher)
 	if len(snap.Overall.Heroes) != 2 {
 		t.Fatalf("meta heroes = %d, want 2 distinct Arakni variants", len(snap.Overall.Heroes))
 	}
@@ -139,7 +139,7 @@ func TestBuildFiltersRoundRange(t *testing.T) {
 		2: {Name: "Dromai, Ash Artist"},
 	}
 
-	day1 := Build(rounds, 1, 8, nil, catalog, matcher)
+	day1 := Build(rounds, 1, 8, "", false, catalog, matcher, matcher)
 	if day1.Overall.SourceRound != 1 {
 		t.Fatalf("day1 source round = %d, want 1", day1.Overall.SourceRound)
 	}
@@ -147,7 +147,7 @@ func TestBuildFiltersRoundRange(t *testing.T) {
 		t.Fatalf("day1 decks = %d, want 2", day1.Overall.TotalDecks)
 	}
 
-	day2 := Build(rounds, 9, 9, nil, catalog, matcher)
+	day2 := Build(rounds, 9, 9, "", false, catalog, matcher, matcher)
 	if day2.Overall.SourceRound != 9 {
 		t.Fatalf("day2 source round = %d, want 9", day2.Overall.SourceRound)
 	}
@@ -159,5 +159,87 @@ func TestBuildFiltersRoundRange(t *testing.T) {
 	}
 	if len(day2.HeroWinRates) != 2 {
 		t.Fatalf("day2 win rate rows = %d, want 2", len(day2.HeroWinRates))
+	}
+}
+
+func TestNationalsMetaShareUsesCCAndDraftPairings(t *testing.T) {
+	ccPairings, _ := json.Marshal([]map[string]any{
+		{
+			"player1": "P1", "player2": "P2",
+			"hero1": "Victor Goldmane, High and Mighty", "hero2": "Bravo, Showstopper",
+		},
+	})
+	draftPairings, _ := json.Marshal([]map[string]any{
+		{
+			"player1": "P1", "player2": "P2",
+			"hero1": "Victor", "hero2": "Bravo",
+		},
+	})
+	rounds := []repository.EventRound{
+		{RoundNumber: 1, Pairings: ccPairings},
+		{RoundNumber: 6, Pairings: draftPairings},
+	}
+
+	heroRows := []repository.HeroMatchRow{
+		{ID: 10, Name: "Victor Goldmane, High and Mighty", Young: false},
+		{ID: 11, Name: "Victor", Young: true},
+		{ID: 20, Name: "Bravo, Showstopper", Young: false},
+		{ID: 21, Name: "Bravo", Young: true},
+	}
+	ccFormat := int16(3)
+	limitedFormat := int16(0)
+	ccMatcher := eventusers.NewHeroMatcher(heroRows, &ccFormat)
+	draftMatcher := eventusers.NewHeroMatcher(heroRows, &limitedFormat)
+	catalog := map[int]HeroCatalog{
+		10: {Name: "Victor Goldmane, High and Mighty"},
+		11: {Name: "Victor"},
+		20: {Name: "Bravo, Showstopper"},
+		21: {Name: "Bravo"},
+	}
+
+	ccSnap := Build(rounds, 1, 5, MetaSharePhaseCC, true, catalog, ccMatcher, ccMatcher)
+	if ccSnap.Overall.SourceRound != 1 {
+		t.Fatalf("cc source round = %d, want 1", ccSnap.Overall.SourceRound)
+	}
+	ccIDs := map[int]bool{ccSnap.Overall.Heroes[0].ID: true, ccSnap.Overall.Heroes[1].ID: true}
+	if !ccIDs[10] || !ccIDs[20] {
+		t.Fatalf("cc heroes = %+v, want adult Victor and Bravo", ccSnap.Overall.Heroes)
+	}
+
+	draftSnap := Build(rounds, 6, 8, MetaSharePhaseDraft, true, catalog, draftMatcher, draftMatcher)
+	if draftSnap.Overall.SourceRound != 6 {
+		t.Fatalf("draft source round = %d, want 6", draftSnap.Overall.SourceRound)
+	}
+	draftIDs := map[int]bool{draftSnap.Overall.Heroes[0].ID: true, draftSnap.Overall.Heroes[1].ID: true}
+	if !draftIDs[11] || !draftIDs[21] {
+		t.Fatalf("draft heroes = %+v, want young Victor and Bravo", draftSnap.Overall.Heroes)
+	}
+
+	day2DraftPairings, _ := json.Marshal([]map[string]any{
+		{"player1": "P1", "player2": "P2", "hero1": "Victor", "hero2": "Bravo"},
+	})
+	day2CCPairings, _ := json.Marshal([]map[string]any{
+		{
+			"player1": "P1", "player2": "P2",
+			"hero1": "Victor Goldmane, High and Mighty", "hero2": "Bravo, Showstopper",
+		},
+	})
+	day2Rounds := []repository.EventRound{
+		{RoundNumber: 9, Pairings: day2DraftPairings},
+		{RoundNumber: 12, Pairings: day2CCPairings},
+	}
+
+	day2DraftSnap := Build(day2Rounds, 9, 11, MetaSharePhaseDraft, true, catalog, draftMatcher, draftMatcher)
+	if day2DraftSnap.Overall.SourceRound != 9 {
+		t.Fatalf("day2 draft source round = %d, want 9", day2DraftSnap.Overall.SourceRound)
+	}
+
+	day2CCSnap := Build(day2Rounds, 12, 15, MetaSharePhaseCC, true, catalog, ccMatcher, ccMatcher)
+	if day2CCSnap.Overall.SourceRound != 12 {
+		t.Fatalf("day2 cc source round = %d, want 12", day2CCSnap.Overall.SourceRound)
+	}
+	day2CCIDs := map[int]bool{day2CCSnap.Overall.Heroes[0].ID: true, day2CCSnap.Overall.Heroes[1].ID: true}
+	if !day2CCIDs[10] || !day2CCIDs[20] {
+		t.Fatalf("day2 cc heroes = %+v, want adult Victor and Bravo", day2CCSnap.Overall.Heroes)
 	}
 }
