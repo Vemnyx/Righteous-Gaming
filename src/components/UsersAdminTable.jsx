@@ -1,13 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext";
+import { roleLabel } from "../constants/roles";
 
 const PAGE_SIZE = 15;
-
-function roleLabel(role) {
-  if (role === 0) return "Admin";
-  if (role === 1) return "Member";
-  return String(role);
-}
 
 /** @param {string | undefined | null} iso */
 function formatDateTime(iso) {

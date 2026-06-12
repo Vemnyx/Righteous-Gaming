@@ -281,6 +281,9 @@ func (h *recordingsHTTP) createRecording(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
+	if !requireWriteAccess(w, u) {
+		return
+	}
 
 	var body createRecordingRequest
 	if err := decodeCatalogJSON(w, r, &body); err != nil {
@@ -417,6 +420,9 @@ func (h *recordingsHTTP) createRecordingComment(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
+	if !requireWriteAccess(w, u) {
+		return
+	}
 
 	id, ok := parsePathID(w, r, "id")
 	if !ok {
@@ -458,6 +464,9 @@ func (h *recordingsHTTP) deleteRecording(w http.ResponseWriter, r *http.Request)
 	}
 	u, ok := h.sessionUser(w, r)
 	if !ok {
+		return
+	}
+	if !requireWriteAccess(w, u) {
 		return
 	}
 

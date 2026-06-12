@@ -15,6 +15,7 @@ import {
 import { EventPlayerHistoryModal, parsePlayerHistory } from "./EventPlayerHistoryModal";
 import { PlayerNameButton } from "./PlayerNameButton";
 import { cardFormatName, formatUsesYoungHeroes } from "../constants/cardFormat";
+import { canWriteContent } from "../constants/roles";
 import { buildTeamSnapshot } from "../utils/eventTeamSnapshot";
 import { parseEventMetaSnapshot } from "../utils/eventMeta";
 import { youtubeEmbedSrc, youtubeVideoIdFromInput } from "../utils/youtube";
@@ -594,7 +595,8 @@ function StandingGridCard({ isLight, rowChrome, heroes, formatId, row, rankDelta
  * }} props
  */
 export function EventDetailPage({ isLight, active, eventId }) {
-  const { user } = useAuth();
+  const { user, sessionProfile } = useAuth();
+  const canWrite = canWriteContent(sessionProfile?.role);
   const [event, setEvent] = useState(/** @type {object | null} */ (null));
   const [eventData, setEventData] = useState(/** @type {object[]} */ ([]));
   const [metaLoading, setMetaLoading] = useState(false);
@@ -1487,29 +1489,36 @@ export function EventDetailPage({ isLight, active, eventId }) {
             <div className="flex flex-col gap-3 rounded-xl border border-dashed border-white/15 bg-black/15 px-4 py-6">
                   <p className="m-0 text-[0.9rem] text-[#f4f0fa]/70">
                     No stream URL for {streamTabs[streamTabIdx] ?? "this segment"} yet.
+                    {!canWrite ? " Ask a team member to add one." : null}
                   </p>
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
-                      YouTube URL
-                    </span>
-                    <input
-                      type="url"
-                      className="w-full rounded-lg border border-white/[0.22] bg-black/35 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55"
-                      placeholder="https://www.youtube.com/watch?v=..."
-                      value={streamUrlDraft}
-                      disabled={streamUrlSaving}
-                      onChange={(e) => setStreamUrlDraft(e.target.value)}
-                    />
-                  </label>
-                  {streamUrlError ? <p className="m-0 text-[0.85rem] text-red-200/90">{streamUrlError}</p> : null}
-                  <button
-                    type="button"
-                    className="self-start rounded-lg border border-white/25 bg-purple-900/40 px-3 py-2 text-[0.8125rem] font-semibold text-white disabled:opacity-45"
-                    disabled={streamUrlSaving || !streamUrlDraft.trim()}
-                    onClick={() => void onSaveStreamURL()}
-                  >
-                    {streamUrlSaving ? "Saving…" : "Save stream URL"}
-                  </button>
+                  {canWrite ? (
+                    <>
+                      <label className="flex flex-col gap-1.5">
+                        <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
+                          YouTube URL
+                        </span>
+                        <input
+                          type="url"
+                          className="w-full rounded-lg border border-white/[0.22] bg-black/35 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55"
+                          placeholder="https://www.youtube.com/watch?v=..."
+                          value={streamUrlDraft}
+                          disabled={streamUrlSaving}
+                          onChange={(e) => setStreamUrlDraft(e.target.value)}
+                        />
+                      </label>
+                      {streamUrlError ? (
+                        <p className="m-0 text-[0.85rem] text-red-200/90">{streamUrlError}</p>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="self-start rounded-lg border border-white/25 bg-purple-900/40 px-3 py-2 text-[0.8125rem] font-semibold text-white disabled:opacity-45"
+                        disabled={streamUrlSaving || !streamUrlDraft.trim()}
+                        onClick={() => void onSaveStreamURL()}
+                      >
+                        {streamUrlSaving ? "Saving…" : "Save stream URL"}
+                      </button>
+                    </>
+                  ) : null}
                 </div>
           )}
 
@@ -1531,23 +1540,25 @@ export function EventDetailPage({ isLight, active, eventId }) {
                     ))}
                   </ul>
                 ) : null}
-                <div className="mt-4 flex flex-col gap-2">
-                  <textarea
-                    className="min-h-[4.5rem] w-full rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55"
-                    placeholder="Add a comment…"
-                    value={commentDraft}
-                    disabled={commentSubmitting}
-                    onChange={(e) => setCommentDraft(e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className="self-start rounded-lg border border-white/25 bg-purple-900/40 px-3 py-2 text-[0.8125rem] font-semibold text-white disabled:opacity-45"
-                    disabled={commentSubmitting}
-                    onClick={() => void onPostComment()}
-                  >
-                    {commentSubmitting ? "Posting…" : "Post comment"}
-                  </button>
-            </div>
+                {canWrite ? (
+                  <div className="mt-4 flex flex-col gap-2">
+                    <textarea
+                      className="min-h-[4.5rem] w-full rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-[0.875rem] text-[#f4f0fa] outline-none focus:border-purple-400/55"
+                      placeholder="Add a comment…"
+                      value={commentDraft}
+                      disabled={commentSubmitting}
+                      onChange={(e) => setCommentDraft(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="self-start rounded-lg border border-white/25 bg-purple-900/40 px-3 py-2 text-[0.8125rem] font-semibold text-white disabled:opacity-45"
+                      disabled={commentSubmitting}
+                      onClick={() => void onPostComment()}
+                    >
+                      {commentSubmitting ? "Posting…" : "Post comment"}
+                    </button>
+                  </div>
+                ) : null}
           </div>
         </>
       ) : null}

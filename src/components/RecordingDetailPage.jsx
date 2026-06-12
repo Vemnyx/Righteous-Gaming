@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
+import { canWriteContent, isAdminRole } from "../constants/roles";
 import { CARD_FORMAT_NAMES } from "../constants/cardFormat";
 import { resolveRecordingPlayback, youtubeEmbedSrc } from "../utils/recordingMedia";
 
@@ -107,7 +108,8 @@ function RecordingPlayback({ url, startSeconds, className = "" }) {
 export function RecordingDetailPage({ isLight, recordingId, active, onBack, onRecordingDeleted }) {
   const { user, sessionProfile } = useAuth();
   const myUserId = typeof sessionProfile?.id === "number" ? sessionProfile.id : null;
-  const isAdmin = Number(sessionProfile?.role) === 0;
+  const isAdmin = isAdminRole(sessionProfile?.role);
+  const canWrite = canWriteContent(sessionProfile?.role);
   const [meta, setMeta] = useState(
     /** @type {{ id: number, user_id: number, url: string, label?: string | null, format: number, start_seconds?: number | null, created_at: string, owner_username?: string | null, owner_email?: string, first_hero_name?: string | null, first_hero_art_image_url?: string | null, second_hero_name?: string | null, second_hero_art_image_url?: string | null } | null} */ (
       null,
@@ -264,7 +266,7 @@ export function RecordingDetailPage({ isLight, recordingId, active, onBack, onRe
   }, [user, meta, commentDraft]);
 
   const canDelete =
-    meta != null && myUserId != null && (meta.user_id === myUserId || isAdmin);
+    canWrite && meta != null && myUserId != null && (meta.user_id === myUserId || isAdmin);
 
   const closeDeleteModal = useCallback(() => {
     setDeleteOpen(false);
@@ -430,36 +432,38 @@ export function RecordingDetailPage({ isLight, recordingId, active, onBack, onRe
               </ul>
             )}
 
-            <div className="mt-4 flex flex-col gap-2">
-              <label className="flex flex-col gap-1.5">
-                <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
-                  Add a comment
-                </span>
-                <textarea
-                  className={`${inputCls} min-h-[5rem] resize-y`}
-                  value={commentDraft}
-                  onChange={(e) => setCommentDraft(e.target.value)}
-                  placeholder="Share notes about this recording…"
-                  disabled={commentSubmitting || !user}
-                  rows={3}
-                />
-              </label>
-              {commentError ? (
-                <p className="m-0 text-[0.85rem] text-red-200/95" role="alert">
-                  {commentError}
-                </p>
-              ) : null}
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  className={btnPrimary}
-                  disabled={commentSubmitting || !user}
-                  onClick={() => void submitComment()}
-                >
-                  {commentSubmitting ? "Posting…" : "Post comment"}
-                </button>
+            {canWrite ? (
+              <div className="mt-4 flex flex-col gap-2">
+                <label className="flex flex-col gap-1.5">
+                  <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
+                    Add a comment
+                  </span>
+                  <textarea
+                    className={`${inputCls} min-h-[5rem] resize-y`}
+                    value={commentDraft}
+                    onChange={(e) => setCommentDraft(e.target.value)}
+                    placeholder="Share notes about this recording…"
+                    disabled={commentSubmitting || !user}
+                    rows={3}
+                  />
+                </label>
+                {commentError ? (
+                  <p className="m-0 text-[0.85rem] text-red-200/95" role="alert">
+                    {commentError}
+                  </p>
+                ) : null}
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    className={btnPrimary}
+                    disabled={commentSubmitting || !user}
+                    onClick={() => void submitComment()}
+                  >
+                    {commentSubmitting ? "Posting…" : "Post comment"}
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : null}
           </section>
         </>
       ) : null}

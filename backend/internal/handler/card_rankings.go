@@ -325,6 +325,9 @@ func (h *cardRatingsHTTP) saveMyRating(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !requireCardRaterResourceAccess(w, u) {
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var body saveUserCardRatingRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -431,6 +434,9 @@ func (h *cardRatingsHTTP) listMyCardsToRate(w http.ResponseWriter, r *http.Reque
 	}
 	u, ok := h.sessionUser(w, r)
 	if !ok {
+		return
+	}
+	if !requireCardRaterResourceAccess(w, u) {
 		return
 	}
 	raterID, ok := parseRaterIDQuery(w, r)
@@ -657,7 +663,11 @@ func (h *cardRatingsHTTP) createCardRater(w http.ResponseWriter, r *http.Request
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.sessionUser(w, r); !ok {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireCardRaterResourceAccess(w, u) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
@@ -714,7 +724,11 @@ func (h *cardRatingsHTTP) completeActiveCardRater(w http.ResponseWriter, r *http
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.sessionUser(w, r); !ok {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireCardRaterResourceAccess(w, u) {
 		return
 	}
 	updated, err := h.app.Repo.CompleteActiveCardRater(r.Context())
@@ -736,7 +750,11 @@ func (h *cardRatingsHTTP) reopenCardRater(w http.ResponseWriter, r *http.Request
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.sessionUser(w, r); !ok {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireCardRaterResourceAccess(w, u) {
 		return
 	}
 	idStr := strings.TrimSpace(r.PathValue("id"))
@@ -781,7 +799,11 @@ func (h *cardRatingsHTTP) deleteCardRater(w http.ResponseWriter, r *http.Request
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.sessionUser(w, r); !ok {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireCardRaterResourceAccess(w, u) {
 		return
 	}
 	idStr := strings.TrimSpace(r.PathValue("id"))

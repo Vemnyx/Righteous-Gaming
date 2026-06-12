@@ -25,6 +25,7 @@ import { UserAccountMenu } from "../components/UserAccountMenu";
 import { UserSettings } from "../components/UserSettings";
 import { UserProfile } from "../components/UserProfile";
 import { sessionProfileDisplayName } from "../auth/sessionProfile";
+import { canAccessCardRaterResource, isAdminRole } from "../constants/roles";
 
 /** Persisted before opening Invite User so Back restores the dashboard URL (e.g. `/admin/users`). */
 const SESSION_INVITE_RETURN_KEY = "rg-dashboard-return-url";
@@ -883,9 +884,6 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
   };
 }
 
-/** Matches backend/domain: RoleAdmin = 0, RoleMember = 1 */
-const ROLE_ADMIN = 0;
-
 /**
  * Admin tab requires admin (`role === 0`). Omit `requiresAdmin` for member-visible tabs.
  * @typedef {{ id: string, label: string, requiresAdmin?: boolean }} DashboardTabSpec
@@ -989,6 +987,31 @@ const resourcesMenuItemActiveDark =
 const resourcesMenuItemActiveLight =
   "border border-[rgba(152,117,207,0.85)] bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] text-white shadow-[0_2px_14px_rgb(103_61_154/0.35)]";
 
+/** @param {{ isLight: boolean, onOpenData: () => void }} props */
+function GuestCardRaterNotice({ isLight, onOpenData }) {
+  return (
+    <div
+      className={`mx-auto flex max-w-lg flex-col items-center gap-4 rounded-xl border px-6 py-10 text-center ${
+        isLight ? "border-white/[0.12] bg-black/20" : "border-white/10 bg-black/25"
+      }`}
+    >
+      <h2 className="m-0 text-lg font-semibold text-[#f4f0fa]">Card Rater unavailable</h2>
+      <p className="m-0 text-[0.9rem] leading-relaxed text-[#f4f0fa]/70">
+        Guest accounts can browse completed card rating results under{" "}
+        <span className="text-[#f4f0fa]/90">Data → Card Ratings</span>, but cannot start or manage
+        rating sessions.
+      </p>
+      <button
+        type="button"
+        className="rounded-lg border border-white/25 bg-purple-900/45 px-4 py-2.5 text-[0.875rem] font-semibold text-white hover:bg-purple-900/60"
+        onClick={onOpenData}
+      >
+        Open Card Ratings
+      </button>
+    </div>
+  );
+}
+
 function HamburgerIcon({ className }) {
   return (
     <svg
@@ -1059,23 +1082,30 @@ export default function Dashboard({ onNavigate }) {
   const [adminHovered, setAdminHovered] = useState(false);
   const [dataHovered, setDataHovered] = useState(false);
 
+  const isAdmin = isAdminRole(sessionProfile?.role);
+  const canUseCardRaterResource = canAccessCardRaterResource(sessionProfile?.role);
+
   const tabs = useMemo(() => {
-    const isAdmin = Number(sessionProfile?.role) === ROLE_ADMIN;
     return ALL_TABS.filter((t) => !t.requiresAdmin || isAdmin);
-  }, [sessionProfile]);
+  }, [isAdmin]);
+
+  const visibleResourceSubLinks = useMemo(() => {
+    if (canUseCardRaterResource) return RESOURCE_SUB_LINKS;
+    return RESOURCE_SUB_LINKS.filter((l) => l.segment !== "card-rater");
+  }, [canUseCardRaterResource]);
 
   const resourcesTabLabel = useMemo(() => {
     if (activeTab !== RESOURCES_TAB_ID) {
       return ALL_TABS.find((t) => t.id === RESOURCES_TAB_ID)?.label ?? "Resources";
     }
-    const hit = RESOURCE_SUB_LINKS.find(
+    const hit = visibleResourceSubLinks.find(
       (l) =>
         l.segment === resourcesChild ||
         (l.segment === "card-rater" &&
           (resourcesChild === "card-rater-play" || (resourcesChild === "card-rater" && cardRaterPlayAtRoot))),
     );
     return hit?.label ?? "Resources";
-  }, [activeTab, resourcesChild, cardRaterPlayAtRoot]);
+  }, [activeTab, resourcesChild, cardRaterPlayAtRoot, visibleResourceSubLinks]);
 
   const adminTabLabel = useMemo(() => {
     if (activeTab !== ADMIN_TAB_ID) {
@@ -1532,8 +1562,13 @@ export default function Dashboard({ onNavigate }) {
   const isLight = theme === "light";
 
   const showCardRankerResources =
-    resourcesChild === "card-rater-play" ||
-    (resourcesChild === "card-rater" && cardRaterPlayAtRoot);
+    canUseCardRaterResource &&
+    (resourcesChild === "card-rater-play" ||
+      (resourcesChild === "card-rater" && cardRaterPlayAtRoot));
+
+  const showGuestCardRaterBlocked =
+    !canUseCardRaterResource &&
+    (resourcesChild === "card-rater" || resourcesChild === "card-rater-play");
 
   return (
     <div className={isLight ? shellLight : shellDark}>
@@ -1589,14 +1624,14 @@ export default function Dashboard({ onNavigate }) {
               {tabs.map((tab) => {
                 const subLinks =
                   tab.id === RESOURCES_TAB_ID
-                    ? RESOURCE_SUB_LINKS
+                    ? visibleResourceSubLinks
                     : tab.id === DATA_TAB_ID
                       ? DATA_SUB_LINKS
                       : tab.id === ADMIN_TAB_ID
                         ? ADMIN_SUB_LINKS
                         : [];
                 const showDesktopSubmenu =
-                  (tab.id === RESOURCES_TAB_ID && RESOURCE_SUB_LINKS.length > 1) ||
+                  (tab.id === RESOURCES_TAB_ID && visibleResourceSubLinks.length > 1) ||
                   (tab.id === DATA_TAB_ID && DATA_SUB_LINKS.length >= 1) ||
                   (tab.id === ADMIN_TAB_ID && ADMIN_SUB_LINKS.length >= 1);
                 const desktopHovered =
@@ -1752,7 +1787,7 @@ export default function Dashboard({ onNavigate }) {
                   ? "border border-[rgba(152,117,207,0.75)] bg-gradient-to-b from-[#7b4cb8]/90 to-[#5a2f8f]/90 text-white shadow-[0_2px_12px_rgb(103_61_154/0.35)] focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/70"
                   : "border border-[rgba(142,90,200,0.55)] bg-gradient-to-br from-[rgba(80,40,120,0.45)] to-[rgba(40,20,70,0.55)] text-white focus-visible:ring-2 focus-visible:ring-purple-500/65";
 
-                if (tab.id === RESOURCES_TAB_ID && RESOURCE_SUB_LINKS.length > 1) {
+                if (tab.id === RESOURCES_TAB_ID && visibleResourceSubLinks.length > 1) {
                   return (
                     <div key={tab.id} className="flex flex-col gap-1">
                       <button
@@ -1774,7 +1809,7 @@ export default function Dashboard({ onNavigate }) {
                           role="group"
                           aria-label="Resources pages"
                         >
-                          {RESOURCE_SUB_LINKS.map((link) => {
+                          {visibleResourceSubLinks.map((link) => {
                             const subSel =
                               resourcesChild === link.segment ||
                               (link.segment === "card-rater" &&
@@ -2058,6 +2093,8 @@ export default function Dashboard({ onNavigate }) {
                   active={activeTab === RESOURCES_TAB_ID && resourcesChild === "events"}
                   onOpenEvent={openEventDetail}
                 />
+              ) : showGuestCardRaterBlocked ? (
+                <GuestCardRaterNotice isLight={isLight} onOpenData={() => goDataSub("card-ratings")} />
               ) : showCardRankerResources ? (
                 <CardRanker
                   isLight={isLight}

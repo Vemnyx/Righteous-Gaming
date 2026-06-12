@@ -683,7 +683,11 @@ type updateStreamURLsRequest struct {
 }
 
 func (h *eventsHTTP) updateEventDataStreamURLs(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.requireUser(w, r); !ok {
+	u, ok := h.requireUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireWriteAccess(w, u) {
 		return
 	}
 	dataID, ok := parseEventDataID(r)
@@ -761,6 +765,9 @@ type createEventDataCommentRequest struct {
 func (h *eventsHTTP) createEventDataComment(w http.ResponseWriter, r *http.Request) {
 	u, ok := h.requireUser(w, r)
 	if !ok {
+		return
+	}
+	if !requireWriteAccess(w, u) {
 		return
 	}
 	dataID, ok := parseEventDataID(r)

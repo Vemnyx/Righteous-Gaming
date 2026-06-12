@@ -2,8 +2,7 @@ import { useState } from "react";
 import { AuthShell } from "../components/AuthShell";
 import { useAuth } from "../auth/AuthContext";
 
-/** Matches backend/domain: RoleAdmin = 0, RoleMember = 1 */
-const ROLE_ADMIN = 0;
+import { ROLE_ADMIN, ROLE_GUEST, ROLE_MEMBER } from "../constants/roles";
 
 /** Must match Dashboard `SESSION_INVITE_RETURN_KEY` */
 const SESSION_INVITE_RETURN_KEY = "rg-dashboard-return-url";
@@ -72,7 +71,7 @@ export default function InviteUser({ onNavigate }) {
       return;
     }
     const roleNum = Number(role);
-    if (roleNum !== 0 && roleNum !== 1) {
+    if (roleNum !== ROLE_ADMIN && roleNum !== ROLE_MEMBER && roleNum !== ROLE_GUEST) {
       setError("Invalid role.");
       return;
     }
@@ -195,8 +194,9 @@ export default function InviteUser({ onNavigate }) {
           }}
           disabled={submitting}
         >
-          <option value="1">Member</option>
-          <option value="0">Admin</option>
+          <option value={String(ROLE_MEMBER)}>Member</option>
+          <option value={String(ROLE_GUEST)}>Guest</option>
+          <option value={String(ROLE_ADMIN)}>Admin</option>
         </select>
 
         <button type="submit" className={primaryBtn} disabled={submitting}>

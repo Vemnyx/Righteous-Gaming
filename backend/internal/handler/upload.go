@@ -88,7 +88,8 @@ func (h *uploadHTTP) uploadAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.svc.UserForIDToken(r.Context(), idToken); err != nil {
+	u, err := h.svc.UserForIDToken(r.Context(), idToken)
+	if err != nil {
 		if errors.Is(err, service.ErrValidation) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -103,6 +104,9 @@ func (h *uploadHTTP) uploadAsset(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Error("upload asset session check", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if !requireWriteAccess(w, u) {
 		return
 	}
 

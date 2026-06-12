@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
+import { canWriteContent } from "../constants/roles";
 import { deckHeroLabel } from "../utils/deckHeroLabel";
 import { deckDisplayName } from "../utils/deckDisplayName";
 import { deckSourceLabel } from "../utils/deckSourceLabel";
@@ -96,6 +97,7 @@ function parseApiError(errText) {
 export function DecksList({ isLight, active, onOpenDeck }) {
   const { user, sessionProfile } = useAuth();
   const isAdmin = Number(sessionProfile?.role) === 0;
+  const canWrite = canWriteContent(sessionProfile?.role);
   const [rows, setRows] = useState(/** @type {DeckRow[]} */ ([]));
   const [sets, setSets] = useState(/** @type {{ id: number, name: string }[]} */ ([]));
   const [loading, setLoading] = useState(false);
@@ -597,14 +599,16 @@ export function DecksList({ isLight, active, onOpenDeck }) {
             </label>
           ) : null}
         </div>
-        <button
-          type="button"
-          className={`shrink-0 self-end ${btnPrimary}`}
-          disabled={!user || loading}
-          onClick={openImportModal}
-        >
-          Import From Fabrary
-        </button>
+        {canWrite ? (
+          <button
+            type="button"
+            className={`shrink-0 self-end ${btnPrimary}`}
+            disabled={!user || loading}
+            onClick={openImportModal}
+          >
+            Import From Fabrary
+          </button>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -618,7 +622,9 @@ export function DecksList({ isLight, active, onOpenDeck }) {
           <div
             className={`col-span-full rounded-xl border px-4 py-10 text-center text-[0.875rem] text-[#f4f0fa]/65 ${cardChromeBorder}`}
           >
-            No decks yet. Import one from Fabrary to get started.
+            {canWrite
+              ? "No decks yet. Import one from Fabrary to get started."
+              : "No decks to show."}
           </div>
         ) : filteredRows.length === 0 ? (
           <div

@@ -147,7 +147,11 @@ func (h *decksHTTP) createDeckSource(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.sessionUser(w, r); !ok {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireWriteAccess(w, u) {
 		return
 	}
 
@@ -368,6 +372,9 @@ func (h *decksHTTP) deleteMyDeck(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !requireWriteAccess(w, u) {
+		return
+	}
 
 	idStr := strings.TrimSpace(r.PathValue("id"))
 	id, err := strconv.Atoi(idStr)
@@ -395,6 +402,9 @@ func (h *decksHTTP) importFabraryDeck(w http.ResponseWriter, r *http.Request) {
 	}
 	u, ok := h.sessionUser(w, r)
 	if !ok {
+		return
+	}
+	if !requireWriteAccess(w, u) {
 		return
 	}
 

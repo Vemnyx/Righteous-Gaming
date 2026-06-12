@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
+import { canWriteContent } from "../constants/roles";
 import { CARD_FORMAT_NAMES, isValidCardFormatId } from "../constants/cardFormat";
 import { extFromFilename, MAX_UPLOAD_SIZE_LABEL, uploadPublicAsset, uploadSizeError } from "../utils/uploadPublicAsset";
 import { youtubeVideoIdFromInput } from "../utils/youtube";
@@ -158,6 +159,7 @@ function RecordingRowHeroArt({ side, src, name }) {
 export function RecordingsList({ isLight, active, onOpenRecording }) {
   const { user, sessionProfile } = useAuth();
   const myUserId = typeof sessionProfile?.id === "number" ? sessionProfile.id : null;
+  const canWrite = canWriteContent(sessionProfile?.role);
 
   const [rows, setRows] = useState(/** @type {RecordingRow[]} */ ([]));
   const [total, setTotal] = useState(0);
@@ -673,14 +675,16 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
             </select>
           </label>
         </div>
-        <button
-          type="button"
-          className={`shrink-0 self-end ${btnPrimary}`}
-          disabled={!user || loading || metaLoading}
-          onClick={openAddModal}
-        >
-          Add Recording
-        </button>
+        {canWrite ? (
+          <button
+            type="button"
+            className={`shrink-0 self-end ${btnPrimary}`}
+            disabled={!user || loading || metaLoading}
+            onClick={openAddModal}
+          >
+            Add Recording
+          </button>
+        ) : null}
       </div>
 
       <div className="mx-auto mt-3 flex w-full max-w-[61.6rem] flex-col gap-2.5 sm:mt-4">
@@ -695,7 +699,9 @@ export function RecordingsList({ isLight, active, onOpenRecording }) {
             className={`rounded-xl border px-4 py-10 text-center text-[0.875rem] text-[#f4f0fa]/65 ${cardChromeBorder}`}
           >
             {total === 0 && filterFormat === FILTER_ALL && filterHero === FILTER_ALL && filterUploader === FILTER_ALL
-              ? "No recordings yet. Add one to get started."
+              ? canWrite
+                ? "No recordings yet. Add one to get started."
+                : "No recordings yet."
               : "No recordings match the selected filters."}
           </div>
         ) : (

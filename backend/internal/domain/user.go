@@ -3,22 +3,31 @@ package domain
 import "time"
 
 // Role identifies the user's role in the application (stored as integer in the database).
-// 0 = admin, 1 = member (default for new users).
+// 0 = admin, 1 = member (default for new users), 2 = guest (read-only).
 type Role int
 
 const (
 	RoleAdmin  Role = 0
 	RoleMember Role = 1
+	RoleGuest  Role = 2
 )
 
 // Valid reports whether r is a known role constant.
 func (r Role) Valid() bool {
 	switch r {
-	case RoleAdmin, RoleMember:
+	case RoleAdmin, RoleMember, RoleGuest:
 		return true
 	default:
 		return false
 	}
+}
+
+// CanWriteContent reports whether u may create or mutate app content.
+func (u *User) CanWriteContent() bool {
+	if u == nil || u.Role == nil {
+		return false
+	}
+	return u.Role.CanWriteContent()
 }
 
 // UserSettings holds per-user app preferences (from user_settings).
