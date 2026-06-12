@@ -9,10 +9,15 @@ import (
 )
 
 func TestBuildMetaShareAndWinRates(t *testing.T) {
-	standings, _ := json.Marshal([]map[string]any{
-		{"rank": 1, "player": "Alice", "hero": "Fai", "wins": 3},
-		{"rank": 2, "player": "Bob", "hero": "Fai", "wins": 2},
-		{"rank": 3, "player": "Cara", "hero": "Dromai", "wins": 2},
+	pairings, _ := json.Marshal([]map[string]any{
+		{
+			"player1": "Alice", "player2": "Cara",
+			"hero1": "Fai", "hero2": "Dromai",
+		},
+		{
+			"player1": "Bob", "player2": "Dan",
+			"hero1": "Fai", "hero2": "Fai",
+		},
 	})
 	results, _ := json.Marshal([]map[string]any{
 		{
@@ -29,7 +34,7 @@ func TestBuildMetaShareAndWinRates(t *testing.T) {
 
 	rounds := []repository.EventRound{{
 		RoundNumber: 1,
-		Standings:   standings,
+		Pairings:    pairings,
 		Results:     results,
 	}}
 
@@ -45,13 +50,16 @@ func TestBuildMetaShareAndWinRates(t *testing.T) {
 
 	snap := Build(rounds, 1, 1, nil, catalog, matcher)
 
-	if snap.Overall.TotalDecks != 3 {
-		t.Fatalf("total decks = %d, want 3", snap.Overall.TotalDecks)
+	if snap.Overall.TotalDecks != 4 {
+		t.Fatalf("total decks = %d, want 4", snap.Overall.TotalDecks)
+	}
+	if snap.Overall.SourceRound != 1 {
+		t.Fatalf("source round = %d, want 1", snap.Overall.SourceRound)
 	}
 	if len(snap.Overall.Heroes) != 2 {
 		t.Fatalf("meta heroes = %d, want 2", len(snap.Overall.Heroes))
 	}
-	if snap.Overall.Heroes[0].Count != 2 || snap.Overall.Heroes[0].Pct != 66.7 {
+	if snap.Overall.Heroes[0].Count != 3 || snap.Overall.Heroes[0].Pct != 75 {
 		t.Fatalf("Fai share = %+v", snap.Overall.Heroes[0])
 	}
 	if len(snap.HeroWinRates) != 2 {
@@ -66,11 +74,13 @@ func TestBuildMetaShareAndWinRates(t *testing.T) {
 }
 
 func TestBuildMetaShareSeparatesArakniVariants(t *testing.T) {
-	standings, _ := json.Marshal([]map[string]any{
-		{"rank": 1, "player": "P1", "hero": "Arakni, Marionette", "wins": 3},
-		{"rank": 2, "player": "P2", "hero": "Arakni, 5L!p3d 7hRu 7h3 cR4X", "wins": 2},
+	pairings, _ := json.Marshal([]map[string]any{
+		{
+			"player1": "P1", "player2": "P2",
+			"hero1": "Arakni, Marionette", "hero2": "Arakni, 5L!p3d 7hRu 7h3 cR4X",
+		},
 	})
-	rounds := []repository.EventRound{{RoundNumber: 5, Standings: standings}}
+	rounds := []repository.EventRound{{RoundNumber: 1, Pairings: pairings}}
 
 	matcher := eventusers.NewHeroMatcher([]repository.HeroMatchRow{
 		{ID: 30, Name: "Arakni, Marionette", Young: false},
@@ -102,16 +112,22 @@ func TestBuildFiltersRoundRange(t *testing.T) {
 			"winner_name": "Cara", "winner_side": "Player 2",
 		},
 	})
-	day1Standings, _ := json.Marshal([]map[string]any{
-		{"rank": 1, "player": "Alice", "hero": "Fai", "wins": 1},
+	day1Pairings, _ := json.Marshal([]map[string]any{
+		{
+			"player1": "Alice", "player2": "Bob",
+			"hero1": "Fai", "hero2": "Fai",
+		},
 	})
-	day2Standings, _ := json.Marshal([]map[string]any{
-		{"rank": 1, "player": "Alice", "hero": "Dromai", "wins": 2},
+	day2Pairings, _ := json.Marshal([]map[string]any{
+		{
+			"player1": "Alice", "player2": "Cara",
+			"hero1": "Dromai", "hero2": "Fai",
+		},
 	})
 
 	rounds := []repository.EventRound{
-		{RoundNumber: 8, Standings: day1Standings, Results: day1Results},
-		{RoundNumber: 9, Standings: day2Standings, Results: day2Results},
+		{RoundNumber: 1, Pairings: day1Pairings, Results: day1Results},
+		{RoundNumber: 9, Pairings: day2Pairings, Results: day2Results},
 	}
 
 	matcher := eventusers.NewHeroMatcher([]repository.HeroMatchRow{
@@ -123,12 +139,23 @@ func TestBuildFiltersRoundRange(t *testing.T) {
 		2: {Name: "Dromai, Ash Artist"},
 	}
 
+	day1 := Build(rounds, 1, 8, nil, catalog, matcher)
+	if day1.Overall.SourceRound != 1 {
+		t.Fatalf("day1 source round = %d, want 1", day1.Overall.SourceRound)
+	}
+	if day1.Overall.TotalDecks != 2 {
+		t.Fatalf("day1 decks = %d, want 2", day1.Overall.TotalDecks)
+	}
+
 	day2 := Build(rounds, 9, 9, nil, catalog, matcher)
-	if day2.Overall.TotalDecks != 1 {
-		t.Fatalf("day2 decks = %d, want 1", day2.Overall.TotalDecks)
+	if day2.Overall.SourceRound != 9 {
+		t.Fatalf("day2 source round = %d, want 9", day2.Overall.SourceRound)
+	}
+	if day2.Overall.TotalDecks != 2 {
+		t.Fatalf("day2 decks = %d, want 2", day2.Overall.TotalDecks)
 	}
 	if day2.Overall.Heroes[0].Name != "Dromai, Ash Artist" {
-		t.Fatalf("day2 hero = %q, want Dromai", day2.Overall.Heroes[0].Name)
+		t.Fatalf("day2 top hero = %q, want Dromai", day2.Overall.Heroes[0].Name)
 	}
 	if len(day2.HeroWinRates) != 2 {
 		t.Fatalf("day2 win rate rows = %d, want 2", len(day2.HeroWinRates))

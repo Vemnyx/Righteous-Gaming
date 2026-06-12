@@ -54,11 +54,11 @@ type Snapshot struct {
 	MatchupMatrix  [][]*float64     `json:"matchup_matrix"`
 }
 
-type standingRow struct {
-	Rank   int    `json:"rank"`
-	Player string `json:"player"`
-	Hero   string `json:"hero"`
-	Wins   int    `json:"wins"`
+type pairingRow struct {
+	Player1 string `json:"player1"`
+	Player2 string `json:"player2"`
+	Hero1   string `json:"hero1"`
+	Hero2   string `json:"hero2"`
 }
 
 type resultRow struct {
@@ -123,6 +123,18 @@ func maxRoundNumber(rounds []repository.EventRound) int {
 	return max
 }
 
+const (
+	metaShareDay1PairingsRound = 1
+	metaShareDay2PairingsRound = 9
+)
+
+func metaSharePairingsRound(fromRound int) int {
+	if fromRound >= metaShareDay2PairingsRound {
+		return metaShareDay2PairingsRound
+	}
+	return metaShareDay1PairingsRound
+}
+
 func buildOverallMetaShare(
 	rounds []repository.EventRound,
 	fromRound int,
@@ -135,58 +147,55 @@ func buildOverallMetaShare(
 		return out
 	}
 
-	sorted := append([]repository.EventRound(nil), rounds...)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].RoundNumber < sorted[j].RoundNumber
-	})
-
-	// Each player counted once using their hero from their latest standings appearance.
-	type playerEntry struct {
-		round int
-		key   fieldKey
+	sourceRound := metaSharePairingsRound(fromRound)
+	var source *repository.EventRound
+	for i := range rounds {
+		if rounds[i].RoundNumber == sourceRound {
+			source = &rounds[i]
+			break
+		}
 	}
-	playerLatest := map[string]playerEntry{}
-	sourceRound := 0
-
-	for _, rr := range sorted {
-		if rr.RoundNumber < fromRound || rr.RoundNumber > throughRound {
-			continue
-		}
-		if rr.RoundNumber > sourceRound {
-			sourceRound = rr.RoundNumber
-		}
-		var rows []standingRow
-		_ = json.Unmarshal(rr.Standings, &rows)
-		for _, row := range rows {
-			player := normalizePlayer(row.Player)
-			if player == "" {
-				continue
-			}
-			key := canonicalFieldKey(row.Hero, matcher, catalog)
-			if key.name == "" {
-				continue
-			}
-			prev, ok := playerLatest[player]
-			if !ok || rr.RoundNumber >= prev.round {
-				playerLatest[player] = playerEntry{round: rr.RoundNumber, key: key}
-			}
-		}
+	if source == nil {
+		return out
 	}
 
 	out.SourceRound = sourceRound
-	for _, rr := range sorted {
-		if rr.RoundNumber == sourceRound {
-			out.SourceRoundLabel = rr.RoundLabel
-			break
+	if source.RoundLabel != nil {
+		out.SourceRoundLabel = source.RoundLabel
+	}
+
+	// Each player counted once from the day's opening-round pairings (R1 or R9).
+	playerHero := map[string]fieldKey{}
+	var pairingRows []pairingRow
+	_ = json.Unmarshal(source.Pairings, &pairingRows)
+	for _, row := range pairingRows {
+		if !scrape.ValidMatchPlayers(row.Player1, row.Player2) {
+			continue
+		}
+		for player, hero := range map[string]string{
+			normalizePlayer(row.Player1): row.Hero1,
+			normalizePlayer(row.Player2): row.Hero2,
+		} {
+			if player == "" {
+				continue
+			}
+			if _, seen := playerHero[player]; seen {
+				continue
+			}
+			key := canonicalFieldKey(hero, matcher, catalog)
+			if key.name == "" {
+				continue
+			}
+			playerHero[player] = key
 		}
 	}
 
 	counts := map[fieldKey]int{}
-	for _, entry := range playerLatest {
-		counts[entry.key]++
+	for _, key := range playerHero {
+		counts[key]++
 	}
 
-	total := len(playerLatest)
+	total := len(playerHero)
 	out.TotalDecks = total
 	if total == 0 {
 		return out

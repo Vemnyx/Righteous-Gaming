@@ -68,20 +68,22 @@ export function EventMetaTab({
   }, [metaSubTab, metaRound, throughRound, metaDay]);
 
   const dayLabel = metaDay === "day2" ? "Day 2" : "Day 1";
+  const metaShareRoundLabel =
+    snapshot?.overall?.source_round_label ||
+    (snapshot?.overall?.source_round ? `Round ${snapshot.overall.source_round}` : "");
+
   const roundScopeLabel =
     metaSubTab === "matchups" && snapshot
       ? `all rounds through R${snapshot.through_round}`
-      : showMetaDaySplit && snapshot
-        ? metaSubTab === "share"
-          ? metaDay === "day1"
-            ? "R1–R8"
-            : `R9–R${snapshot.through_round || maxRound}`
-          : snapshot.from_round && snapshot.from_round > 1
+      : metaSubTab === "share" && snapshot?.overall?.source_round
+        ? metaShareRoundLabel
+        : showMetaDaySplit && snapshot
+          ? snapshot.from_round && snapshot.from_round > 1
             ? `R${snapshot.from_round}–R${snapshot.through_round}`
             : `through R${snapshot.through_round}`
-        : snapshot
-          ? `through R${snapshot.through_round}`
-          : "";
+          : snapshot
+            ? `through R${snapshot.through_round}`
+            : "";
 
   const roundSelect =
     metaSubTab === "round-stats" && rounds.length > 0 ? (
@@ -164,11 +166,11 @@ export function EventMetaTab({
           <p className="m-0 mb-4 text-[0.82rem] text-[#f4f0fa]/60">
             {overall.total_decks} decks{showMetaDaySplit ? ` on ${dayLabel}` : " across the full event"}
             {overall.source_round > 0
-              ? ` · each player counted once (latest standing ${roundScopeLabel})`
+              ? ` · each player counted once (${metaShareRoundLabel || `round ${overall.source_round}`} pairings)`
               : ""}
           </p>
           {overall.heroes.length === 0 ? (
-            <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">No standings data yet.</p>
+            <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">No pairing data yet.</p>
           ) : (
             <ul className="m-0 flex w-full max-w-[min(100%,44rem)] list-none flex-col gap-3.5 p-0">
               {overall.heroes.map((hero) => {
