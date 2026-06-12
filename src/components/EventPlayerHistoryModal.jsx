@@ -65,7 +65,7 @@ export function EventPlayerHistoryModal({
       }}
     >
       <div
-        className={`relative flex max-h-[min(90vh,640px)] w-full max-w-3xl flex-col rounded-xl p-5 sm:p-6 ${panel}`}
+        className={`relative flex max-h-[min(90vh,640px)] w-full max-w-3xl flex-col rounded-xl p-3 sm:p-6 ${panel}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="event-player-history-title"
@@ -107,47 +107,87 @@ export function EventPlayerHistoryModal({
           history.rows.length === 0 ? (
             <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">No rounds found for this player in this segment.</p>
           ) : (
-            <div className={`overflow-auto rounded-xl border ${border}`}>
-              <table className="w-full min-w-[36rem] border-collapse text-left text-[0.8125rem]">
-                <thead>
-                  <tr className="border-b border-white/[0.08] text-[0.68rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/45">
-                    <th className="px-3 py-2.5 font-semibold">Round</th>
-                    <th className="px-3 py-2.5 font-semibold">Opponent</th>
-                    <th className="px-3 py-2.5 font-semibold">Hero</th>
-                    <th className="px-3 py-2.5 font-semibold">Opp. hero</th>
-                    <th className="px-3 py-2.5 font-semibold">Result</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.rows.map((row) => (
-                    <tr
-                      key={`${row.round}-${row.opponent}-${row.hero}`}
-                      className="border-b border-white/[0.06] last:border-b-0"
-                    >
-                      <td className="px-3 py-2.5 tabular-nums text-[#f4f0fa]/85">
-                        R{row.round}
-                        {row.round_label ? (
-                          <span className="ml-1 text-[0.72rem] text-[#f4f0fa]/45">({row.round_label})</span>
-                        ) : null}
+            <>
+              <ul className={`m-0 flex list-none flex-col gap-1.5 overflow-auto p-0 sm:hidden ${border} max-h-[min(60vh,28rem)] rounded-xl border`}>
+                {history.rows.map((row) => (
+                  <li
+                    key={`${row.round}-${row.opponent}-${row.hero}`}
+                    className="border-b border-white/[0.06] px-2.5 py-2 last:border-b-0"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="min-w-0">
+                          <OpponentName name={row.opponent} onPlayerClick={onPlayerClick} />
+                        </div>
+                        <p className="m-0 truncate text-[0.65rem] leading-tight text-[#f4f0fa]/62">
+                          {row.hero || "—"}
+                          <span className="text-[#f4f0fa]/35"> vs </span>
+                          {row.opponent_hero || "—"}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right leading-tight">
+                        <p className="m-0 text-[0.72rem] font-semibold tabular-nums text-[#f4f0fa]/80">
+                          R{row.round}
+                        </p>
+                        <div className="mt-0.5 text-[0.72rem]">
+                          <ResultBadge result={row.result} />
+                        </div>
                         {row.table != null && row.table > 0 ? (
-                          <span className="mt-0.5 block text-[0.68rem] text-[#f4f0fa]/40">Table {row.table}</span>
+                          <p className="m-0 mt-0.5 text-[0.62rem] tabular-nums text-[#f4f0fa]/45">
+                            T{row.table}
+                          </p>
                         ) : null}
-                      </td>
-                      <td className="max-w-[10rem] px-3 py-2.5">
-                        <OpponentName name={row.opponent} onPlayerClick={onPlayerClick} />
-                      </td>
-                      <td className="max-w-[9rem] truncate px-3 py-2.5 text-[#f4f0fa]/72">{row.hero || "—"}</td>
-                      <td className="max-w-[9rem] truncate px-3 py-2.5 text-[#f4f0fa]/72">
-                        {row.opponent_hero || "—"}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <ResultBadge result={row.result} />
-                      </td>
+                      </div>
+                    </div>
+                    {row.round_label ? (
+                      <p className="m-0 mt-1 truncate text-[0.62rem] text-[#f4f0fa]/45">{row.round_label}</p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+
+              <div className={`hidden overflow-auto rounded-xl border sm:block ${border}`}>
+                <table className="w-full min-w-[36rem] border-collapse text-left text-[0.8125rem]">
+                  <thead>
+                    <tr className="border-b border-white/[0.08] text-[0.68rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/45">
+                      <th className="px-3 py-2.5 font-semibold">Round</th>
+                      <th className="px-3 py-2.5 font-semibold">Opponent</th>
+                      <th className="px-3 py-2.5 font-semibold">Hero</th>
+                      <th className="px-3 py-2.5 font-semibold">Opp. hero</th>
+                      <th className="px-3 py-2.5 font-semibold">Result</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {history.rows.map((row) => (
+                      <tr
+                        key={`${row.round}-${row.opponent}-${row.hero}`}
+                        className="border-b border-white/[0.06] last:border-b-0"
+                      >
+                        <td className="px-3 py-2.5 tabular-nums text-[#f4f0fa]/85">
+                          R{row.round}
+                          {row.round_label ? (
+                            <span className="ml-1 text-[0.72rem] text-[#f4f0fa]/45">({row.round_label})</span>
+                          ) : null}
+                          {row.table != null && row.table > 0 ? (
+                            <span className="mt-0.5 block text-[0.68rem] text-[#f4f0fa]/40">Table {row.table}</span>
+                          ) : null}
+                        </td>
+                        <td className="max-w-[10rem] px-3 py-2.5">
+                          <OpponentName name={row.opponent} onPlayerClick={onPlayerClick} />
+                        </td>
+                        <td className="max-w-[9rem] truncate px-3 py-2.5 text-[#f4f0fa]/72">{row.hero || "—"}</td>
+                        <td className="max-w-[9rem] truncate px-3 py-2.5 text-[#f4f0fa]/72">
+                          {row.opponent_hero || "—"}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <ResultBadge result={row.result} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )
         ) : null}
       </div>
@@ -164,7 +204,7 @@ function OpponentName({ name, onPlayerClick }) {
   return (
     <button
       type="button"
-      className="m-0 max-w-full truncate border-0 bg-transparent p-0 text-left font-semibold text-[#f4f0fa] underline-offset-2 hover:text-purple-200 hover:underline"
+      className="m-0 max-w-full truncate border-0 bg-transparent p-0 text-left text-[0.78rem] font-semibold text-[#f4f0fa] underline-offset-2 hover:text-purple-200 hover:underline sm:text-[0.8125rem]"
       onClick={() => onPlayerClick(name)}
     >
       {name}

@@ -216,48 +216,91 @@ function TeamRankingsTable({ rankings, isLight, rowChrome, leaderUserIds, onPlay
   const border = isLight ? "border-white/[0.12] bg-black/25" : rowChrome;
 
   return (
-    <div className={`overflow-x-auto rounded-xl border ${border}`}>
-      <table className="w-full min-w-[28rem] border-collapse text-left text-[0.8125rem]">
-        <thead>
-          <tr className="border-b border-white/[0.08] text-[0.68rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/45">
-            <th className="px-3 py-2.5 font-semibold">Player</th>
-            <th className="px-3 py-2.5 font-semibold">Rank</th>
-            <th className="px-3 py-2.5 font-semibold">Hero</th>
-            <th className="px-3 py-2.5 font-semibold">Record</th>
-            <th className="px-3 py-2.5 font-semibold">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rankings.map((row) => (
-            <tr key={row.userId} className="border-b border-white/[0.06] last:border-b-0">
-              <td className="px-3 py-2.5 font-semibold text-[#f4f0fa]">
-                <span className="inline-flex items-center gap-1.5">
-                  <PlayerNameButton name={row.name} onPlayerClick={onPlayerClick} className="text-[#f4f0fa]" />
-                  {leaderUserIds.has(row.userId) ? <LeaderCrown /> : null}
+    <>
+      <ul className={`m-0 flex list-none flex-col gap-1.5 p-0 sm:hidden ${border} rounded-xl border`}>
+        {rankings.map((row) => (
+          <li
+            key={row.userId}
+            className="border-b border-white/[0.06] px-2.5 py-2 last:border-b-0"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-1">
+                  <PlayerNameButton
+                    name={row.name}
+                    onPlayerClick={onPlayerClick}
+                    className="min-w-0 truncate text-[0.78rem] text-[#f4f0fa]"
+                  />
+                  {leaderUserIds.has(row.userId) ? <LeaderCrown className="h-3 w-3 text-amber-400" /> : null}
+                </div>
+                <p className="m-0 truncate text-[0.65rem] leading-tight text-[#f4f0fa]/62">{row.hero || "—"}</p>
+              </div>
+              <div className="shrink-0 text-right leading-tight">
+                <p className="m-0 text-[0.72rem] font-semibold tabular-nums text-[#f4f0fa]/80">
+                  {row.dropped ? "—" : row.rank != null ? `#${row.rank}` : "—"}
+                </p>
+                <p className="m-0 text-[0.68rem] tabular-nums text-[#f4f0fa]/85">
+                  {row.wins}-{row.losses}
+                </p>
+              </div>
+            </div>
+            <p className="m-0 mt-1 text-[0.62rem]">
+              {row.dropped ? (
+                <span className="text-amber-200/85">
+                  Dropped
+                  {row.droppedAfterRound != null ? ` (R${row.droppedAfterRound}+)` : ""}
                 </span>
-              </td>
-              <td className="px-3 py-2.5 tabular-nums text-[#f4f0fa]/80">
-                {row.dropped ? "—" : row.rank != null ? `#${row.rank}` : "—"}
-              </td>
-              <td className="max-w-[10rem] truncate px-3 py-2.5 text-[#f4f0fa]/72">{row.hero || "—"}</td>
-              <td className="px-3 py-2.5 tabular-nums text-[#f4f0fa]/85">
-                {row.wins}-{row.losses}
-              </td>
-              <td className="px-3 py-2.5">
-                {row.dropped ? (
-                  <span className="text-[0.75rem] text-amber-200/85">
-                    Dropped
-                    {row.droppedAfterRound != null ? ` (after R${row.droppedAfterRound})` : ""}
-                  </span>
-                ) : (
-                  <span className="text-[0.75rem] text-emerald-300/80">Active</span>
-                )}
-              </td>
+              ) : (
+                <span className="text-emerald-300/80">Active</span>
+              )}
+            </p>
+          </li>
+        ))}
+      </ul>
+
+      <div className={`hidden overflow-x-auto rounded-xl border sm:block ${border}`}>
+        <table className="w-full min-w-[28rem] border-collapse text-left text-[0.8125rem]">
+          <thead>
+            <tr className="border-b border-white/[0.08] text-[0.68rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/45">
+              <th className="px-3 py-2.5 font-semibold">Player</th>
+              <th className="px-3 py-2.5 font-semibold">Rank</th>
+              <th className="px-3 py-2.5 font-semibold">Hero</th>
+              <th className="px-3 py-2.5 font-semibold">Record</th>
+              <th className="px-3 py-2.5 font-semibold">Status</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rankings.map((row) => (
+              <tr key={row.userId} className="border-b border-white/[0.06] last:border-b-0">
+                <td className="px-3 py-2.5 font-semibold text-[#f4f0fa]">
+                  <span className="inline-flex items-center gap-1.5">
+                    <PlayerNameButton name={row.name} onPlayerClick={onPlayerClick} className="text-[#f4f0fa]" />
+                    {leaderUserIds.has(row.userId) ? <LeaderCrown /> : null}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 tabular-nums text-[#f4f0fa]/80">
+                  {row.dropped ? "—" : row.rank != null ? `#${row.rank}` : "—"}
+                </td>
+                <td className="max-w-[10rem] truncate px-3 py-2.5 text-[#f4f0fa]/72">{row.hero || "—"}</td>
+                <td className="px-3 py-2.5 tabular-nums text-[#f4f0fa]/85">
+                  {row.wins}-{row.losses}
+                </td>
+                <td className="px-3 py-2.5">
+                  {row.dropped ? (
+                    <span className="text-[0.75rem] text-amber-200/85">
+                      Dropped
+                      {row.droppedAfterRound != null ? ` (after R${row.droppedAfterRound})` : ""}
+                    </span>
+                  ) : (
+                    <span className="text-[0.75rem] text-emerald-300/80">Active</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 

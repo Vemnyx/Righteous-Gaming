@@ -40,8 +40,10 @@ export function EventMetaTab({
   const border = isLight ? "border-white/[0.12] bg-black/25" : rowChrome;
   const heroArtFade =
     "[mask-image:linear-gradient(to_right,black_0%,black_70%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_70%,transparent_100%)]";
-  const metaShareArtWidth = "w-[4.75rem]";
-  const metaShareBarHeight = "min-h-[3.25rem] h-[3.25rem]";
+  const metaShareArtWidth = "w-[6.5rem] sm:w-[7.5rem]";
+  const metaShareBarHeight = "h-[3.25rem]";
+  const metaSharePurpleFill =
+    "bg-gradient-to-r from-purple-600/90 via-purple-500/75 to-purple-400/45";
 
   const subTabBtn = (id, label) => {
     const on = metaSubTab === id;
@@ -138,7 +140,6 @@ export function EventMetaTab({
   }
 
   const overall = snapshot.overall;
-  const maxBarPct = overall.heroes[0]?.pct ?? 100;
 
   return (
     <div className="flex flex-col gap-5">
@@ -166,9 +167,9 @@ export function EventMetaTab({
           {overall.heroes.length === 0 ? (
             <p className="m-0 text-[0.85rem] text-[#f4f0fa]/60">No standings data yet.</p>
           ) : (
-            <ul className="m-0 mr-auto flex w-full max-w-[52%] min-w-[16rem] list-none flex-col gap-3 p-0">
+            <ul className="m-0 flex w-full max-w-[min(100%,44rem)] list-none flex-col gap-3.5 p-0">
               {overall.heroes.map((hero) => {
-                const barWidth = maxBarPct > 0 ? (hero.pct / maxBarPct) * 100 : 0;
+                const barPct = hero.pct > 0 ? Math.max(hero.pct, 2.5) : 0;
                 return (
                   <li key={`${hero.hero_id}-${hero.name}`} className="flex flex-col gap-1.5">
                     <span
@@ -177,9 +178,9 @@ export function EventMetaTab({
                     >
                       {hero.name}
                     </span>
-                    <div className={`flex overflow-hidden rounded-lg border border-white/[0.08] bg-black/20 ${metaShareBarHeight}`}>
+                    <div className="flex items-center gap-2.5 sm:gap-3">
                       <div
-                        className={`relative shrink-0 overflow-hidden border-r border-white/[0.06] bg-black/25 ${metaShareArtWidth} ${metaShareBarHeight}`}
+                        className={`relative shrink-0 overflow-hidden rounded-md ${metaShareArtWidth} ${metaShareBarHeight}`}
                         aria-hidden
                       >
                         {hero.art_image_url ? (
@@ -190,25 +191,24 @@ export function EventMetaTab({
                             draggable={false}
                           />
                         ) : (
-                          <div className="h-full w-full bg-gradient-to-r from-purple-900/40 via-purple-800/20 to-transparent" />
+                          <div className={`h-full w-full ${metaSharePurpleFill}`} />
                         )}
                       </div>
-                      <div className={`relative min-w-0 flex-1 ${metaShareBarHeight}`}>
-                        <div
-                          className="absolute inset-y-0 left-0 overflow-hidden bg-gradient-to-r from-purple-900/40 via-purple-800/20 to-purple-800/10"
-                          style={{ width: `${Math.max(barWidth, hero.pct > 0 ? 8 : 0)}%` }}
-                        >
-                          <div className="absolute inset-0 bg-black/20" aria-hidden />
-                          <div className="relative flex h-full items-center px-2.5 py-1.5 text-[0.78rem]">
-                            <span className="min-w-0 truncate font-medium tabular-nums text-[#f4f0fa]/90">
-                              {hero.count} {hero.count === 1 ? "deck" : "decks"}
-                            </span>
-                          </div>
+                      <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
+                        <div className={`relative min-w-0 flex-1 ${metaShareBarHeight}`}>
+                          {barPct > 0 ? (
+                            <div
+                              className={`${metaShareBarHeight} overflow-hidden rounded-md ${metaSharePurpleFill}`}
+                              style={{ width: `${barPct}%` }}
+                              aria-hidden
+                            />
+                          ) : null}
                         </div>
-                        <div
-                          className={`relative z-[1] flex h-full items-center justify-end px-3 py-1.5 text-[0.78rem] ${metaShareBarHeight}`}
-                        >
-                          <span className="shrink-0 font-semibold tabular-nums text-[#f4f0fa]">
+                        <div className="shrink-0 text-right text-[0.78rem] leading-tight tabular-nums text-[#f4f0fa]/85">
+                          <span className="block whitespace-nowrap">
+                            {hero.count} {hero.count === 1 ? "deck" : "decks"}
+                          </span>
+                          <span className="block whitespace-nowrap font-semibold text-[#f4f0fa]">
                             {hero.pct.toFixed(1)}%
                           </span>
                         </div>

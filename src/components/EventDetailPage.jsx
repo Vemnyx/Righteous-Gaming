@@ -254,7 +254,7 @@ function MatchPlayerTextBlock({ align, player, hero, isWinner = false, onPlayerC
     : "justify-end pt-1.5 pb-2 pl-1 pr-2 text-right items-end";
 
   return (
-    <div className={`flex min-h-full min-w-0 flex-1 flex-col ${textPosCls}`}>
+    <div className={`flex min-w-0 flex-col ${textPosCls}`}>
       <div
         className={`max-w-full ${
           isWinner
@@ -283,6 +283,71 @@ function MatchPlayerTextBlock({ align, player, hero, isWinner = false, onPlayerC
 }
 
 /**
+ * Full-width hero banner for mobile match rows.
+ * @param {{ src?: string | null, name?: string | null, isWinner?: boolean, align?: "left" | "right" }} props
+ */
+function MatchMobileHeroBanner({ src, name, isWinner = false, align = "left" }) {
+  const label = name != null && String(name).trim() !== "" ? String(name).trim() : "Hero";
+  const winnerCls = isWinner ? "ring-2 ring-inset ring-amber-400/75" : "";
+  const objectCls = align === "left" ? "object-left" : "object-right";
+  const fadeCls = heroArtFadeToRight;
+
+  return (
+    <div className={`relative h-[4.25rem] w-full overflow-hidden bg-black/20 ${winnerCls}`} aria-hidden={!src}>
+      {src ? (
+        <img
+          src={src}
+          alt=""
+          className={`h-full w-full scale-[1.06] object-cover ${objectCls} ${fadeCls}`}
+          draggable={false}
+        />
+      ) : (
+        <div
+          className={`h-full w-full bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent ${fadeCls}`}
+          title={label}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * @param {{
+ *   player: string,
+ *   hero?: string | null,
+ *   heroArt?: string | null,
+ *   isWinner?: boolean,
+ *   onPlayerClick?: (name: string) => void,
+ *   align?: "left" | "right",
+ *   withTopBorder?: boolean,
+ * }} props
+ */
+function MatchMobilePlayerSection({
+  player,
+  hero,
+  heroArt,
+  isWinner = false,
+  onPlayerClick,
+  align = "left",
+  withTopBorder = false,
+}) {
+  return (
+    <div className={withTopBorder ? "border-t border-white/[0.08]" : ""}>
+      <MatchMobileHeroBanner src={heroArt} name={hero} isWinner={isWinner} align={align} />
+      <div className="px-3 py-2">
+        <MatchPlayerTextBlock
+          align={align}
+          player={player}
+          hero={hero}
+          isWinner={isWinner}
+          onPlayerClick={onPlayerClick}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
  * @param {{
  *   player1: string,
  *   hero1?: string | null,
@@ -297,34 +362,61 @@ function MatchPlayerTextBlock({ align, player, hero, isWinner = false, onPlayerC
  */
 function MatchRowContent({ player1, hero1, player2, hero2, hero1Art, hero2Art, table, winner = null, onPlayerClick }) {
   return (
-    <div className={`relative flex items-stretch ${MATCH_ROW_MIN_H}`}>
-      <MatchHeroArtStrip align="left" src={hero1Art} name={hero1} isWinner={winner === 1} />
-      <MatchHeroArtStrip align="right" src={hero2Art} name={hero2} isWinner={winner === 2} />
-
-      <div className={`relative z-[1] flex min-w-0 flex-1 ${matchHeroArtTextInsetLeft}`}>
-        <MatchPlayerTextBlock
-          align="left"
+    <>
+      <div className="flex flex-col sm:hidden">
+        <MatchMobilePlayerSection
           player={player1}
           hero={hero1}
+          heroArt={hero1Art}
           isWinner={winner === 1}
           onPlayerClick={onPlayerClick}
+          align="left"
         />
-      </div>
-      <div className="relative z-[1] flex shrink-0 flex-col items-center justify-center px-2 sm:px-3">
         {table != null && table > 0 ? (
-          <p className="m-0 whitespace-nowrap text-[0.875rem] font-semibold text-[#f4f0fa]/55">Table {table}</p>
+          <div className="border-y border-white/[0.08] bg-black/15 px-3 py-1.5 text-center">
+            <p className="m-0 text-[0.78rem] font-semibold text-[#f4f0fa]/55">Table {table}</p>
+          </div>
         ) : null}
-      </div>
-      <div className={`relative z-[1] flex min-w-0 flex-1 ${matchHeroArtTextInsetRight}`}>
-        <MatchPlayerTextBlock
-          align="right"
+        <MatchMobilePlayerSection
           player={player2}
           hero={hero2}
+          heroArt={hero2Art}
           isWinner={winner === 2}
           onPlayerClick={onPlayerClick}
+          align="left"
+          withTopBorder={table == null || table <= 0}
         />
       </div>
-    </div>
+
+      <div className={`relative hidden items-stretch sm:flex ${MATCH_ROW_MIN_H}`}>
+        <MatchHeroArtStrip align="left" src={hero1Art} name={hero1} isWinner={winner === 1} />
+        <MatchHeroArtStrip align="right" src={hero2Art} name={hero2} isWinner={winner === 2} />
+
+        <div className={`relative z-[1] flex min-w-0 flex-1 ${matchHeroArtTextInsetLeft}`}>
+          <MatchPlayerTextBlock
+            align="left"
+            player={player1}
+            hero={hero1}
+            isWinner={winner === 1}
+            onPlayerClick={onPlayerClick}
+          />
+        </div>
+        <div className="relative z-[1] flex shrink-0 flex-col items-center justify-center px-2 sm:px-3">
+          {table != null && table > 0 ? (
+            <p className="m-0 whitespace-nowrap text-[0.875rem] font-semibold text-[#f4f0fa]/55">Table {table}</p>
+          ) : null}
+        </div>
+        <div className={`relative z-[1] flex min-w-0 flex-1 ${matchHeroArtTextInsetRight}`}>
+          <MatchPlayerTextBlock
+            align="right"
+            player={player2}
+            hero={hero2}
+            isWinner={winner === 2}
+            onPlayerClick={onPlayerClick}
+          />
+        </div>
+      </div>
+    </>
   );
 }
 
