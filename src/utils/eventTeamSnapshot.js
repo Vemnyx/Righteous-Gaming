@@ -57,12 +57,78 @@ function recordThroughRound(matches, userId, throughRound) {
 }
 
 /**
+ * @param {TeamMatchRow[]} matches
+ * @param {number} userId
+ * @returns {Set<number>}
+ */
+function pairingRoundsForUser(matches, userId) {
+  /** @type {Set<number>} */
+  const rounds = new Set();
+  for (const m of matches) {
+    if (m.user_id !== userId || m.kind !== "pairing") continue;
+    const round = Number(m.round);
+    if (Number.isFinite(round) && round > 0) rounds.add(round);
+  }
+  return rounds;
+}
+
+/** @param {Set<number>} rounds */
+function maxRoundNumber(rounds) {
+  let max = 0;
+  for (const r of rounds) {
+    if (r > max) max = r;
+  }
+  return max;
+}
+
+/** @param {TeamMatchRow[]} matches @param {number} round */
+function roundHasAnyPairings(matches, round) {
+  return matches.some((m) => m.kind === "pairing" && Number(m.round) === round);
+}
+
+/** @param {TeamMatchRow[]} matches @param {number} round */
+function roundHasAnyStandings(matches, round) {
+  return matches.some((m) => m.kind === "standing" && Number(m.round) === round);
+}
+
+/**
+ * Wins for chart/table at round r: official standings when published, else match results.
+ * @param {TeamMatchRow[]} matches
+ * @param {number} userId
+ * @param {number} round
+ * @param {Map<number, { rank: number, wins: number, hero: string }> | undefined} standingsByRound
+ */
+function winsAtRound(matches, userId, round, standingsByRound) {
+  const standingRow = standingsByRound?.get(round);
+  if (standingRow && roundHasAnyStandings(matches, round)) {
+    return standingRow.wins;
+  }
+  return recordThroughRound(matches, userId, round).wins;
+}
+
+/**
+ * @param {TeamMatchRow[]} matches
+ * @param {number} userId
+ * @param {number} round
+ */
+function heroFromPairingRound(matches, userId, round) {
+  for (const m of matches) {
+    if (m.user_id !== userId || m.kind !== "pairing" || Number(m.round) !== round) continue;
+    const p = parseTeamMatchPayload(m.payload);
+    const h = String(p.hero ?? m.hero_name ?? "").trim();
+    if (h) return h;
+  }
+  return "";
+}
+
+/**
  * @param {TeamMatchRow[]} segmentMatches
  * @param {TeamMember[]} teamMembers
  * @param {number} currentRound
  */
 export function buildTeamSnapshot(segmentMatches, teamMembers, currentRound) {
   const roundCap = Math.max(1, Number(currentRound) || 1);
+  const capPairingsPublished = roundHasAnyPairings(segmentMatches, roundCap);
 
   /** @type {Map<number, Map<number, { rank: number, wins: number, hero: string }>>} */
   const standingsByUser = new Map();
@@ -90,21 +156,10 @@ export function buildTeamSnapshot(segmentMatches, teamMembers, currentRound) {
   const chartSeries = teamMembers.map((member, idx) => {
     const byRound = standingsByUser.get(member.user_id);
     /** @type {{ round: number, wins: number }[]} */
-    const points = [];
-    if (byRound) {
-      for (const r of chartRounds) {
-        const row = byRound.get(r);
-        if (row) points.push({ round: r, wins: row.wins });
-      }
-    }
-    if (points.length === 0) {
-      let cumulative = 0;
-      for (const r of chartRounds) {
-        const { wins } = recordThroughRound(segmentMatches, member.user_id, r);
-        cumulative = wins;
-        points.push({ round: r, wins: cumulative });
-      }
-    }
+    const points = chartRounds.map((r) => ({
+      round: r,
+      wins: winsAtRound(segmentMatches, member.user_id, r, byRound),
+    }));
     return {
       userId: member.user_id,
       name: teamMemberLabel(member),
@@ -128,20 +183,26 @@ export function buildTeamSnapshot(segmentMatches, teamMembers, currentRound) {
       }
     }
 
-    const hadEarlier = lastStandingRound > 0 && lastStandingRound < roundCap;
-    const dropped = hadEarlier && !currentStanding;
-    const recordRound = dropped ? lastStandingRound : roundCap;
+    const pairingRounds = pairingRoundsForUser(segmentMatches, member.user_id);
+    const lastPairingRound = maxRoundNumber(pairingRounds);
+    const hasPairingForCap = pairingRounds.has(roundCap);
+    const hadEarlierPairing = lastPairingRound > 0 && lastPairingRound < roundCap;
+    const dropped = capPairingsPublished && hadEarlierPairing && !hasPairingForCap;
+    const recordRound = dropped ? lastPairingRound : roundCap;
     const { wins, losses } = recordThroughRound(segmentMatches, member.user_id, recordRound);
+    const heroFromPairing = hasPairingForCap
+      ? heroFromPairingRound(segmentMatches, member.user_id, roundCap)
+      : "";
 
     return {
       userId: member.user_id,
       name: teamMemberLabel(member),
       rank: currentStanding?.rank ?? null,
-      hero: currentStanding?.hero ?? lastStanding?.hero ?? "",
+      hero: currentStanding?.hero ?? heroFromPairing ?? lastStanding?.hero ?? "",
       wins,
       losses,
       dropped,
-      droppedAfterRound: dropped ? lastStandingRound : null,
+      droppedAfterRound: dropped ? lastPairingRound : null,
       sortRank: currentStanding?.rank ?? (dropped ? lastStanding?.rank ?? 9999 : 9999),
     };
   });
@@ -149,6 +210,10 @@ export function buildTeamSnapshot(segmentMatches, teamMembers, currentRound) {
   rankings.sort((a, b) => {
     if (a.dropped !== b.dropped) return a.dropped ? 1 : -1;
     if (a.sortRank !== b.sortRank) return a.sortRank - b.sortRank;
+    if (a.rank == null && b.rank == null && !a.dropped && !b.dropped) {
+      if (a.wins !== b.wins) return b.wins - a.wins;
+      if (a.losses !== b.losses) return a.losses - b.losses;
+    }
     return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
   });
 

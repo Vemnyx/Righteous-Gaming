@@ -796,6 +796,29 @@ export function EventDetailPage({ isLight, active, eventId }) {
     };
   }, [active, user, eventId, event]);
 
+  const refreshTeamSummary = useCallback(async () => {
+    if (!user || !eventId || !event) return;
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/events/${eventId}/team-summary`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setTeamMatches(Array.isArray(data.matches) ? data.matches : []);
+    } catch {
+      /* keep last good snapshot during background refresh */
+    }
+  }, [user, eventId, event]);
+
+  useEffect(() => {
+    if (!active || mainTab !== "team") return undefined;
+    const timer = setInterval(() => {
+      void refreshTeamSummary();
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, [active, mainTab, refreshTeamSummary]);
+
   useEffect(() => {
     roundsInitializedRef.current = false;
   }, [activeData?.id]);
