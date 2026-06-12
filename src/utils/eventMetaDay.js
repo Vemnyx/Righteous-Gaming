@@ -48,6 +48,9 @@ export function metaDayRounds(metaDay, rounds) {
  * @param {{ round_number?: number }[]} rounds
  */
 export function metaEffectiveThroughRound(metaDay, metaSubTab, metaRound, rounds) {
+  if (metaSubTab === "matchups") {
+    return metaMaxRoundNumber(rounds) || metaRound;
+  }
   if (!showMetaDaySplit(rounds)) return metaRound;
   const range = metaDayRoundRange(metaDay, rounds);
   if (metaSubTab === "share") return range.maxInDay;
@@ -56,9 +59,11 @@ export function metaEffectiveThroughRound(metaDay, metaSubTab, metaRound, rounds
 
 /**
  * @param {MetaDay} metaDay
+ * @param {"share" | "round-stats" | "matchups"} metaSubTab
  * @param {{ round_number?: number }[]} rounds
  */
-export function metaEffectiveFromRound(metaDay, rounds) {
+export function metaEffectiveFromRound(metaDay, metaSubTab, rounds) {
+  if (metaSubTab === "matchups") return 1;
   if (!showMetaDaySplit(rounds)) return 1;
   return metaDayRoundRange(metaDay, rounds).from;
 }

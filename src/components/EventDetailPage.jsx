@@ -823,7 +823,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
     try {
       const token = await user.getIdToken();
       const throughRound = metaEffectiveThroughRound(metaDay, metaSubTab, metaRound, rounds);
-      const fromRound = metaEffectiveFromRound(metaDay, rounds);
+      const fromRound = metaEffectiveFromRound(metaDay, metaSubTab, rounds);
       const params = new URLSearchParams({
         event_data_id: String(activeData.id),
         through_round: String(throughRound),

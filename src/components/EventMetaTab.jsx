@@ -69,20 +69,22 @@ export function EventMetaTab({
 
   const dayLabel = metaDay === "day2" ? "Day 2" : "Day 1";
   const roundScopeLabel =
-    showMetaDaySplit && snapshot
-      ? metaSubTab === "share"
-        ? metaDay === "day1"
-          ? "R1–R8"
-          : `R9–R${snapshot.through_round || maxRound}`
-        : snapshot.from_round && snapshot.from_round > 1
-          ? `R${snapshot.from_round}–R${snapshot.through_round}`
-          : `through R${snapshot.through_round}`
-      : snapshot
-        ? `through R${snapshot.through_round}`
-        : "";
+    metaSubTab === "matchups" && snapshot
+      ? `all rounds through R${snapshot.through_round}`
+      : showMetaDaySplit && snapshot
+        ? metaSubTab === "share"
+          ? metaDay === "day1"
+            ? "R1–R8"
+            : `R9–R${snapshot.through_round || maxRound}`
+          : snapshot.from_round && snapshot.from_round > 1
+            ? `R${snapshot.from_round}–R${snapshot.through_round}`
+            : `through R${snapshot.through_round}`
+        : snapshot
+          ? `through R${snapshot.through_round}`
+          : "";
 
   const roundSelect =
-    metaSubTab !== "share" && rounds.length > 0 ? (
+    metaSubTab === "round-stats" && rounds.length > 0 ? (
       <select
         className="rg-select shrink-0 rounded-md border border-white/15 bg-black/25 py-1.5 pl-2.5 text-[0.8125rem] text-[#f4f0fa] outline-none focus:border-purple-400/45"
         value={metaRound}
@@ -97,7 +99,7 @@ export function EventMetaTab({
       </select>
     ) : null;
 
-  const daySelect = showMetaDaySplit ? (
+  const daySelect = showMetaDaySplit && metaSubTab !== "matchups" ? (
     <select
       className="rg-select shrink-0 rounded-md border border-white/15 bg-black/25 py-1.5 pl-2.5 text-[0.8125rem] text-[#f4f0fa] outline-none focus:border-purple-400/45"
       value={metaDay}
@@ -140,6 +142,7 @@ export function EventMetaTab({
   }
 
   const overall = snapshot.overall;
+  const maxBarPct = overall.heroes[0]?.pct ?? 100;
 
   return (
     <div className="flex flex-col gap-5">
@@ -169,7 +172,8 @@ export function EventMetaTab({
           ) : (
             <ul className="m-0 flex w-full max-w-[min(100%,44rem)] list-none flex-col gap-3.5 p-0">
               {overall.heroes.map((hero) => {
-                const barPct = hero.pct > 0 ? Math.max(hero.pct, 2.5) : 0;
+                const barWidth =
+                  maxBarPct > 0 && hero.pct > 0 ? Math.min(100, (hero.pct / maxBarPct) * 100) : 0;
                 return (
                   <li key={`${hero.hero_id}-${hero.name}`} className="flex flex-col gap-1.5">
                     <span
@@ -194,24 +198,22 @@ export function EventMetaTab({
                           <div className={`h-full w-full ${metaSharePurpleFill}`} />
                         )}
                       </div>
-                      <div className="flex min-w-0 flex-1 items-center gap-2.5 sm:gap-3">
-                        <div className={`relative min-w-0 flex-1 ${metaShareBarHeight}`}>
-                          {barPct > 0 ? (
-                            <div
-                              className={`${metaShareBarHeight} overflow-hidden rounded-md ${metaSharePurpleFill}`}
-                              style={{ width: `${barPct}%` }}
-                              aria-hidden
-                            />
-                          ) : null}
-                        </div>
-                        <div className="shrink-0 text-right text-[0.78rem] leading-tight tabular-nums text-[#f4f0fa]/85">
-                          <span className="block whitespace-nowrap">
-                            {hero.count} {hero.count === 1 ? "deck" : "decks"}
-                          </span>
-                          <span className="block whitespace-nowrap font-semibold text-[#f4f0fa]">
-                            {hero.pct.toFixed(1)}%
-                          </span>
-                        </div>
+                      <div className={`relative min-w-0 flex-1 ${metaShareBarHeight}`}>
+                        {barWidth > 0 ? (
+                          <div
+                            className={`${metaShareBarHeight} overflow-hidden rounded-md ${metaSharePurpleFill}`}
+                            style={{ width: `${barWidth}%` }}
+                            aria-hidden
+                          />
+                        ) : null}
+                      </div>
+                      <div className="w-[4.75rem] shrink-0 text-right text-[0.78rem] leading-tight tabular-nums text-[#f4f0fa]/85 sm:w-[5rem]">
+                        <span className="block whitespace-nowrap">
+                          {hero.count} {hero.count === 1 ? "deck" : "decks"}
+                        </span>
+                        <span className="block whitespace-nowrap font-semibold text-[#f4f0fa]">
+                          {hero.pct.toFixed(1)}%
+                        </span>
                       </div>
                     </div>
                   </li>
