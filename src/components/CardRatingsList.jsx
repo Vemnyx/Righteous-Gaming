@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
 import { cardFormatName } from "../constants/cardFormat";
+import { canWriteContent } from "../constants/roles";
 
 /** @typedef {{ id: number, name: string }} CatalogSetLite */
 
@@ -32,7 +33,8 @@ function filenameFromContentDisposition(contentDisposition) {
  * @param {{ isLight: boolean, active: boolean, onViewResults: (id: number) => void }} props
  */
 export function CardRatingsList({ isLight, active, onViewResults }) {
-  const { user } = useAuth();
+  const { user, sessionProfile } = useAuth();
+  const canWrite = canWriteContent(sessionProfile?.role);
   const [rows, setRows] = useState(/** @type {CardRaterRow[]} */ ([]));
   const [sets, setSets] = useState(/** @type {CatalogSetLite[]} */ ([]));
   const [loading, setLoading] = useState(false);
@@ -244,16 +246,18 @@ export function CardRatingsList({ isLight, active, onViewResults }) {
       ) : null}
 
       <div className="flex flex-col gap-2">
-        <div className="flex justify-end">
-          <button
-            type="button"
-            className={`${btnBase} ${btnTheme}`}
-            disabled={!user}
-            onClick={openExportModal}
-          >
-            Export Ratings
-          </button>
-        </div>
+        {canWrite ? (
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className={`${btnBase} ${btnTheme}`}
+              disabled={!user}
+              onClick={openExportModal}
+            >
+              Export Ratings
+            </button>
+          </div>
+        ) : null}
 
         <div className={`overflow-x-auto rounded-xl border bg-black/20 ${tableChromeBorder}`}>
           <table className="w-full min-w-[56rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">

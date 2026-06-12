@@ -183,6 +183,13 @@ func (h *decksHTTP) isAdmin(u *domain.User) bool {
 	return u != nil && u.Role != nil && *u.Role == domain.RoleAdmin
 }
 
+func (h *decksHTTP) canBrowseAllDecks(u *domain.User) bool {
+	if u == nil || u.Role == nil {
+		return false
+	}
+	return u.Role.CanBrowseAllDecks()
+}
+
 func (h *decksHTTP) listMyDecks(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -194,7 +201,7 @@ func (h *decksHTTP) listMyDecks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filter := repository.DeckListFilter{}
-	isAdmin := h.isAdmin(u)
+	browseAll := h.canBrowseAllDecks(u)
 
 	if uidStr := strings.TrimSpace(r.URL.Query().Get("user_id")); uidStr != "" {
 		uid, err := strconv.Atoi(uidStr)
@@ -202,12 +209,12 @@ func (h *decksHTTP) listMyDecks(w http.ResponseWriter, r *http.Request) {
 			writeFieldError(w, http.StatusBadRequest, "user_id", "invalid")
 			return
 		}
-		if !isAdmin && uid != u.ID {
+		if !browseAll && uid != u.ID {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
 		filter.UserID = &uid
-	} else if !isAdmin {
+	} else if !browseAll {
 		filter.UserID = &u.ID
 	}
 
@@ -291,7 +298,7 @@ func (h *decksHTTP) getMyDeck(w http.ResponseWriter, r *http.Request) {
 
 	var deck *repository.Deck
 	var entries []repository.DeckCardEntry
-	if h.isAdmin(u) {
+	if h.canBrowseAllDecks(u) {
 		deck, entries, err = h.app.Repo.GetDeckByID(r.Context(), id)
 	} else {
 		deck, entries, err = h.app.Repo.GetDeckByIDForUser(r.Context(), id, u.ID)

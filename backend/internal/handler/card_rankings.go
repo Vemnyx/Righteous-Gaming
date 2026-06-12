@@ -250,6 +250,9 @@ func (h *cardRatingsHTTP) listMyCardRatingsExportSets(w http.ResponseWriter, r *
 	if !ok {
 		return
 	}
+	if !requireCardRaterResourceAccess(w, u) {
+		return
+	}
 	sets, err := h.app.Repo.ListUserRatedSets(r.Context(), u.ID)
 	if err != nil {
 		log.Error("list user rated sets for export", "error", err)
@@ -285,6 +288,9 @@ func (h *cardRatingsHTTP) exportMyCardRatings(w http.ResponseWriter, r *http.Req
 	}
 	u, ok := h.sessionUser(w, r)
 	if !ok {
+		return
+	}
+	if !requireCardRaterResourceAccess(w, u) {
 		return
 	}
 	setID, ok := parseSetIDQueryOnly(w, r)

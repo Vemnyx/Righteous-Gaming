@@ -16,3 +16,14 @@ func (r Role) CanWriteContent() bool {
 func (r Role) CanAccessCardRaterResource() bool {
 	return r.CanWriteContent()
 }
+
+// CanBrowseAllDecks reports whether the role may list and open any team deck.
+// Members only see their own imports; guests and admins see the full library.
+func (r Role) CanBrowseAllDecks() bool {
+	switch r {
+	case RoleAdmin, RoleGuest:
+		return true
+	default:
+		return false
+	}
+}

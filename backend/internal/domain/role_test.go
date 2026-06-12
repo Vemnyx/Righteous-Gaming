@@ -6,6 +6,15 @@ func TestRoleGuestPermissions(t *testing.T) {
 	if RoleGuest.CanWriteContent() {
 		t.Fatal("guest should not write content")
 	}
+	if !RoleGuest.CanBrowseAllDecks() {
+		t.Fatal("guest should browse all decks")
+	}
+	if RoleMember.CanBrowseAllDecks() {
+		t.Fatal("member should not browse all decks")
+	}
+	if !RoleAdmin.CanBrowseAllDecks() {
+		t.Fatal("admin should browse all decks")
+	}
 	if RoleGuest.CanAccessCardRaterResource() {
 		t.Fatal("guest should not access card rater resource")
 	}

@@ -20,6 +20,12 @@ export function canWriteContent(role) {
 }
 
 /** @param {number | null | undefined} role */
+export function canBrowseAllDecks(role) {
+  const n = Number(role);
+  return n === ROLE_ADMIN || n === ROLE_GUEST;
+}
+
+/** @param {number | null | undefined} role */
 export function canAccessCardRaterResource(role) {
   return canWriteContent(role);
 }

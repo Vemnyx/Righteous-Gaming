@@ -624,7 +624,7 @@ export function DecksList({ isLight, active, onOpenDeck }) {
           >
             {canWrite
               ? "No decks yet. Import one from Fabrary to get started."
-              : "No decks to show."}
+              : "No decks to show yet."}
           </div>
         ) : filteredRows.length === 0 ? (
           <div
