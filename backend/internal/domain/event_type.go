@@ -68,7 +68,7 @@ func EventTypeFromCoverageLabel(label string) (EventType, bool) {
 	switch {
 	case strings.Contains(s, "pro tour"):
 		return EventTypeProTour, true
-	case strings.Contains(s, "nationals"):
+	case strings.Contains(s, "national championship"), strings.Contains(s, "nationals"):
 		return EventTypeNationals, true
 	case strings.Contains(s, "calling"):
 		return EventTypeCalling, true

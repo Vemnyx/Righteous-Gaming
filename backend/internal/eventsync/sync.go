@@ -53,7 +53,7 @@ func (r *Runner) Stop() {
 
 func (r *Runner) tick(ctx context.Context) {
 	now := time.Now().UTC()
-	pending, err := r.repo.ListEventsWithoutCoverage(ctx, now)
+	pending, err := r.repo.ListEventsForCoverageDiscovery(ctx, now)
 	if err != nil {
 		log.Error("event sync list pending coverage", "error", err)
 	} else {
