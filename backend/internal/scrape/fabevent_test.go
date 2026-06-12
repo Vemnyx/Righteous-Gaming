@@ -23,6 +23,20 @@ func TestCleanHeroNameStripsMarkupNoise(t *testing.T) {
 	}
 }
 
+func TestValidHeroName(t *testing.T) {
+	cases := map[string]bool{
+		"Fai, Rising Rebellion": true,
+		"N/A":                   false,
+		"":                      false,
+		"TBD":                   false,
+	}
+	for in, want := range cases {
+		if got := scrape.ValidHeroName(in); got != want {
+			t.Fatalf("ValidHeroName(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
 func TestValidPlayerName(t *testing.T) {
 	cases := map[string]bool{
 		"Alice Smith": true,

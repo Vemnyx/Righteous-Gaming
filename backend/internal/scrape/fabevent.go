@@ -603,17 +603,31 @@ func cleanInlineText(s string) string {
 	return reWhitespace.ReplaceAllString(strings.TrimSpace(s), " ")
 }
 
+func isPlaceholderCoverageLabel(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "n/a", "na", "tbd", "-":
+		return true
+	default:
+		return false
+	}
+}
+
 // ValidPlayerName reports whether s is a real player name from FabTCG coverage.
 func ValidPlayerName(s string) bool {
 	s = cleanInlineText(s)
 	if s == "" {
 		return false
 	}
-	switch strings.ToLower(s) {
-	case "n/a", "na", "tbd", "-":
+	return !isPlaceholderCoverageLabel(s)
+}
+
+// ValidHeroName reports whether s is a real hero label from FabTCG coverage.
+func ValidHeroName(s string) bool {
+	s = CleanHeroName(s)
+	if s == "" {
 		return false
 	}
-	return true
+	return !isPlaceholderCoverageLabel(s)
 }
 
 // ValidMatchPlayers reports whether both sides of a pairing/result row are real players.

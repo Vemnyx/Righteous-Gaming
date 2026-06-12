@@ -2,11 +2,64 @@ package eventmeta
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"righteous-gaming/backend/internal/eventusers"
 	"righteous-gaming/backend/internal/repository"
 )
+
+func TestBuildMetaShareSkipsNAPlayer(t *testing.T) {
+	pairings, _ := json.Marshal([]map[string]any{
+		{
+			"player1": "N/A", "player2": "Alice",
+			"hero1": "N/A", "hero2": "Fai",
+		},
+		{
+			"player1": "Bob", "player2": "Cara",
+			"hero1": "Fai", "hero2": "Dromai",
+		},
+	})
+	results, _ := json.Marshal([]map[string]any{
+		{
+			"player1": "N/A", "player2": "Alice",
+			"hero1": "N/A", "hero2": "Fai",
+			"winner_name": "Alice", "winner_side": "Player 2",
+		},
+		{
+			"player1": "Bob", "player2": "Cara",
+			"hero1": "Fai", "hero2": "Dromai",
+			"winner_name": "Bob", "winner_side": "Player 1",
+		},
+	})
+	rounds := []repository.EventRound{{
+		RoundNumber: 1,
+		Pairings:    pairings,
+		Results:     results,
+	}}
+
+	matcher := eventusers.NewHeroMatcher([]repository.HeroMatchRow{
+		{ID: 1, Name: "Fai, Dracai of Aegis", Young: false},
+		{ID: 2, Name: "Dromai, Ash Artist", Young: false},
+	}, nil)
+	catalog := map[int]HeroCatalog{
+		1: {Name: "Fai, Dracai of Aegis"},
+		2: {Name: "Dromai, Ash Artist"},
+	}
+
+	snap := Build(rounds, 1, 1, "", false, catalog, matcher, matcher)
+	if snap.Overall.TotalDecks != 3 {
+		t.Fatalf("meta decks = %d, want 3 (N/A excluded)", snap.Overall.TotalDecks)
+	}
+	for _, h := range snap.Overall.Heroes {
+		if strings.EqualFold(h.Name, "n/a") {
+			t.Fatalf("unexpected N/A hero in meta share: %+v", h)
+		}
+	}
+	if len(snap.HeroWinRates) != 2 {
+		t.Fatalf("win rate rows = %d, want 2 (N/A match excluded)", len(snap.HeroWinRates))
+	}
+}
 
 func TestBuildMetaShareAndWinRates(t *testing.T) {
 	pairings, _ := json.Marshal([]map[string]any{

@@ -175,25 +175,8 @@ func buildOverallMetaShare(
 	var pairingRows []pairingRow
 	_ = json.Unmarshal(source.Pairings, &pairingRows)
 	for _, row := range pairingRows {
-		if !scrape.ValidMatchPlayers(row.Player1, row.Player2) {
-			continue
-		}
-		for player, hero := range map[string]string{
-			normalizePlayer(row.Player1): row.Hero1,
-			normalizePlayer(row.Player2): row.Hero2,
-		} {
-			if player == "" {
-				continue
-			}
-			if _, seen := playerHero[player]; seen {
-				continue
-			}
-			key := canonicalFieldKey(hero, matcher, catalog)
-			if key.name == "" {
-				continue
-			}
-			playerHero[player] = key
-		}
+		recordPairingPlayer(playerHero, row.Player1, row.Hero1, matcher, catalog)
+		recordPairingPlayer(playerHero, row.Player2, row.Hero2, matcher, catalog)
 	}
 
 	counts := map[fieldKey]int{}
@@ -351,6 +334,9 @@ func buildMatchupMatrix(
 }
 
 func resultWinnerKeys(row resultRow, matcher *eventusers.HeroMatcher, catalog map[int]HeroCatalog) (winner, loser recordKey) {
+	if !scrape.ValidPlayerName(row.Player1) || !scrape.ValidPlayerName(row.Player2) {
+		return recordKey{}, recordKey{}
+	}
 	h1 := canonicalFieldKey(row.Hero1, matcher, catalog)
 	h2 := canonicalFieldKey(row.Hero2, matcher, catalog)
 	if h1.name == "" || h2.name == "" {
@@ -360,7 +346,7 @@ func resultWinnerKeys(row resultRow, matcher *eventusers.HeroMatcher, catalog ma
 	r2 := recordKey{id: h2.id, name: h2.name}
 
 	wName := normalizePlayer(row.WinnerName)
-	if wName != "" {
+	if wName != "" && scrape.ValidPlayerName(row.WinnerName) {
 		p1 := normalizePlayer(row.Player1)
 		p2 := normalizePlayer(row.Player2)
 		if wName == p1 {
@@ -380,9 +366,33 @@ func resultWinnerKeys(row resultRow, matcher *eventusers.HeroMatcher, catalog ma
 	return recordKey{}, recordKey{}
 }
 
+func recordPairingPlayer(
+	playerHero map[string]fieldKey,
+	player string,
+	hero string,
+	matcher *eventusers.HeroMatcher,
+	catalog map[int]HeroCatalog,
+) {
+	if !scrape.ValidPlayerName(player) {
+		return
+	}
+	key := normalizePlayer(player)
+	if key == "" {
+		return
+	}
+	if _, seen := playerHero[key]; seen {
+		return
+	}
+	field := canonicalFieldKey(hero, matcher, catalog)
+	if field.name == "" {
+		return
+	}
+	playerHero[key] = field
+}
+
 func canonicalFieldKey(raw string, matcher *eventusers.HeroMatcher, catalog map[int]HeroCatalog) fieldKey {
 	name := strings.TrimSpace(scrape.CleanHeroName(raw))
-	if name == "" {
+	if name == "" || !scrape.ValidHeroName(name) {
 		return fieldKey{}
 	}
 	if matcher != nil {
