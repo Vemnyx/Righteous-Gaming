@@ -27,4 +27,13 @@ func TestRoleGuestPermissions(t *testing.T) {
 	if !RoleGuest.Valid() {
 		t.Fatal("guest should be a valid role")
 	}
+	if RoleGuest.CountsForTeamSnapshot() {
+		t.Fatal("guest should not count for team snapshot")
+	}
+	if !RoleMember.CountsForTeamSnapshot() {
+		t.Fatal("member should count for team snapshot")
+	}
+	if !RoleAdmin.CountsForTeamSnapshot() {
+		t.Fatal("admin should count for team snapshot")
+	}
 }

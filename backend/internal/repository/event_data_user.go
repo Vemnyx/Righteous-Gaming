@@ -84,6 +84,7 @@ func (r *Repository) ListEventDataUsersByEventID(ctx context.Context, eventID in
 SELECT `+eventDataUserSelectCols+`
 `+eventDataUserJoins+`
 WHERE ed.event_id = $1
+  AND u.role IN (0, 1)
 ORDER BY edu.event_data_id ASC, edu.round_number ASC, edu.kind ASC, edu.user_id ASC`, eventID)
 	if err != nil {
 		return nil, err
@@ -105,6 +106,7 @@ func (r *Repository) ListEventDataUsersByEventDataID(ctx context.Context, eventD
 SELECT `+eventDataUserSelectCols+`
 `+eventDataUserJoins+`
 WHERE edu.event_data_id = $1
+  AND u.role IN (0, 1)
 ORDER BY edu.round_number ASC, edu.kind ASC, edu.user_id ASC`, eventDataID)
 	if err != nil {
 		return nil, err

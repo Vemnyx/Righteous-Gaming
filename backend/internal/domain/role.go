@@ -27,3 +27,13 @@ func (r Role) CanBrowseAllDecks() bool {
 		return false
 	}
 }
+
+// CountsForTeamSnapshot reports whether the user should appear in event team views.
+func (r Role) CountsForTeamSnapshot() bool {
+	switch r {
+	case RoleAdmin, RoleMember:
+		return true
+	default:
+		return false
+	}
+}
