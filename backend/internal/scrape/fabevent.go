@@ -82,12 +82,12 @@ type StandingRow struct {
 }
 
 type ResultRow struct {
-	Player1    string
-	Player2    string
-	Hero1      string
-	Hero2      string
-	WinnerSide string
-	WinnerName string
+	Player1    string `json:"player1"`
+	Player2    string `json:"player2"`
+	Hero1      string `json:"hero1"`
+	Hero2      string `json:"hero2"`
+	WinnerSide string `json:"winner_side"`
+	WinnerName string `json:"winner_name"`
 }
 
 func (c *Client) warmFabSession(ctx context.Context) {
@@ -635,6 +635,20 @@ func ValidMatchPlayers(player1, player2 string) bool {
 	return ValidPlayerName(player1) && ValidPlayerName(player2)
 }
 
+// FilterValidResultRows drops rows with placeholder player names (e.g. N/A).
+func FilterValidResultRows(rows []ResultRow) []ResultRow {
+	if len(rows) == 0 {
+		return rows
+	}
+	out := make([]ResultRow, 0, len(rows))
+	for _, row := range rows {
+		if ValidMatchPlayers(row.Player1, row.Player2) {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
 // ResultRowDecided reports whether a result row has a declared winner.
 func ResultRowDecided(row ResultRow) bool {
 	if strings.TrimSpace(row.WinnerName) != "" {
@@ -644,7 +658,7 @@ func ResultRowDecided(row ResultRow) bool {
 	return strings.Contains(lower, "player 1") || strings.Contains(lower, "player 2")
 }
 
-// FilterResultRows drops placeholder player names and undecided matches.
+// FilterResultRows drops placeholder player names and undecided matches (for storage/indexing).
 func FilterResultRows(rows []ResultRow) []ResultRow {
 	if len(rows) == 0 {
 		return rows

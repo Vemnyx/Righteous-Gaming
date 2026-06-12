@@ -459,7 +459,7 @@ func filterStoredResults(raw json.RawMessage) json.RawMessage {
 	if err := json.Unmarshal(raw, &rows); err != nil {
 		return raw
 	}
-	filtered := scrape.FilterResultRows(rows)
+	filtered := scrape.FilterValidResultRows(rows)
 	if len(filtered) == len(rows) {
 		return raw
 	}

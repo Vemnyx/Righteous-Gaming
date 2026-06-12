@@ -2,6 +2,7 @@ package scrape_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -52,6 +53,21 @@ func TestValidPlayerName(t *testing.T) {
 		if got := scrape.ValidPlayerName(in); got != want {
 			t.Fatalf("ValidPlayerName(%q) = %v, want %v", in, got, want)
 		}
+	}
+}
+
+func TestFilterStoredResultsJSON(t *testing.T) {
+	raw := `[{"player1":"Alice","player2":"Bob","hero1":"Fai","hero2":"Ira","winner_side":"Player 1","winner_name":"Alice"}]`
+	var rows []scrape.ResultRow
+	if err := json.Unmarshal([]byte(raw), &rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Player1 != "Alice" {
+		t.Fatalf("unmarshal: %+v", rows)
+	}
+	filtered := scrape.FilterValidResultRows(rows)
+	if len(filtered) != 1 {
+		t.Fatalf("filtered: %d, want 1", len(filtered))
 	}
 }
 
