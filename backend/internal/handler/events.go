@@ -562,6 +562,22 @@ func (h *eventsHTTP) getEventMeta(w http.ResponseWriter, r *http.Request) {
 	} else {
 		shareFormat = ed.Format
 		matchupFormat = ed.Format
+		limited := int16(domain.CardFormatLimited)
+		shareSourceRound := 1
+		if fromRound >= 9 {
+			shareSourceRound = 9
+		}
+		for _, rr := range rounds {
+			if rr.RoundLabel == nil || !scrape.RoundLabelIndicatesDraft(*rr.RoundLabel) {
+				continue
+			}
+			if rr.RoundNumber == shareSourceRound {
+				shareFormat = &limited
+			}
+			if rr.RoundNumber == throughRound {
+				matchupFormat = &limited
+			}
+		}
 	}
 	shareMatcher := eventusers.NewHeroMatcher(heroRows, shareFormat)
 	matchupMatcher := eventusers.NewHeroMatcher(heroRows, matchupFormat)

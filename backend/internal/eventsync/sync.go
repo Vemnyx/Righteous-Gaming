@@ -133,9 +133,18 @@ func SyncEventData(ctx context.Context, repo *repository.Repository, client *scr
 }
 
 func scrapeRoundPayloads(ctx context.Context, client *scrape.Client, rl scrape.RoundLinks, covReferer string) (repository.CreateEventRoundParams, error) {
-	pairHTML, _ := client.FetchHTMLReferer(ctx, rl.Pairings, covReferer)
-	resHTML, _ := client.FetchHTMLReferer(ctx, rl.Results, covReferer)
-	stHTML, _ := client.FetchHTMLReferer(ctx, rl.Standings, covReferer)
+	pairHTML, err := client.FetchHTMLReferer(ctx, rl.Pairings, covReferer)
+	if err != nil {
+		return repository.CreateEventRoundParams{}, err
+	}
+	resHTML, err := client.FetchHTMLReferer(ctx, rl.Results, covReferer)
+	if err != nil {
+		return repository.CreateEventRoundParams{}, err
+	}
+	stHTML, err := client.FetchHTMLReferer(ctx, rl.Standings, covReferer)
+	if err != nil {
+		return repository.CreateEventRoundParams{}, err
+	}
 
 	pairings, err := encodePairings(scrape.ParsePairings(pairHTML))
 	if err != nil {
@@ -223,6 +232,9 @@ func encodePairings(rows []scrape.PairingRow) (json.RawMessage, error) {
 	}
 	out := make([]row, 0, len(rows))
 	for _, r := range rows {
+		if !scrape.ValidMatchPlayers(r.Player1, r.Player2) {
+			continue
+		}
 		out = append(out, row{Table: r.Table, Player1: r.Player1, Player2: r.Player2, Hero1: r.Hero1, Hero2: r.Hero2})
 	}
 	return json.Marshal(out)

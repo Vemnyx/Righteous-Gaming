@@ -14,7 +14,7 @@ import {
 } from "../utils/eventMetaDay.js";
 import { EventPlayerHistoryModal, parsePlayerHistory } from "./EventPlayerHistoryModal";
 import { PlayerNameButton } from "./PlayerNameButton";
-import { cardFormatName, formatUsesYoungHeroes } from "../constants/cardFormat";
+import { cardFormatName, CardFormat, formatUsesYoungHeroes } from "../constants/cardFormat";
 import { canWriteContent } from "../constants/roles";
 import { buildTeamSnapshot } from "../utils/eventTeamSnapshot";
 import { parseEventMetaSnapshot } from "../utils/eventMeta";
@@ -121,6 +121,17 @@ function heroArtForName(heroName, heroes, formatId) {
   return best?.art_image_url ?? null;
 }
 
+/**
+ * Coverage format for hero art: Booster Draft rounds use Limited (young heroes).
+ * @param {number | null | undefined} eventFormat
+ * @param {string | null | undefined} roundLabel
+ */
+function coverageFormatForRound(eventFormat, roundLabel) {
+  const label = String(roundLabel || "").toLowerCase();
+  if (label.includes("draft")) return CardFormat.Limited;
+  return eventFormat ?? null;
+}
+
 /** @param {string | null | undefined} player @param {string} query */
 function playerMatchesNameFilter(player, query) {
   const q = normalizeHeroKey(query);
@@ -132,7 +143,7 @@ function playerMatchesNameFilter(player, query) {
 function isValidResultPlayer(name) {
   const n = normalizeHeroKey(name);
   if (!n) return false;
-  return n !== "n/a" && n !== "na" && n !== "tbd" && n !== "-";
+  return n !== "n/a" && n !== "na" && n !== "tbd" && n !== "-" && n !== "player 1" && n !== "player 2";
 }
 
 /** @param {{ player1?: string, player2?: string }} row */
@@ -1250,6 +1261,15 @@ export function EventDetailPage({ isLight, active, eventId }) {
 
   const nameFilterActive = nameFilter.trim().length > 0;
 
+  const selectedRoundMeta = useMemo(() => {
+    return rounds.find((r) => r.round_number === round) ?? null;
+  }, [rounds, round]);
+
+  const coverageFormatId = useMemo(
+    () => coverageFormatForRound(activeData?.format, selectedRoundMeta?.round_label),
+    [activeData?.format, selectedRoundMeta?.round_label],
+  );
+
   const coverageLoading =
     coverageTab === "snapshot"
       ? teamLoading
@@ -1418,7 +1438,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
                   isLight={isLight}
                   rowChrome={rowChrome}
                   heroes={heroes}
-                  formatId={activeData.format}
+                  formatId={coverageFormatId}
                   row={row}
                   onPlayerClick={openPlayerHistory}
                 />
@@ -1439,7 +1459,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
                   isLight={isLight}
                   rowChrome={rowChrome}
                   heroes={heroes}
-                  formatId={activeData.format}
+                  formatId={coverageFormatId}
                   row={row}
                   onPlayerClick={openPlayerHistory}
                 />
@@ -1460,7 +1480,7 @@ export function EventDetailPage({ isLight, active, eventId }) {
                   isLight={isLight}
                   rowChrome={rowChrome}
                   heroes={heroes}
-                  formatId={activeData.format}
+                  formatId={coverageFormatId}
                   row={row}
                   rankDelta={standingRankDelta(row.rank, prevRankByPlayer, row.player)}
                   onPlayerClick={openPlayerHistory}

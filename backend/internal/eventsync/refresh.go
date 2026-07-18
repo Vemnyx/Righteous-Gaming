@@ -24,6 +24,8 @@ func jsonArrayLen(raw json.RawMessage) int {
 
 // roundNeedsRefresh reports whether a stored round should be re-scraped.
 // The latest round is always refreshed so live results and standings stay current.
+// Empty pairings also refresh: a prior failed scrape can leave a shell row that would
+// otherwise never update (common for later Pro Tour draft rounds after a timed-out create sync).
 func roundNeedsRefresh(er repository.EventRound, isLatest bool) bool {
 	if isLatest {
 		return true
@@ -31,13 +33,16 @@ func roundNeedsRefresh(er repository.EventRound, isLatest bool) bool {
 	pairings := jsonArrayLen(er.Pairings)
 	results := jsonArrayLen(er.Results)
 	standings := jsonArrayLen(er.Standings)
-	if pairings > 0 && results == 0 {
+	if pairings == 0 {
 		return true
 	}
-	if pairings > 0 && results < pairings {
+	if results == 0 {
 		return true
 	}
-	if results > 0 && standings == 0 {
+	if results < pairings {
+		return true
+	}
+	if standings == 0 {
 		return true
 	}
 	return false

@@ -16,29 +16,29 @@ import (
 const fabBrowserUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 var (
-	reDateLine       = regexp.MustCompile(`(?is)(?:<b>|<strong>)\s*Date:\s*</(?:b|strong)>\s*([^<]+)`)
-	reDateLinePlain  = regexp.MustCompile(`(?is)Date:\s*((?:January|February|March|April|May|June|July|August|September|October|November|December)[^<\n]*?\d{4})`)
-	reVenueLine      = regexp.MustCompile(`(?is)(?:<b>|<strong>)\s*Venue:\s*</(?:b|strong)>\s*([^<]+)`)
-	reVenueLinePlain = regexp.MustCompile(`(?is)Venue:\s*([^<\n]+)`)
-	reFormatLine     = regexp.MustCompile(`(?is)(?:<b>|<strong>)\s*Format:\s*</(?:b|strong)>\s*([^<]+)`)
+	reDateLine        = regexp.MustCompile(`(?is)(?:<b>|<strong>)\s*Date:\s*</(?:b|strong)>\s*([^<]+)`)
+	reDateLinePlain   = regexp.MustCompile(`(?is)Date:\s*((?:January|February|March|April|May|June|July|August|September|October|November|December)[^<\n]*?\d{4})`)
+	reVenueLine       = regexp.MustCompile(`(?is)(?:<b>|<strong>)\s*Venue:\s*</(?:b|strong)>\s*([^<]+)`)
+	reVenueLinePlain  = regexp.MustCompile(`(?is)Venue:\s*([^<\n]+)`)
+	reFormatLine      = regexp.MustCompile(`(?is)(?:<b>|<strong>)\s*Format:\s*</(?:b|strong)>\s*([^<]+)`)
 	reFormatLinePlain = regexp.MustCompile(`(?is)Format:\s*([A-Za-z][A-Za-z0-9\s\-]+?)(?:Entry|Eligibility|Rules|Venue|Date|Hosted|Registration|<|\n|$)`)
-	reCoverageHref   = regexp.MustCompile(`(?is)<a[^>]+href=["'](https://fabtcg\.com(?:/en)?/coverage/[^"'#?]+/?)["'][^>]*>.*?<h3[^>]*>([^<]+)</h3>`)
-	reCoverageSlug   = regexp.MustCompile(`(?i)/coverage/([^/"'#?]+)`)
-	reRoundRow       = regexp.MustCompile(`(?is)<tr>\s*<td[^>]*class=["']rounds["'][^>]*>([^<]+)</td>.*?pairings/(\d+)/.*?results/(\d+)/.*?standings/(\d+)/`)
-	reYouTuBePath    = regexp.MustCompile(`(?i)youtu\.be/([a-zA-Z0-9_-]{11})(?:[?#&/]|$)`)
-	reYouTubeV       = regexp.MustCompile(`(?i)[?&]v=([a-zA-Z0-9_-]{11})(?:[&#]|$)`)
-	reYouTubeEmbed   = regexp.MustCompile(`(?i)youtube\.com/embed/([a-zA-Z0-9_-]{11})(?:[?#&/]|$)`)
-	reYouTubeShorts  = regexp.MustCompile(`(?i)youtube\.com/shorts/([a-zA-Z0-9_-]{11})(?:[?#&/]|$)`)
-	reMatchRow       = regexp.MustCompile(`(?is)<tr\s+class=["']match-row["'][^>]*>(.*?)</tr>`)
-	reTableNumber    = regexp.MustCompile(`(?is)<td[^>]*class=["']table-number["'][^>]*>.*?(?:</span>\s*)?(\d+)\s*</td>`)
-	rePlayerText     = regexp.MustCompile(`(?is)<div\s+class=["']player-text["'][^>]*>(.*?)</div>`)
-	reWinnerPill     = regexp.MustCompile(`(?is)<span\s+class=["']winner-pill["'][^>]*>([^<]+)</span>`)
-	reStandingRow    = regexp.MustCompile(`(?is)<tr>\s*<td\s+class=["']rank["'][^>]*>\s*(\d+)\s*</td>.*?<span\s+class=["']player-name["'][^>]*>([^<]+)</span>.*?<span\s+class=["']hero-name["'][^>]*>([^<]+)</span>.*?<td\s+class=["']wins["'][^>]*>\s*(\d+)\s*</td>`)
-	reBrSplit        = regexp.MustCompile(`(?i)<br\s*/?>`)
-	reHeroNoise      = regexp.MustCompile(`[<>\\]+`)
+	reCoverageHref    = regexp.MustCompile(`(?is)<a[^>]+href=["'](https://fabtcg\.com(?:/en)?/coverage/[^"'#?]+/?)["'][^>]*>.*?<h3[^>]*>([^<]+)</h3>`)
+	reCoverageSlug    = regexp.MustCompile(`(?i)/coverage/([^/"'#?]+)`)
+	reRoundRow        = regexp.MustCompile(`(?is)<tr>\s*<td[^>]*class=["']rounds["'][^>]*>([^<]+)</td>.*?pairings/(\d+)/.*?results/(\d+)/.*?standings/(\d+)/`)
+	reYouTuBePath     = regexp.MustCompile(`(?i)youtu\.be/([a-zA-Z0-9_-]{11})(?:[?#&/]|$)`)
+	reYouTubeV        = regexp.MustCompile(`(?i)[?&]v=([a-zA-Z0-9_-]{11})(?:[&#]|$)`)
+	reYouTubeEmbed    = regexp.MustCompile(`(?i)youtube\.com/embed/([a-zA-Z0-9_-]{11})(?:[?#&/]|$)`)
+	reYouTubeShorts   = regexp.MustCompile(`(?i)youtube\.com/shorts/([a-zA-Z0-9_-]{11})(?:[?#&/]|$)`)
+	reMatchRow        = regexp.MustCompile(`(?is)<tr\s+class=["']match-row["'][^>]*>(.*?)</tr>`)
+	reTableNumber     = regexp.MustCompile(`(?is)<td[^>]*class=["']table-number["'][^>]*>.*?(?:</span>\s*)?(\d+)\s*</td>`)
+	rePlayerText      = regexp.MustCompile(`(?is)<div\s+class=["']player-text["'][^>]*>(.*?)</div>`)
+	reWinnerPill      = regexp.MustCompile(`(?is)<span\s+class=["']winner-pill["'][^>]*>([^<]+)</span>`)
+	reStandingRow     = regexp.MustCompile(`(?is)<tr>\s*<td\s+class=["']rank["'][^>]*>\s*(\d+)\s*</td>.*?<span\s+class=["']player-name["'][^>]*>([^<]+)</span>.*?<span\s+class=["']hero-name["'][^>]*>([^<]+)</span>.*?<td\s+class=["']wins["'][^>]*>\s*(\d+)\s*</td>`)
+	reBrSplit         = regexp.MustCompile(`(?i)<br\s*/?>`)
+	reHeroNoise       = regexp.MustCompile(`[<>\\]+`)
 	reWPTournamentAPI = regexp.MustCompile(`(?i)href=["'](https://fabtcg\.com/api/wp/v2/tournament/\d+)["']`)
-	reWhitespace     = regexp.MustCompile(`\s+`)
-	reStripTags      = regexp.MustCompile(`(?s)<[^>]+>`)
+	reWhitespace      = regexp.MustCompile(`\s+`)
+	reStripTags       = regexp.MustCompile(`(?s)<[^>]+>`)
 )
 
 const fabHomeURL = "https://fabtcg.com/"
@@ -219,7 +219,7 @@ type wpTournamentItem struct {
 	Content struct {
 		Rendered string `json:"rendered"`
 	} `json:"content"`
-	Link string `json:"link"`
+	Link  string `json:"link"`
 	Yoast struct {
 		OGImage []struct {
 			URL string `json:"url"`
@@ -510,7 +510,7 @@ func ParseResults(htmlText string) []ResultRow {
 		lower := strings.ToLower(winnerSide)
 		if strings.Contains(lower, "player 1") {
 			winner = p1
-		} else 		if strings.Contains(lower, "player 2") {
+		} else if strings.Contains(lower, "player 2") {
 			winner = p2
 		}
 		if !ValidMatchPlayers(p1, p2) {
@@ -605,7 +605,7 @@ func cleanInlineText(s string) string {
 
 func isPlaceholderCoverageLabel(s string) bool {
 	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "n/a", "na", "tbd", "-":
+	case "n/a", "na", "tbd", "-", "player 1", "player 2", "player1", "player2":
 		return true
 	default:
 		return false
@@ -619,6 +619,16 @@ func ValidPlayerName(s string) bool {
 		return false
 	}
 	return !isPlaceholderCoverageLabel(s)
+}
+
+// RoundLabelIndicatesDraft reports whether a FabTCG round label is a booster draft segment
+// (e.g. "Round 6 - Booster Draft" on Pro Tour coverage).
+func RoundLabelIndicatesDraft(label string) bool {
+	lower := strings.ToLower(strings.TrimSpace(label))
+	if lower == "" {
+		return false
+	}
+	return strings.Contains(lower, "draft")
 }
 
 // ValidHeroName reports whether s is a real hero label from FabTCG coverage.

@@ -50,6 +50,13 @@ func TestRoundNeedsRefresh(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "empty pairings refreshes",
+			er: repository.EventRound{
+				Pairings: json.RawMessage(`[]`), Results: json.RawMessage(`[]`), Standings: json.RawMessage(`[]`),
+			},
+			want: true,
+		},
+		{
 			name: "complete older round",
 			er: repository.EventRound{
 				Pairings: pairings, Results: results, Standings: standings,

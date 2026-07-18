@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 
+	"righteous-gaming/backend/internal/domain"
 	"righteous-gaming/backend/internal/repository"
 	"righteous-gaming/backend/internal/scrape"
 )
@@ -67,11 +68,18 @@ func IndexRound(ctx context.Context, repo *repository.Repository, round reposito
 	} else if !errors.Is(err, repository.ErrEventDataNotFound) {
 		return err
 	}
+	if round.RoundLabel != nil && scrape.RoundLabelIndicatesDraft(*round.RoundLabel) {
+		limited := int16(domain.CardFormatLimited)
+		eventFormat = &limited
+	}
 	heroes := NewHeroMatcher(heroRows, eventFormat)
 
 	var pairings []pairingRow
 	_ = json.Unmarshal(round.Pairings, &pairings)
 	for _, row := range pairings {
+		if !scrape.ValidMatchPlayers(row.Player1, row.Player2) {
+			continue
+		}
 		hero1 := cleanHero(row.Hero1)
 		hero2 := cleanHero(row.Hero2)
 		for _, u := range users {

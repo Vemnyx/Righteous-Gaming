@@ -48,11 +48,53 @@ func TestValidPlayerName(t *testing.T) {
 		"-":           false,
 		"":            false,
 		"   ":         false,
+		"Player 1":    false,
+		"Player 2":    false,
+		"player 2":    false,
 	}
 	for in, want := range cases {
 		if got := scrape.ValidPlayerName(in); got != want {
 			t.Fatalf("ValidPlayerName(%q) = %v, want %v", in, got, want)
 		}
+	}
+}
+
+func TestRoundLabelIndicatesDraft(t *testing.T) {
+	cases := map[string]bool{
+		"Round 6 - Booster Draft":      true,
+		"Round 5 - Classic Constructed": false,
+		"Round 8 - Booster Draft":      true,
+		"":                             false,
+		"Draft":                        true,
+	}
+	for in, want := range cases {
+		if got := scrape.RoundLabelIndicatesDraft(in); got != want {
+			t.Fatalf("RoundLabelIndicatesDraft(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
+func TestParseCoverageRoundsIncludesBoosterDraft(t *testing.T) {
+	html := `
+<table>
+<tr><td class="rounds">Round 5 - Classic Constructed</td>
+<td><a href="https://fabtcg.com/coverage/pro-tour-las-vegas/pairings/5/">View</a></td>
+<td><a href="https://fabtcg.com/coverage/pro-tour-las-vegas/results/5/">View</a></td>
+<td><a href="https://fabtcg.com/coverage/pro-tour-las-vegas/standings/5/">View</a></td></tr>
+<tr><td class="rounds">Round 6 - Booster Draft</td>
+<td><a href="https://fabtcg.com/coverage/pro-tour-las-vegas/pairings/6/">View</a></td>
+<td><a href="https://fabtcg.com/coverage/pro-tour-las-vegas/results/6/">View</a></td>
+<td><a href="https://fabtcg.com/coverage/pro-tour-las-vegas/standings/6/">View</a></td></tr>
+</table>`
+	rounds := scrape.ParseCoverageRounds(html, "pro-tour-las-vegas")
+	if len(rounds) != 2 {
+		t.Fatalf("rounds=%d want 2", len(rounds))
+	}
+	if rounds[1].Number != 6 || rounds[1].Label != "Round 6 - Booster Draft" {
+		t.Fatalf("draft round: %+v", rounds[1])
+	}
+	if !scrape.RoundLabelIndicatesDraft(rounds[1].Label) {
+		t.Fatal("expected draft label")
 	}
 }
 
