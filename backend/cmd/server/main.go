@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"righteous-gaming/backend/internal/app"
-	"righteous-gaming/backend/internal/eventsync"
 	"righteous-gaming/backend/internal/handler"
 	"righteous-gaming/backend/internal/scrape"
 	"righteous-gaming/backend/internal/service"
@@ -39,9 +38,6 @@ func main() {
 	log.Info("application initialized")
 
 	scrapeClient := scrape.NewClient()
-	syncRunner := eventsync.NewRunner(application.Repo, scrapeClient)
-	syncRunner.Start(ctx)
-	defer syncRunner.Stop()
 
 	addr := listenAddr()
 
