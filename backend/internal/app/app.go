@@ -19,7 +19,6 @@ import (
 type App struct {
 	Repo     *repository.Repository
 	Firebase *client.Firebase
-	Gmail    *client.Gmail
 	GCS      *client.GCS
 
 	closeLog func()
@@ -77,12 +76,6 @@ func New(ctx context.Context) (*App, error) {
 		closeInfo()
 		return nil, fmt.Errorf("app: firebase: %w", err)
 	}
-	gm, err := client.NewGmail(ctx)
-	if err != nil {
-		repo.Close()
-		closeInfo()
-		return nil, fmt.Errorf("app: gmail: %w", err)
-	}
 	gcs, err := client.NewGCS(ctx)
 	if err != nil {
 		repo.Close()
@@ -93,22 +86,11 @@ func New(ctx context.Context) (*App, error) {
 	a := &App{
 		Repo:     repo,
 		Firebase: fb,
-		Gmail:    gm,
 		GCS:      gcs,
 		closeLog: closeInfo,
 	}
 	log.Info("database connection established")
 	return a, nil
-}
-
-// SendGmail sends a plain-text email via the configured Gmail API client (OAuth).
-func (a *App) SendGmail(ctx context.Context, to, subject, body string) error {
-	return a.Gmail.SendEmail(ctx, to, subject, body)
-}
-
-// SendGmailHTML sends an HTML email via the configured Gmail API client (OAuth).
-func (a *App) SendGmailHTML(ctx context.Context, to, subject, body string) error {
-	return a.Gmail.SendHTMLEmail(ctx, to, subject, body)
 }
 
 // UploadToGCS uploads from r to gs://righteous-assets/objectPath using Application

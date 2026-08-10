@@ -7,8 +7,6 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": "http://localhost:8080",
-      "/complete-registration": "http://localhost:8080",
-      "/send-email": "http://localhost:8080",
     },
   },
 });

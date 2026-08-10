@@ -13,34 +13,37 @@ var ErrUserNotFound = errors.New("repository: user not found")
 
 // User is a row from users.
 type User struct {
-	ID           int
-	Email        string
-	Username     *string
-	FirstName    *string
-	LastName     *string
-	UID          string
-	Role         int
-	CreatedAt    time.Time
-	RegisteredAt *time.Time
+	ID                     int
+	Email                  string
+	Username               *string
+	FirstName              *string
+	LastName               *string
+	UID                    string
+	Role                   int
+	CreatedAt              time.Time
+	RegisteredAt           *time.Time
+	DefaultPasswordChanged bool
 }
 
 const userSelectColumns = `
-SELECT id, email, username, first_name, last_name, COALESCE(uid, ''), role, created_at`
+SELECT id, email, username, first_name, last_name, COALESCE(uid, ''), role, created_at, default_password_changed`
 
 // CreateUserInput holds fields required to insert a user (id and created_at are set by the DB).
 type CreateUserInput struct {
-	Email     string
-	Username  *string
-	FirstName *string
-	LastName  *string
-	UID       string
-	Role      int
+	Email                  string
+	Username               *string
+	FirstName              *string
+	LastName               *string
+	UID                    string
+	Role                   int
+	Registered             bool
+	DefaultPasswordChanged bool
 }
 
 func scanUserRow(row pgx.Row) (*User, error) {
 	var u User
 	if err := row.Scan(
-		&u.ID, &u.Email, &u.Username, &u.FirstName, &u.LastName, &u.UID, &u.Role, &u.CreatedAt,
+		&u.ID, &u.Email, &u.Username, &u.FirstName, &u.LastName, &u.UID, &u.Role, &u.CreatedAt, &u.DefaultPasswordChanged,
 	); err != nil {
 		return nil, err
 	}
@@ -153,70 +156,26 @@ WHERE email = $1 OR ($2::varchar IS NOT NULL AND username = $2)`
 	return out, nil
 }
 
-// CompleteRegistrationByID updates the invited row with uid, username, names, and registration timestamp.
-func (r *Repository) CompleteRegistrationByID(ctx context.Context, id int, uid string, username, firstName, lastName *string) (*User, error) {
+// AttachFirebaseUID registers an existing invited DB row with a Firebase UID and marks registration complete.
+func (r *Repository) AttachFirebaseUID(ctx context.Context, id int, uid string, role int) (*User, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
 UPDATE users
 SET uid = $2,
-    username = $3,
-    first_name = $4,
-    last_name = $5,
-    registered_at = now()
+    role = $3,
+    registered_at = now(),
+    default_password_changed = false
 WHERE id = $1
-RETURNING id, email, username, first_name, last_name, COALESCE(uid, ''), role, created_at`
-	row := r.pool.QueryRow(ctx, q, id, uid, username, firstName, lastName)
+RETURNING id, email, username, first_name, last_name, COALESCE(uid, ''), role, created_at, default_password_changed`
+	row := r.pool.QueryRow(ctx, q, id, uid, role)
 	u, err := scanUserRow(row)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
-		return nil, fmt.Errorf("repository: complete registration by id: %w", err)
-	}
-	return u, nil
-}
-
-// CompleteRegistrationByIDAndDeleteInvite updates the invited user and removes the invite row in one transaction.
-func (r *Repository) CompleteRegistrationByIDAndDeleteInvite(ctx context.Context, userID int, uid string, username, firstName, lastName *string, inviteCode string) (*User, error) {
-	if r.pool == nil {
-		return nil, fmt.Errorf("repository: pool is closed")
-	}
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("repository: begin complete registration: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
-	const updateQ = `
-UPDATE users
-SET uid = $2,
-    username = $3,
-    first_name = $4,
-    last_name = $5,
-    registered_at = now()
-WHERE id = $1
-RETURNING id, email, username, first_name, last_name, COALESCE(uid, ''), role, created_at`
-	row := tx.QueryRow(ctx, updateQ, userID, uid, username, firstName, lastName)
-	u, err := scanUserRow(row)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrUserNotFound
-		}
-		return nil, fmt.Errorf("repository: complete registration update: %w", err)
-	}
-
-	tag, err := tx.Exec(ctx, `DELETE FROM user_registration WHERE user_id = $1 AND code = $2`, userID, inviteCode)
-	if err != nil {
-		return nil, fmt.Errorf("repository: delete user registration: %w", err)
-	}
-	if tag.RowsAffected() != 1 {
-		return nil, fmt.Errorf("repository: delete user registration: expected 1 row affected, got %d", tag.RowsAffected())
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("repository: commit complete registration: %w", err)
+		return nil, fmt.Errorf("repository: attach firebase uid: %w", err)
 	}
 	return u, nil
 }
@@ -227,15 +186,38 @@ func (r *Repository) CreateUser(ctx context.Context, in CreateUserInput) (*User,
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-INSERT INTO users (email, username, uid, role)
-VALUES ($1, $2, $3, $4)
-RETURNING id, email, username, first_name, last_name, uid, role, created_at`
-	row := r.pool.QueryRow(ctx, q, in.Email, in.Username, in.UID, in.Role)
+INSERT INTO users (email, username, first_name, last_name, uid, role, registered_at, default_password_changed)
+VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $7 THEN now() ELSE NULL END, $8)
+RETURNING id, email, username, first_name, last_name, COALESCE(uid, ''), role, created_at, default_password_changed`
+	row := r.pool.QueryRow(ctx, q,
+		in.Email, in.Username, in.FirstName, in.LastName, in.UID, in.Role, in.Registered, in.DefaultPasswordChanged,
+	)
 	u, err := scanUserRow(row)
 	if err != nil {
 		return nil, fmt.Errorf("repository: create user: %w", err)
 	}
 	return u, nil
+}
+
+// MarkDefaultPasswordChanged sets default_password_changed = true for the user.
+func (r *Repository) MarkDefaultPasswordChanged(ctx context.Context, userID int) error {
+	if r.pool == nil {
+		return fmt.Errorf("repository: pool is closed")
+	}
+	if userID <= 0 {
+		return fmt.Errorf("repository: invalid user id")
+	}
+	tag, err := r.pool.Exec(ctx, `
+UPDATE users
+SET default_password_changed = true
+WHERE id = $1`, userID)
+	if err != nil {
+		return fmt.Errorf("repository: mark default password changed: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrUserNotFound
+	}
+	return nil
 }
 
 // UpdateUserProfile updates username, first name, and last name for a user.
@@ -252,7 +234,7 @@ SET username = $2,
     first_name = $3,
     last_name = $4
 WHERE id = $1
-RETURNING id, email, username, first_name, last_name, COALESCE(uid, ''), role, created_at`
+RETURNING id, email, username, first_name, last_name, COALESCE(uid, ''), role, created_at, default_password_changed`
 	row := r.pool.QueryRow(ctx, q, userID, username, firstName, lastName)
 	u, err := scanUserRow(row)
 	if err != nil {
@@ -300,7 +282,7 @@ func (r *Repository) ListUsersPaged(ctx context.Context, limit, offset int) ([]U
 	}
 
 	const q = `
-SELECT id, email, username, COALESCE(uid, ''), role, created_at, registered_at
+SELECT id, email, username, COALESCE(uid, ''), role, created_at, registered_at, default_password_changed
 FROM users
 ORDER BY id ASC
 LIMIT $1 OFFSET $2`
@@ -313,7 +295,9 @@ LIMIT $1 OFFSET $2`
 	list := make([]User, 0, limit)
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt, &u.RegisteredAt); err != nil {
+		if err := rows.Scan(
+			&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt, &u.RegisteredAt, &u.DefaultPasswordChanged,
+		); err != nil {
 			return nil, 0, fmt.Errorf("repository: list users paged scan: %w", err)
 		}
 		list = append(list, u)

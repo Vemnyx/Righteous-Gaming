@@ -27,8 +27,8 @@ import { UserProfile } from "../components/UserProfile";
 import { sessionProfileDisplayName } from "../auth/sessionProfile";
 import { canAccessCardRaterResource, canAccessData, isAdminRole } from "../constants/roles";
 
-/** Persisted before opening Invite User so Back restores the dashboard URL (e.g. `/admin/users`). */
-const SESSION_INVITE_RETURN_KEY = "rg-dashboard-return-url";
+/** Persisted before opening Create User so Back restores the dashboard URL (e.g. `/admin/users`). */
+const SESSION_CREATE_USER_RETURN_KEY = "rg-dashboard-return-url";
 
 const RESOURCES_TAB_ID = "resources";
 const DATA_TAB_ID = "data";
@@ -1988,18 +1988,18 @@ export default function Dashboard({ onNavigate }) {
                 <UsersAdminTable
                   isLight={isLight}
                   active={activeTab === ADMIN_TAB_ID && adminChild === "users"}
-                  onInviteUser={
+                  onCreateUser={
                     onNavigate
                       ? () => {
                           try {
                             sessionStorage.setItem(
-                              SESSION_INVITE_RETURN_KEY,
+                              SESSION_CREATE_USER_RETURN_KEY,
                               window.location.pathname + window.location.search + window.location.hash,
                             );
                           } catch {
                             /* ignore */
                           }
-                          onNavigate("/admin/invite-user");
+                          onNavigate("/admin/create-user");
                         }
                       : undefined
                   }

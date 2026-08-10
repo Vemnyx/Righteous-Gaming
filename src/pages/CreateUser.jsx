@@ -4,16 +4,18 @@ import { useAuth } from "../auth/AuthContext";
 
 import { ROLE_ADMIN, ROLE_GUEST, ROLE_MEMBER, ROLE_PLAY_TESTER } from "../constants/roles";
 
-/** Must match Dashboard `SESSION_INVITE_RETURN_KEY` */
-const SESSION_INVITE_RETURN_KEY = "rg-dashboard-return-url";
+/** Must match Dashboard `SESSION_CREATE_USER_RETURN_KEY` */
+const SESSION_CREATE_USER_RETURN_KEY = "rg-dashboard-return-url";
 
 const THEME_STORAGE_KEY = "rg-dashboard-theme";
+
+const DEFAULT_PASSWORD = "password123+";
 
 /** @param {{ onNavigate: (path: string) => void }} p */
 function navigateBackToDashboard(onNavigate, fallbackPath = "/announcements") {
   try {
-    const saved = sessionStorage.getItem(SESSION_INVITE_RETURN_KEY);
-    sessionStorage.removeItem(SESSION_INVITE_RETURN_KEY);
+    const saved = sessionStorage.getItem(SESSION_CREATE_USER_RETURN_KEY);
+    sessionStorage.removeItem(SESSION_CREATE_USER_RETURN_KEY);
     if (typeof saved === "string" && saved.startsWith("/")) {
       onNavigate(saved);
       return;
@@ -37,7 +39,7 @@ const primaryBtn =
   "mt-6 w-full cursor-pointer rounded-lg border border-white/[0.18] bg-gradient-to-br from-[#8b5abf] to-[#5c2f91] px-4 py-3 text-[0.9rem] font-semibold text-white shadow-[0_4px_20px_rgba(90,47,143,0.35)] hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/60 disabled:cursor-not-allowed disabled:opacity-55";
 
 /** @param {{ onNavigate: (path: string) => void }} props */
-export default function InviteUser({ onNavigate }) {
+export default function CreateUser({ onNavigate }) {
   const { user, sessionProfile, sessionProfileLoading } = useAuth();
   const [theme] = useState(() => {
     try {
@@ -52,7 +54,7 @@ export default function InviteUser({ onNavigate }) {
   const [role, setRole] = useState("1");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
-  const [done, setDone] = useState(false);
+  const [doneEmail, setDoneEmail] = useState(/** @type {string | null} */ (null));
 
   const shellVariant = theme === "dark" ? "dark" : "light";
   const isAdmin = Number(sessionProfile?.role) === ROLE_ADMIN;
@@ -60,7 +62,7 @@ export default function InviteUser({ onNavigate }) {
   async function handleSubmit(e) {
     e.preventDefault();
     setError(null);
-    setDone(false);
+    setDoneEmail(null);
     if (!user) {
       setError("You must be signed in.");
       return;
@@ -94,7 +96,7 @@ export default function InviteUser({ onNavigate }) {
       });
 
       if (res.status === 204) {
-        setDone(true);
+        setDoneEmail(trimmed);
         setEmail("");
         setRole("1");
         return;
@@ -122,7 +124,7 @@ export default function InviteUser({ onNavigate }) {
       <AuthShell variant={shellVariant} narrow>
         <h1 className="m-0 text-xl font-bold text-[#f4f0fa]">Admin only</h1>
         <p className="mt-3 text-[0.9rem] leading-relaxed text-[#f4f0fa]/75">
-          You do not have access to invite users.
+          You do not have access to create users.
         </p>
         <button
           type="button"
@@ -145,17 +147,19 @@ export default function InviteUser({ onNavigate }) {
         ← Back to dashboard
       </button>
 
-      <h1 className="m-0 text-xl font-bold text-[#f4f0fa]">Invite user</h1>
+      <h1 className="m-0 text-xl font-bold text-[#f4f0fa]">Create user</h1>
       <p className="mt-2 text-[0.85rem] leading-relaxed text-[#f4f0fa]/70">
-        Sends a registration email with a link to complete sign-up.
+        Creates an account they can sign in with. Temporary password:{" "}
+        <code className="rounded bg-[#332d3c] px-1.5 py-0.5 text-[0.8rem] text-[#e8def5]">{DEFAULT_PASSWORD}</code>
       </p>
 
-      {done ? (
+      {doneEmail ? (
         <p
           className="mt-5 rounded-lg border border-emerald-500/35 bg-emerald-950/35 px-3 py-2.5 text-[0.875rem] text-emerald-100/95"
           role="status"
         >
-          Invitation email sent.
+          Account created for <span className="font-semibold">{doneEmail}</span>. They must change the
+          temporary password on first sign-in.
         </p>
       ) : null}
 
@@ -169,33 +173,33 @@ export default function InviteUser({ onNavigate }) {
       ) : null}
 
       <form className="mt-6 flex flex-col" onSubmit={(e) => void handleSubmit(e)} noValidate>
-        <label className={labelClass} htmlFor="invite-email">
+        <label className={labelClass} htmlFor="create-user-email">
           Email
         </label>
         <input
-          id="invite-email"
+          id="create-user-email"
           type="email"
           autoComplete="email"
           className={inputClass}
           value={email}
           onChange={(e) => {
             setEmail(e.target.value);
-            setDone(false);
+            setDoneEmail(null);
           }}
           placeholder="name@gmail.com"
           disabled={submitting}
         />
 
-        <label className={`${labelClass} mt-5`} htmlFor="invite-role">
+        <label className={`${labelClass} mt-5`} htmlFor="create-user-role">
           Role
         </label>
         <select
-          id="invite-role"
+          id="create-user-role"
           className={selectClass}
           value={role}
           onChange={(e) => {
             setRole(e.target.value);
-            setDone(false);
+            setDoneEmail(null);
           }}
           disabled={submitting}
         >
@@ -206,7 +210,7 @@ export default function InviteUser({ onNavigate }) {
         </select>
 
         <button type="submit" className={primaryBtn} disabled={submitting}>
-          {submitting ? "Sending…" : "Send invitation"}
+          {submitting ? "Creating…" : "Create account"}
         </button>
       </form>
     </AuthShell>

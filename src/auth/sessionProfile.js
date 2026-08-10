@@ -4,9 +4,9 @@ export const SESSION_PROFILE_STORAGE_KEY = "rg-session-profile";
 
 /** @typedef {{ card_rater_quick_submit?: boolean }} UserSettings */
 
-/** @typedef {{ username?: string | null, first_name?: string | null, last_name?: string | null }} UserProfilePatch */
+/** @typedef {{ username?: string | null, first_name?: string | null, last_name?: string | null, default_password_changed?: boolean }} UserProfilePatch */
 
-/** @typedef {{ email?: string, username?: string|null, first_name?: string|null, last_name?: string|null, uid?: string, role?: number|null, created_at?: string, settings?: UserSettings }} SessionProfile */
+/** @typedef {{ id?: number, email?: string, username?: string|null, first_name?: string|null, last_name?: string|null, uid?: string, role?: number|null, created_at?: string, default_password_changed?: boolean, settings?: UserSettings }} SessionProfile */
 
 /**
  * @param {SessionProfile | null | undefined} profile
@@ -45,7 +45,12 @@ export function readSessionProfile(expectedUid) {
     if (!raw) return null;
     const o = JSON.parse(raw);
     if (!o || typeof o !== "object" || o.uid !== expectedUid) return null;
-    return { ...o, settings: userSettingsFromProfile(o) };
+    /** @type {SessionProfile} */
+    const profile = { ...o, settings: userSettingsFromProfile(o) };
+    if (typeof o.default_password_changed === "boolean") {
+      profile.default_password_changed = o.default_password_changed;
+    }
+    return profile;
   } catch {
     return null;
   }
@@ -81,7 +86,11 @@ export async function fetchSessionProfileFromApi(idToken) {
     throw new Error(t || `session/me failed: ${res.status}`);
   }
   const data = await res.json();
-  return { ...data, settings: userSettingsFromProfile(data) };
+  return {
+    ...data,
+    default_password_changed: data?.default_password_changed === true,
+    settings: userSettingsFromProfile(data),
+  };
 }
 
 /**

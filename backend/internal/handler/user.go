@@ -3,37 +3,20 @@ package handler
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	"righteous-gaming/backend/internal/app"
 	"righteous-gaming/backend/internal/domain"
-	"righteous-gaming/backend/internal/emailtemplates"
-	"righteous-gaming/backend/internal/repository"
 	"righteous-gaming/backend/internal/service"
 	"righteous-gaming/backend/log"
 )
 
-const adminInviteRegisterURL = "https://righteousgaming.team/register"
-
 type userHTTP struct {
 	svc *service.UserService
 	app *app.App
-}
-
-type completeRegistrationRequest struct {
-	Email     string  `json:"email"`
-	Code      string  `json:"code"`
-	Username  *string `json:"username"`
-	FirstName string  `json:"first_name"`
-	LastName  string  `json:"last_name"`
-	Password  string  `json:"password"`
 }
 
 type messageErrorResponse struct {
@@ -45,25 +28,24 @@ type adminRegisterUserRequest struct {
 	Role  *int   `json:"role,omitempty"` // Omit or null → member (1).
 }
 
+type changePasswordRequest struct {
+	Password string `json:"password"`
+}
+
 type fieldErrorResponse struct {
 	Field   string `json:"field"`
 	Message string `json:"message"`
 }
 
-type registrationLookupResponse struct {
-	Email    string    `json:"email"`
-	Code     string    `json:"code"`
-	ExpireAt time.Time `json:"expire_at"`
-}
-
 type adminListedUserJSON struct {
-	ID           int        `json:"id"`
-	Email        string     `json:"email"`
-	Username     *string    `json:"username,omitempty"`
-	UID          string     `json:"uid"`
-	Role         int        `json:"role"`
-	InviteSentAt time.Time  `json:"invite_sent_at"`
-	RegisteredAt *time.Time `json:"registered_at,omitempty"`
+	ID                     int        `json:"id"`
+	Email                  string     `json:"email"`
+	Username               *string    `json:"username,omitempty"`
+	UID                    string     `json:"uid"`
+	Role                   int        `json:"role"`
+	CreatedAt              time.Time  `json:"created_at"`
+	RegisteredAt           *time.Time `json:"registered_at,omitempty"`
+	DefaultPasswordChanged bool       `json:"default_password_changed"`
 }
 
 type adminUsersListResponse struct {
@@ -116,13 +98,14 @@ func (h *userHTTP) adminListUsers(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		uname := row.Username
 		out = append(out, adminListedUserJSON{
-			ID:           row.ID,
-			Email:        row.Email,
-			Username:     uname,
-			UID:          row.UID,
-			Role:         row.Role,
-			InviteSentAt: row.CreatedAt,
-			RegisteredAt: row.RegisteredAt,
+			ID:                     row.ID,
+			Email:                  row.Email,
+			Username:               uname,
+			UID:                    row.UID,
+			Role:                   row.Role,
+			CreatedAt:              row.CreatedAt,
+			RegisteredAt:           row.RegisteredAt,
+			DefaultPasswordChanged: row.DefaultPasswordChanged,
 		})
 	}
 
@@ -183,54 +166,6 @@ func (h *userHTTP) createUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(out)
-}
-
-func (h *userHTTP) completeRegistration(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	const maxBody = 1 << 20
-	r.Body = http.MaxBytesReader(w, r.Body, maxBody)
-
-	var body completeRegistrationRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	if _, err := h.svc.CompleteRegistration(r.Context(), body.Email, body.Code, body.Username, &body.FirstName, &body.LastName, body.Password); err != nil {
-		if errors.Is(err, service.ErrValidation) {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if errors.Is(err, service.ErrUserNotFound) {
-			http.Error(w, "User not found", http.StatusNotFound)
-			return
-		}
-		if errors.Is(err, service.ErrRegistrationNotFound) {
-			writeMessageError(w, http.StatusNotFound, "Registration could not be found. Please use the link from your invitation email.")
-			return
-		}
-		if errors.Is(err, service.ErrRegistrationExpired) {
-			writeMessageError(w, http.StatusGone, "This registration link has expired. Please contact your admin to send a new invitation.")
-			return
-		}
-		if errors.Is(err, service.ErrEmailAlreadyRegistered) {
-			writeFieldError(w, http.StatusConflict, "email", "Email is already registered.")
-			return
-		}
-		if errors.Is(err, service.ErrUsernameNotAvailable) {
-			writeFieldError(w, http.StatusConflict, "username", "Username is not available.")
-			return
-		}
-		log.Error("failed to complete registration", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
 }
 
 func (h *userHTTP) sessionMe(w http.ResponseWriter, r *http.Request) {
@@ -448,34 +383,43 @@ func (h *userHTTP) saveMyProfile(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(profile)
 }
 
-func (h *userHTTP) registrationByCode(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+func (h *userHTTP) changePassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodPatch {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	code := strings.TrimSpace(r.URL.Query().Get("code"))
-	row, err := h.svc.RegistrationByCode(r.Context(), code)
+	idToken := bearerIDToken(r.Header.Get("Authorization"))
+	if idToken == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var body changePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeMessageError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	u, err := h.svc.ChangePasswordForIDToken(r.Context(), idToken, body.Password)
 	if err != nil {
 		if errors.Is(err, service.ErrValidation) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, service.ErrUnauthenticated) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 		if errors.Is(err, service.ErrUserNotFound) {
 			http.Error(w, "User not found", http.StatusNotFound)
 			return
 		}
-		log.Error("failed to lookup registration by code", "error", err)
+		log.Error("failed to change password", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(registrationLookupResponse{
-		Email:    row.Email,
-		Code:     row.Code,
-		ExpireAt: row.ExpireAt,
-	})
+	_ = json.NewEncoder(w).Encode(u)
 }
 
 func (h *userHTTP) adminRegisterUser(w http.ResponseWriter, r *http.Request) {
@@ -486,10 +430,6 @@ func (h *userHTTP) adminRegisterUser(w http.ResponseWriter, r *http.Request) {
 	idToken := bearerIDToken(r.Header.Get("Authorization"))
 	if idToken == "" {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-	if h.app == nil {
-		http.Error(w, "email service unavailable", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -508,8 +448,7 @@ func (h *userHTTP) adminRegisterUser(w http.ResponseWriter, r *http.Request) {
 		role = *body.Role
 	}
 
-	user, err := h.svc.CreateInvitedUserForAdmin(r.Context(), idToken, email, role)
-	if err != nil {
+	if _, err := h.svc.CreateProvisionedUserForAdmin(r.Context(), idToken, email, role); err != nil {
 		if errors.Is(err, service.ErrValidation) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -522,49 +461,12 @@ func (h *userHTTP) adminRegisterUser(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
-		if errors.Is(err, service.ErrUserNotFound) {
-			http.Error(w, "User not found", http.StatusNotFound)
-			return
-		}
 		if errors.Is(err, service.ErrAlreadyRegistered) {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
-		log.Error("failed to create invited user", "error", err)
+		log.Error("failed to create provisioned user", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	code := newRegistrationCode()
-	if _, err := h.app.Repo.UpsertUserRegistration(r.Context(), repository.CreateUserRegistrationInput{
-		UserID:   user.ID,
-		Email:    email,
-		Code:     code,
-		ExpireAt: time.Now().Add(12 * time.Hour),
-	}); err != nil {
-		log.Error("failed to upsert user registration", "error", err, "email", email, "user_id", user.ID)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	registerURL, err := registerURLWithCode(adminInviteRegisterURL, code)
-	if err != nil {
-		log.Error("failed to build register url", "error", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	subject := "You're invited to Righteous Gaming"
-	content, err := emailtemplates.RenderAdminRegisterInvite(registerURL)
-	if err != nil {
-		log.Error("failed to render registration invite email", "error", err)
-		http.Error(w, "failed to render invite email", http.StatusInternalServerError)
-		return
-	}
-
-	if err := h.app.SendGmailHTML(r.Context(), email, subject, content); err != nil {
-		log.Error("failed to send registration invite email", "error", err, "email", email)
-		http.Error(w, "failed to send invite email", http.StatusBadGateway)
 		return
 	}
 
@@ -592,19 +494,4 @@ func bearerIDToken(authorization string) string {
 		return ""
 	}
 	return strings.TrimSpace(fields[1])
-}
-
-func newRegistrationCode() string {
-	return uuid.NewString()
-}
-
-func registerURLWithCode(baseURL, code string) (string, error) {
-	u, err := url.Parse(strings.TrimSpace(baseURL))
-	if err != nil {
-		return "", fmt.Errorf("parse base url: %w", err)
-	}
-	q := u.Query()
-	q.Set("code", code)
-	u.RawQuery = q.Encode()
-	return u.String(), nil
 }

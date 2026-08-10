@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	firebaseauth "firebase.google.com/go/v4/auth"
 
@@ -19,22 +18,18 @@ var ErrAlreadyRegistered = errors.New("service: user already registered")
 var ErrEmailAlreadyRegistered = errors.New("service: email already registered")
 var ErrUsernameNotAvailable = errors.New("service: username not available")
 var ErrUserNotFound = errors.New("service: user not found")
-var ErrRegistrationNotFound = errors.New("service: registration not found")
-var ErrRegistrationExpired = errors.New("service: registration expired")
 var ErrUnauthenticated = errors.New("service: unauthenticated")
 var ErrForbidden = errors.New("service: forbidden")
+
+// DefaultUserPassword is assigned when an admin provisions a new account.
+const DefaultUserPassword = "password123+"
+
+const minUserPasswordLen = 6
 
 // UserService coordinates user-related use cases.
 type UserService struct {
 	repo *repository.Repository
 	fb   *client.Firebase
-}
-
-type RegistrationLookup struct {
-	UserID   int
-	Email    string
-	Code     string
-	ExpireAt time.Time
 }
 
 func NewUserService(repo *repository.Repository, fb *client.Firebase) *UserService {
@@ -231,8 +226,9 @@ func (s *UserService) ListUsersPagedForAdmin(ctx context.Context, idToken string
 	return s.repo.ListUsersPaged(ctx, limit, offset)
 }
 
-// CreateInvitedUserForAdmin verifies the caller is an admin, then creates or reuses an invited user row.
-func (s *UserService) CreateInvitedUserForAdmin(ctx context.Context, idToken string, email string, role int) (*domain.User, error) {
+// CreateProvisionedUserForAdmin verifies the caller is an admin, then creates a Firebase
+// Auth user with DefaultUserPassword and a matching Postgres row (forced password change).
+func (s *UserService) CreateProvisionedUserForAdmin(ctx context.Context, idToken string, email string, role int) (*domain.User, error) {
 	caller, err := s.UserForIDToken(ctx, idToken)
 	if err != nil {
 		return nil, err
@@ -240,27 +236,7 @@ func (s *UserService) CreateInvitedUserForAdmin(ctx context.Context, idToken str
 	if caller.Role == nil || *caller.Role != domain.RoleAdmin {
 		return nil, fmt.Errorf("%w", ErrForbidden)
 	}
-	return s.CreateInvitedUser(ctx, email, role)
-}
-
-func (s *UserService) RegistrationByCode(ctx context.Context, code string) (*RegistrationLookup, error) {
-	code = strings.TrimSpace(code)
-	if code == "" {
-		return nil, fmt.Errorf("%w: code is required", ErrValidation)
-	}
-	row, err := s.repo.UserRegistrationByCode(ctx, code)
-	if err != nil {
-		if errors.Is(err, repository.ErrUserNotFound) {
-			return nil, fmt.Errorf("%w: registration not found", ErrUserNotFound)
-		}
-		return nil, fmt.Errorf("service: registration by code: %w", err)
-	}
-	return &RegistrationLookup{
-		UserID:   row.UserID,
-		Email:    row.Email,
-		Code:     row.Code,
-		ExpireAt: row.ExpireAt,
-	}, nil
+	return s.CreateProvisionedUser(ctx, email, role)
 }
 
 // CreateUser validates input, persists to Postgres, creates the Firebase Auth user with the same
@@ -284,10 +260,12 @@ func (s *UserService) CreateUser(ctx context.Context, in domain.User) (*domain.U
 	}
 
 	row, err := s.repo.CreateUser(ctx, repository.CreateUserInput{
-		Email:    email,
-		Username: in.Username,
-		UID:      uid,
-		Role:     int(role),
+		Email:                  email,
+		Username:               in.Username,
+		UID:                    uid,
+		Role:                   int(role),
+		Registered:             true,
+		DefaultPasswordChanged: false,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("service: create user: %w", err)
@@ -310,110 +288,8 @@ func (s *UserService) CreateUser(ctx context.Context, in domain.User) (*domain.U
 	return domainUserFromRepo(row), nil
 }
 
-// CompleteRegistration completes an invited registration by creating Firebase credentials,
-// then updating the existing invited DB row with uid/username/names/registered_at and removing the invite row.
-func (s *UserService) CompleteRegistration(ctx context.Context, email, registrationCode string, username, firstName, lastName *string, password string) (*domain.User, error) {
-	email = strings.TrimSpace(email)
-	registrationCode = strings.TrimSpace(registrationCode)
-	password = strings.TrimSpace(password)
-	if email == "" {
-		return nil, fmt.Errorf("%w: email is required", ErrValidation)
-	}
-	if registrationCode == "" {
-		return nil, fmt.Errorf("%w: registration code is required", ErrValidation)
-	}
-	if password == "" {
-		return nil, fmt.Errorf("%w: password is required", ErrValidation)
-	}
-	if len(password) < 6 {
-		return nil, fmt.Errorf("%w: password must be at least 6 characters", ErrValidation)
-	}
-
-	var cleanUsername *string
-	if username != nil {
-		n := strings.TrimSpace(*username)
-		if n != "" {
-			cleanUsername = &n
-		}
-	}
-
-	cleanFirstName := strings.TrimSpace(ptrStr(firstName))
-	cleanLastName := strings.TrimSpace(ptrStr(lastName))
-	if cleanFirstName == "" {
-		return nil, fmt.Errorf("%w: first name is required", ErrValidation)
-	}
-	if cleanLastName == "" {
-		return nil, fmt.Errorf("%w: last name is required", ErrValidation)
-	}
-	firstNamePtr := &cleanFirstName
-	lastNamePtr := &cleanLastName
-
-	invitedUser, err := s.repo.UserByEmailWithoutUID(ctx, email)
-	if err != nil {
-		if errors.Is(err, repository.ErrUserNotFound) {
-			return nil, fmt.Errorf("%w: User not found", ErrUserNotFound)
-		}
-		return nil, fmt.Errorf("service: find invited user: %w", err)
-	}
-
-	regRow, err := s.repo.UserRegistrationByCode(ctx, registrationCode)
-	if err != nil {
-		if errors.Is(err, repository.ErrUserNotFound) {
-			return nil, fmt.Errorf("%w", ErrRegistrationNotFound)
-		}
-		return nil, fmt.Errorf("service: lookup registration: %w", err)
-	}
-	if time.Now().After(regRow.ExpireAt) {
-		return nil, fmt.Errorf("%w", ErrRegistrationExpired)
-	}
-	if regRow.UserID != invitedUser.ID || !strings.EqualFold(strings.TrimSpace(regRow.Email), email) {
-		return nil, fmt.Errorf("%w", ErrRegistrationNotFound)
-	}
-
-	candidates, err := s.repo.UsersByEmailOrUsername(ctx, email, cleanUsername)
-	if err != nil {
-		return nil, fmt.Errorf("service: lookup registration conflicts: %w", err)
-	}
-	for _, candidate := range candidates {
-		if cleanUsername != nil && candidate.Username != nil {
-			if candidate.ID != invitedUser.ID && strings.EqualFold(strings.TrimSpace(*candidate.Username), *cleanUsername) {
-				return nil, fmt.Errorf("%w: username is not available", ErrUsernameNotAvailable)
-			}
-		}
-	}
-
-	params := (&firebaseauth.UserToCreate{}).
-		Email(email).
-		EmailVerified(false).
-		Disabled(false).
-		Password(password)
-	if cleanUsername != nil {
-		params = params.DisplayName(*cleanUsername)
-	}
-
-	fbUser, err := s.fb.CreateUser(ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("service: firebase create user: %w", err)
-	}
-
-	row, err := s.repo.CompleteRegistrationByIDAndDeleteInvite(ctx, invitedUser.ID, fbUser.UID, cleanUsername, firstNamePtr, lastNamePtr, registrationCode)
-	if err != nil {
-		if deleteErr := s.fb.DeleteUser(ctx, fbUser.UID); deleteErr != nil {
-			return nil, fmt.Errorf(
-				"service: complete registration: %w (also failed to rollback firebase uid=%s: %v)",
-				err,
-				fbUser.UID,
-				deleteErr,
-			)
-		}
-		return nil, fmt.Errorf("service: complete registration: %w", err)
-	}
-
-	return domainUserFromRepo(row), nil
-}
-
-// CreateInvitedUser inserts (or reuses) an invited user using email/role without creating Firebase credentials.
-func (s *UserService) CreateInvitedUser(ctx context.Context, email string, role int) (*domain.User, error) {
+// CreateProvisionedUser creates Firebase credentials with DefaultUserPassword and a DB user row.
+func (s *UserService) CreateProvisionedUser(ctx context.Context, email string, role int) (*domain.User, error) {
 	email = strings.TrimSpace(email)
 	if email == "" {
 		return nil, fmt.Errorf("%w: email is required", ErrValidation)
@@ -425,26 +301,83 @@ func (s *UserService) CreateInvitedUser(ctx context.Context, email string, role 
 
 	existing, err := s.repo.UserByEmail(ctx, email)
 	if err != nil && !errors.Is(err, repository.ErrUserNotFound) {
-		return nil, fmt.Errorf("service: find invited user: %w", err)
+		return nil, fmt.Errorf("service: find user by email: %w", err)
 	}
 	if err == nil && strings.TrimSpace(existing.UID) != "" {
 		return nil, fmt.Errorf("%w: user is already registered", ErrAlreadyRegistered)
 	}
-	if errors.Is(err, repository.ErrUserNotFound) {
-		if err := s.repo.CreateUserIfAbsent(ctx, email, role); err != nil {
-			return nil, fmt.Errorf("service: create invited user: %w", err)
-		}
-		existing, err = s.repo.UserByEmail(ctx, email)
+
+	params := (&firebaseauth.UserToCreate{}).
+		Email(email).
+		EmailVerified(false).
+		Disabled(false).
+		Password(DefaultUserPassword)
+
+	fbUser, err := s.fb.CreateUser(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("service: firebase create user: %w", err)
+	}
+
+	var row *repository.User
+	if existing != nil && strings.TrimSpace(existing.UID) == "" {
+		row, err = s.repo.AttachFirebaseUID(ctx, existing.ID, fbUser.UID, role)
 		if err != nil {
-			return nil, fmt.Errorf("service: fetch invited user after create: %w", err)
+			_ = s.fb.DeleteUser(ctx, fbUser.UID)
+			return nil, fmt.Errorf("service: attach firebase uid: %w", err)
+		}
+	} else {
+		row, err = s.repo.CreateUser(ctx, repository.CreateUserInput{
+			Email:                  email,
+			UID:                    fbUser.UID,
+			Role:                   role,
+			Registered:             true,
+			DefaultPasswordChanged: false,
+		})
+		if err != nil {
+			_ = s.fb.DeleteUser(ctx, fbUser.UID)
+			return nil, fmt.Errorf("service: create provisioned user: %w", err)
 		}
 	}
-	return domainUserFromRepo(existing), nil
+
+	return domainUserFromRepo(row), nil
 }
 
-// firebaseDefaultPassword is a provisional password for new Firebase Email/Password users.
-// Replace with a secure random value or delegated auth before production.
-const firebaseDefaultPassword = "temp-password"
+// ChangePasswordForIDToken updates the authenticated user's Firebase password and clears the
+// default-password requirement.
+func (s *UserService) ChangePasswordForIDToken(ctx context.Context, idToken, newPassword string) (*domain.User, error) {
+	idToken = strings.TrimSpace(idToken)
+	newPassword = strings.TrimSpace(newPassword)
+	if idToken == "" {
+		return nil, fmt.Errorf("%w: id token required", ErrValidation)
+	}
+	if newPassword == "" {
+		return nil, fmt.Errorf("%w: password is required", ErrValidation)
+	}
+	if len(newPassword) < minUserPasswordLen {
+		return nil, fmt.Errorf("%w: password must be at least %d characters", ErrValidation, minUserPasswordLen)
+	}
+	if newPassword == DefaultUserPassword {
+		return nil, fmt.Errorf("%w: choose a password different from the temporary default", ErrValidation)
+	}
+
+	u, err := s.UserForIDToken(ctx, idToken)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(u.UID) == "" {
+		return nil, fmt.Errorf("%w", ErrUserNotFound)
+	}
+
+	params := (&firebaseauth.UserToUpdate{}).Password(newPassword)
+	if _, err := s.fb.UpdateUser(ctx, u.UID, params); err != nil {
+		return nil, fmt.Errorf("service: firebase update password: %w", err)
+	}
+	if err := s.repo.MarkDefaultPasswordChanged(ctx, u.ID); err != nil {
+		return nil, fmt.Errorf("service: mark default password changed: %w", err)
+	}
+	u.DefaultPasswordChanged = true
+	return u, nil
+}
 
 func firebaseParamsFromRow(email, uid string, username *string) *firebaseauth.UserToCreate {
 	p := (&firebaseauth.UserToCreate{}).
@@ -452,7 +385,7 @@ func firebaseParamsFromRow(email, uid string, username *string) *firebaseauth.Us
 		Email(email).
 		EmailVerified(false).
 		Disabled(false).
-		Password(firebaseDefaultPassword)
+		Password(DefaultUserPassword)
 	if username != nil {
 		n := strings.TrimSpace(*username)
 		if n != "" {
@@ -465,20 +398,14 @@ func firebaseParamsFromRow(email, uid string, username *string) *firebaseauth.Us
 func domainUserFromRepo(u *repository.User) *domain.User {
 	r := domain.Role(u.Role)
 	return &domain.User{
-		ID:        u.ID,
-		Email:     u.Email,
-		Username:  u.Username,
-		FirstName: u.FirstName,
-		LastName:  u.LastName,
-		UID:       u.UID,
-		Role:      &r,
-		CreatedAt: &u.CreatedAt,
+		ID:                     u.ID,
+		Email:                  u.Email,
+		Username:               u.Username,
+		FirstName:              u.FirstName,
+		LastName:               u.LastName,
+		UID:                    u.UID,
+		Role:                   &r,
+		CreatedAt:              &u.CreatedAt,
+		DefaultPasswordChanged: u.DefaultPasswordChanged,
 	}
-}
-
-func ptrStr(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }

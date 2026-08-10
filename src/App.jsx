@@ -1,8 +1,8 @@
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import Login from "./pages/Login";
-import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
-import InviteUser from "./pages/InviteUser";
+import CreateUser from "./pages/CreateUser";
+import ChangePassword from "./pages/ChangePassword";
 import { useCallback, useEffect, useState } from "react";
 
 function splitPath(searchPath) {
@@ -14,7 +14,7 @@ function splitPath(searchPath) {
 }
 
 function AppGate() {
-  const { user, loading, configured } = useAuth();
+  const { user, loading, configured, sessionProfile, sessionProfileLoading } = useAuth();
   const [path, setPath] = useState(() => window.location.pathname);
 
   useEffect(() => {
@@ -45,19 +45,23 @@ function AppGate() {
   }
 
   if (!user) {
-    if (path === "/register") {
-      return (
-        <Register
-          onSuccess={() => navigate("/announcements")}
-          onBackToLogin={() => navigate("/")}
-        />
-      );
-    }
     return <Login />;
   }
 
-  if (path === "/admin/invite-user") {
-    return <InviteUser onNavigate={navigate} />;
+  if (sessionProfileLoading && !sessionProfile) {
+    return (
+      <div className="bg-shell-light-fog flex min-h-screen items-center justify-center font-sans text-[#6b6080]">
+        <p>Loading…</p>
+      </div>
+    );
+  }
+
+  if (sessionProfile && sessionProfile.default_password_changed === false) {
+    return <ChangePassword />;
+  }
+
+  if (path === "/admin/create-user" || path === "/admin/invite-user") {
+    return <CreateUser onNavigate={navigate} />;
   }
 
   return <Dashboard onNavigate={navigate} />;

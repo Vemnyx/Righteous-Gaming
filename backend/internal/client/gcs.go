@@ -22,12 +22,10 @@ func AssetsPublicURL(objectPath string) string {
 
 // GCS is a Google Cloud Storage client using Application Default Credentials
 // (ADC). Use the same GCP project and service account (or
-// GOOGLE_APPLICATION_CREDENTIALS) as other server-side Google APIs: grant
-// *roles/storage.objectUser* (or objectAdmin) on the target bucket.
-//
-// This is separate from the Gmail client, which uses OAuth user refresh tokens;
-// GCS requires an identity that can call the Storage API (typically a
-// service account in the same project as the bucket).
+// GCS wraps Cloud Storage uploads for the righteous-assets bucket.
+// Uses Application Default Credentials (metadata on GCE, or
+// GOOGLE_APPLICATION_CREDENTIALS). Grant roles/storage.objectUser (or
+// objectAdmin) on the target bucket to the runtime service account.
 type GCS struct {
 	client *storage.Client
 }

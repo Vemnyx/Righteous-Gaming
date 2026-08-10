@@ -108,6 +108,9 @@ export function AuthProvider({ children }) {
       if (patch.username !== undefined) next.username = patch.username;
       if (patch.first_name !== undefined) next.first_name = patch.first_name;
       if (patch.last_name !== undefined) next.last_name = patch.last_name;
+      if (patch.default_password_changed !== undefined) {
+        next.default_password_changed = patch.default_password_changed === true;
+      }
       writeSessionProfile(next);
       return next;
     });

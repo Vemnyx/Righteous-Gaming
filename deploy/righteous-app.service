@@ -14,10 +14,6 @@ RestartSec=5
 Environment=PORT=8080
 Environment=DATABASE_URL_SECRET=projects/project-28f6d1d8-e4cd-4908-9d7/secrets/database_url/versions/latest
 Environment=FIREBASE_PROJECT_ID=project-28f6d1d8-e4cd-4908-9d7
-Environment=GMAIL_CLIENT_ID=926279577310-9p5kre8f7htbcvu8r46kei6c5bhleql4.apps.googleusercontent.com
-Environment=GMAIL_CLIENT_SECRET=projects/project-28f6d1d8-e4cd-4908-9d7/secrets/gmail_client_secret/versions/latest
-Environment=GMAIL_REFRESH_TOKEN=projects/project-28f6d1d8-e4cd-4908-9d7/secrets/refresh_token/versions/latest
-Environment=GMAIL_SENDERER_EMAIL=teamrighteousgaming@gmail.com
 
 # DataImpulse residential proxy for FabTCG scraping (password in Secret Manager).
 Environment=FABTCG_PROXY_HOST=gw.dataimpulse.com

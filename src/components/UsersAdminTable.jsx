@@ -13,9 +13,9 @@ function formatDateTime(iso) {
 }
 
 /**
- * @param {{ isLight: boolean, active: boolean, onInviteUser?: () => void }} props
+ * @param {{ isLight: boolean, active: boolean, onCreateUser?: () => void }} props
  */
-export function UsersAdminTable({ isLight, active, onInviteUser }) {
+export function UsersAdminTable({ isLight, active, onCreateUser }) {
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
@@ -75,16 +75,16 @@ export function UsersAdminTable({ isLight, active, onInviteUser }) {
   const tableHeadBorder = isLight ? "border-white/12" : "border-white/[0.20]";
   const tableRowBorder = isLight ? "border-white/[0.08]" : "border-white/[0.12]";
 
-  const inviteBtn =
+  const createBtn =
     "rounded-lg border border-white/[0.22] bg-gradient-to-br from-[#7b4cb8] to-[#5a2f8f] px-4 py-2 text-[0.8125rem] font-semibold text-white shadow-[0_3px_14px_rgba(90,47,143,0.38)] hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55";
 
   return (
     <div className="flex w-full flex-1 flex-col gap-4 px-1 py-2 sm:px-2">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <h2 className="m-0 text-left text-lg font-semibold tracking-tight text-[#f4f0fa]">Users</h2>
-        {onInviteUser ? (
-          <button type="button" className={`shrink-0 self-start sm:self-auto ${inviteBtn}`} onClick={onInviteUser}>
-            Invite user
+        {onCreateUser ? (
+          <button type="button" className={`shrink-0 self-start sm:self-auto ${createBtn}`} onClick={onCreateUser}>
+            Create user
           </button>
         ) : null}
       </div>
@@ -115,20 +115,21 @@ export function UsersAdminTable({ isLight, active, onInviteUser }) {
               <th className="px-3 py-2.5 font-semibold sm:px-4">Username</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">UID</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Role</th>
-              <th className="px-3 py-2.5 font-semibold sm:px-4">Invite Sent At</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Created At</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Registered At</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Password</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-[#f4f0fa]/55">
+                <td colSpan={8} className="px-4 py-10 text-center text-[#f4f0fa]/55">
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-[#f4f0fa]/55">
+                <td colSpan={8} className="px-4 py-10 text-center text-[#f4f0fa]/55">
                   No users found.
                 </td>
               </tr>
@@ -153,10 +154,13 @@ export function UsersAdminTable({ isLight, active, onInviteUser }) {
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 sm:px-4">{roleLabel(row.role)}</td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-[0.75rem] text-[#f4f0fa]/75 sm:px-4">
-                    {formatDateTime(row.invite_sent_at)}
+                    {formatDateTime(row.created_at)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 text-[0.75rem] text-[#f4f0fa]/75 sm:px-4">
                     {formatDateTime(row.registered_at)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-[0.75rem] text-[#f4f0fa]/75 sm:px-4">
+                    {row.default_password_changed ? "Updated" : "Temporary"}
                   </td>
                 </tr>
               ))

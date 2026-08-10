@@ -57,15 +57,16 @@ type UserSettings struct {
 // For create requests, omit "role" or send null to default to member (RoleMember).
 // Using *Role allows omit vs zero (which would otherwise imply RoleAdmin).
 type User struct {
-	ID        int        `json:"id,omitempty"`
-	Email     string     `json:"email"`
-	Username  *string    `json:"username,omitempty"`
-	FirstName *string    `json:"first_name,omitempty"`
-	LastName  *string    `json:"last_name,omitempty"`
-	UID       string     `json:"uid"`
-	Role      *Role      `json:"role,omitempty"`
-	CreatedAt *time.Time `json:"created_at,omitempty"`
-	Settings  UserSettings `json:"settings"`
+	ID                     int          `json:"id,omitempty"`
+	Email                  string       `json:"email"`
+	Username               *string      `json:"username,omitempty"`
+	FirstName              *string      `json:"first_name,omitempty"`
+	LastName               *string      `json:"last_name,omitempty"`
+	UID                    string       `json:"uid"`
+	Role                   *Role        `json:"role,omitempty"`
+	CreatedAt              *time.Time   `json:"created_at,omitempty"`
+	DefaultPasswordChanged bool         `json:"default_password_changed"`
+	Settings               UserSettings `json:"settings"`
 }
 
 // UserMeSettings is the response shape for GET /api/me/settings.

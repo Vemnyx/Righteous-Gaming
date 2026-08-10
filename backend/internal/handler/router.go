@@ -12,7 +12,6 @@ import (
 func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient *scrape.Client) http.Handler {
 	mux := http.NewServeMux()
 	uh := &userHTTP{svc: userSvc, app: application}
-	mh := &mailHTTP{app: application}
 	ch := &catalogHTTP{app: application, svc: userSvc}
 	rh := &cardRatingsHTTP{app: application, svc: userSvc}
 	upload := &uploadHTTP{app: application, svc: userSvc}
@@ -23,7 +22,6 @@ func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient 
 	eh := &eventsHTTP{app: application, svc: userSvc, scrape: scrapeClient}
 
 	mux.HandleFunc("POST /api/users", uh.createUser)
-	mux.HandleFunc("POST /api/complete-registration", uh.completeRegistration)
 	mux.HandleFunc("GET /api/session/me", uh.sessionMe)
 	mux.HandleFunc("GET /api/me/settings", uh.getMySettings)
 	mux.HandleFunc("POST /api/me/settings", uh.saveMySettings)
@@ -31,6 +29,8 @@ func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient 
 	mux.HandleFunc("GET /api/me/profile", uh.getMyProfile)
 	mux.HandleFunc("POST /api/me/profile", uh.saveMyProfile)
 	mux.HandleFunc("PATCH /api/me/profile", uh.saveMyProfile)
+	mux.HandleFunc("POST /api/me/change-password", uh.changePassword)
+	mux.HandleFunc("PATCH /api/me/change-password", uh.changePassword)
 	mux.HandleFunc("GET /api/deck-sources", dh.listDeckSources)
 	mux.HandleFunc("POST /api/deck-sources", dh.createDeckSource)
 	mux.HandleFunc("GET /api/me/decks", dh.listMyDecks)
@@ -60,10 +60,8 @@ func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient 
 	mux.HandleFunc("PATCH /api/card-raters/active/complete", rh.completeActiveCardRater)
 	mux.HandleFunc("PATCH /api/card-raters/{id}/reopen", rh.reopenCardRater)
 	mux.HandleFunc("DELETE /api/card-raters/{id}", rh.deleteCardRater)
-	mux.HandleFunc("GET /api/registration", uh.registrationByCode)
 	mux.HandleFunc("POST /api/admin/user/register", uh.adminRegisterUser)
 	mux.HandleFunc("GET /api/admin/users", uh.adminListUsers)
-	mux.HandleFunc("POST /api/send-email", mh.sendEmail)
 
 	mux.HandleFunc("GET /api/sets", ch.listSets)
 	mux.HandleFunc("GET /api/sets/{id}", ch.getSet)
