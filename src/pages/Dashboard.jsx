@@ -25,7 +25,7 @@ import { UserAccountMenu } from "../components/UserAccountMenu";
 import { UserSettings } from "../components/UserSettings";
 import { UserProfile } from "../components/UserProfile";
 import { sessionProfileDisplayName } from "../auth/sessionProfile";
-import { canAccessCardRaterResource, isAdminRole } from "../constants/roles";
+import { canAccessCardRaterResource, canAccessData, isAdminRole } from "../constants/roles";
 
 /** Persisted before opening Invite User so Back restores the dashboard URL (e.g. `/admin/users`). */
 const SESSION_INVITE_RETURN_KEY = "rg-dashboard-return-url";
@@ -885,12 +885,13 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
 }
 
 /**
- * Admin tab requires admin (`role === 0`). Omit `requiresAdmin` for member-visible tabs.
- * @typedef {{ id: string, label: string, requiresAdmin?: boolean }} DashboardTabSpec
+ * Admin tab requires admin (`role === 0`). Data tab requires data access.
+ * Omit role flags for tabs visible to every signed-in user.
+ * @typedef {{ id: string, label: string, requiresAdmin?: boolean, requiresDataAccess?: boolean }} DashboardTabSpec
  */
 const ALL_TABS = [
   { id: "announcements", label: "Announcements" },
-  { id: "data", label: "Data" },
+  { id: "data", label: "Data", requiresDataAccess: true },
   { id: "resources", label: "Resources" },
   { id: ADMIN_TAB_ID, label: "Admin", requiresAdmin: true },
 ];
@@ -987,8 +988,8 @@ const resourcesMenuItemActiveDark =
 const resourcesMenuItemActiveLight =
   "border border-[rgba(152,117,207,0.85)] bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] text-white shadow-[0_2px_14px_rgb(103_61_154/0.35)]";
 
-/** @param {{ isLight: boolean, onOpenData: () => void }} props */
-function GuestCardRaterNotice({ isLight, onOpenData }) {
+/** @param {{ isLight: boolean, canOpenData: boolean, onOpenData: () => void }} props */
+function CardRaterBlockedNotice({ isLight, canOpenData, onOpenData }) {
   return (
     <div
       className={`mx-auto flex max-w-lg flex-col items-center gap-4 rounded-xl border px-6 py-10 text-center ${
@@ -997,17 +998,25 @@ function GuestCardRaterNotice({ isLight, onOpenData }) {
     >
       <h2 className="m-0 text-lg font-semibold text-[#f4f0fa]">Card Rater unavailable</h2>
       <p className="m-0 text-[0.9rem] leading-relaxed text-[#f4f0fa]/70">
-        Guest accounts can browse completed card rating results under{" "}
-        <span className="text-[#f4f0fa]/90">Data → Card Ratings</span>, but cannot start or manage
-        rating sessions.
+        {canOpenData ? (
+          <>
+            Your account can browse completed card rating results under{" "}
+            <span className="text-[#f4f0fa]/90">Data → Card Ratings</span>, but cannot start or manage
+            rating sessions.
+          </>
+        ) : (
+          <>Your account cannot start or manage card rating sessions.</>
+        )}
       </p>
-      <button
-        type="button"
-        className="rounded-lg border border-white/25 bg-purple-900/45 px-4 py-2.5 text-[0.875rem] font-semibold text-white hover:bg-purple-900/60"
-        onClick={onOpenData}
-      >
-        Open Card Ratings
-      </button>
+      {canOpenData ? (
+        <button
+          type="button"
+          className="rounded-lg border border-white/25 bg-purple-900/45 px-4 py-2.5 text-[0.875rem] font-semibold text-white hover:bg-purple-900/60"
+          onClick={onOpenData}
+        >
+          Open Card Ratings
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -1084,10 +1093,15 @@ export default function Dashboard({ onNavigate }) {
 
   const isAdmin = isAdminRole(sessionProfile?.role);
   const canUseCardRaterResource = canAccessCardRaterResource(sessionProfile?.role);
+  const canUseDataTab = canAccessData(sessionProfile?.role);
 
   const tabs = useMemo(() => {
-    return ALL_TABS.filter((t) => !t.requiresAdmin || isAdmin);
-  }, [isAdmin]);
+    return ALL_TABS.filter((t) => {
+      if (t.requiresAdmin && !isAdmin) return false;
+      if (t.requiresDataAccess && !canUseDataTab) return false;
+      return true;
+    });
+  }, [isAdmin, canUseDataTab]);
 
   const visibleResourceSubLinks = useMemo(() => {
     if (canUseCardRaterResource) return RESOURCE_SUB_LINKS;
@@ -1566,7 +1580,7 @@ export default function Dashboard({ onNavigate }) {
     (resourcesChild === "card-rater-play" ||
       (resourcesChild === "card-rater" && cardRaterPlayAtRoot));
 
-  const showGuestCardRaterBlocked =
+  const showCardRaterBlocked =
     !canUseCardRaterResource &&
     (resourcesChild === "card-rater" || resourcesChild === "card-rater-play");
 
@@ -2093,8 +2107,12 @@ export default function Dashboard({ onNavigate }) {
                   active={activeTab === RESOURCES_TAB_ID && resourcesChild === "events"}
                   onOpenEvent={openEventDetail}
                 />
-              ) : showGuestCardRaterBlocked ? (
-                <GuestCardRaterNotice isLight={isLight} onOpenData={() => goDataSub("card-ratings")} />
+              ) : showCardRaterBlocked ? (
+                <CardRaterBlockedNotice
+                  isLight={isLight}
+                  canOpenData={canUseDataTab}
+                  onOpenData={() => goDataSub("card-ratings")}
+                />
               ) : showCardRankerResources ? (
                 <CardRanker
                   isLight={isLight}

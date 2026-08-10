@@ -6,17 +6,56 @@ func TestRoleGuestPermissions(t *testing.T) {
 	if RoleGuest.CanWriteContent() {
 		t.Fatal("guest should not write content")
 	}
-	if !RoleGuest.CanBrowseAllDecks() {
-		t.Fatal("guest should browse all decks")
+	if RoleGuest.CanWriteDecksAndRecordings() {
+		t.Fatal("guest should not write decks or recordings")
 	}
+	if RoleGuest.CanBrowseAllDecks() {
+		t.Fatal("guest should not browse all decks")
+	}
+	if RoleGuest.CanAccessData() {
+		t.Fatal("guest should not access data")
+	}
+	if RoleGuest.CanAccessCardRaterResource() {
+		t.Fatal("guest should not access card rater resource")
+	}
+	if !RoleGuest.Valid() {
+		t.Fatal("guest should be a valid role")
+	}
+	if RoleGuest.CountsForTeamSnapshot() {
+		t.Fatal("guest should not count for team snapshot")
+	}
+}
+
+func TestRolePlayTesterPermissions(t *testing.T) {
+	if RolePlayTester.CanWriteContent() {
+		t.Fatal("play tester should not write general content")
+	}
+	if !RolePlayTester.CanWriteDecksAndRecordings() {
+		t.Fatal("play tester should write decks and recordings")
+	}
+	if !RolePlayTester.CanBrowseAllDecks() {
+		t.Fatal("play tester should browse all decks")
+	}
+	if !RolePlayTester.CanAccessData() {
+		t.Fatal("play tester should access data")
+	}
+	if RolePlayTester.CanAccessCardRaterResource() {
+		t.Fatal("play tester should not access card rater resource")
+	}
+	if !RolePlayTester.Valid() {
+		t.Fatal("play tester should be a valid role")
+	}
+	if RolePlayTester.CountsForTeamSnapshot() {
+		t.Fatal("play tester should not count for team snapshot")
+	}
+}
+
+func TestRoleMemberAndAdminPermissions(t *testing.T) {
 	if RoleMember.CanBrowseAllDecks() {
 		t.Fatal("member should not browse all decks")
 	}
 	if !RoleAdmin.CanBrowseAllDecks() {
 		t.Fatal("admin should browse all decks")
-	}
-	if RoleGuest.CanAccessCardRaterResource() {
-		t.Fatal("guest should not access card rater resource")
 	}
 	if !RoleMember.CanWriteContent() {
 		t.Fatal("member should write content")
@@ -24,11 +63,17 @@ func TestRoleGuestPermissions(t *testing.T) {
 	if !RoleAdmin.CanWriteContent() {
 		t.Fatal("admin should write content")
 	}
-	if !RoleGuest.Valid() {
-		t.Fatal("guest should be a valid role")
+	if !RoleMember.CanWriteDecksAndRecordings() {
+		t.Fatal("member should write decks and recordings")
 	}
-	if RoleGuest.CountsForTeamSnapshot() {
-		t.Fatal("guest should not count for team snapshot")
+	if !RoleAdmin.CanWriteDecksAndRecordings() {
+		t.Fatal("admin should write decks and recordings")
+	}
+	if !RoleMember.CanAccessData() {
+		t.Fatal("member should access data")
+	}
+	if !RoleAdmin.CanAccessData() {
+		t.Fatal("admin should access data")
 	}
 	if !RoleMember.CountsForTeamSnapshot() {
 		t.Fatal("member should count for team snapshot")

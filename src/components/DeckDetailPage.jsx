@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
-import { canWriteContent } from "../constants/roles";
+import { canWriteDecksAndRecordings } from "../constants/roles";
 import { deckHeroLabel } from "../utils/deckHeroLabel";
 import { deckDisplayName } from "../utils/deckDisplayName";
 import { deckFormatColumnLabel } from "../utils/deckTableFilters";
@@ -201,7 +201,7 @@ export function DeckDetailPage({ isLight, deckId, active, onOpenCard, onDeckDele
   }, [meta]);
 
   const canDelete =
-    canWriteContent(sessionProfile?.role) &&
+    canWriteDecksAndRecordings(sessionProfile?.role) &&
     meta != null &&
     myUserId != null &&
     meta.user_id === myUserId;

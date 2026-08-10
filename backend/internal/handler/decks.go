@@ -379,7 +379,7 @@ func (h *decksHTTP) deleteMyDeck(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !requireWriteAccess(w, u) {
+	if !requireDecksAndRecordingsWriteAccess(w, u) {
 		return
 	}
 
@@ -411,7 +411,7 @@ func (h *decksHTTP) importFabraryDeck(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !requireWriteAccess(w, u) {
+	if !requireDecksAndRecordingsWriteAccess(w, u) {
 		return
 	}
 

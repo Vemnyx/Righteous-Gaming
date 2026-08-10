@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
-import { canWriteContent } from "../constants/roles";
+import { canWriteContent, canWriteDecksAndRecordings } from "../constants/roles";
 import { deckHeroLabel } from "../utils/deckHeroLabel";
 import { deckDisplayName } from "../utils/deckDisplayName";
 import { deckSourceLabel } from "../utils/deckSourceLabel";
@@ -97,7 +97,8 @@ function parseApiError(errText) {
 export function DecksList({ isLight, active, onOpenDeck }) {
   const { user, sessionProfile } = useAuth();
   const isAdmin = Number(sessionProfile?.role) === 0;
-  const canWrite = canWriteContent(sessionProfile?.role);
+  const canWrite = canWriteDecksAndRecordings(sessionProfile?.role);
+  const canManageDeckSources = canWriteContent(sessionProfile?.role);
   const [rows, setRows] = useState(/** @type {DeckRow[]} */ ([]));
   const [sets, setSets] = useState(/** @type {{ id: number, name: string }[]} */ ([]));
   const [loading, setLoading] = useState(false);
@@ -751,7 +752,9 @@ export function DecksList({ isLight, active, onOpenDeck }) {
                         setImportSourceId(v);
                       }}
                     >
-                      <option value={CREATE_SOURCE_VALUE}>Create New Source</option>
+                      {canManageDeckSources ? (
+                        <option value={CREATE_SOURCE_VALUE}>Create New Source</option>
+                      ) : null}
                       {deckSources.map((s) => (
                         <option key={s.id} value={String(s.id)}>
                           {s.source}

@@ -3,19 +3,21 @@ package domain
 import "time"
 
 // Role identifies the user's role in the application (stored as integer in the database).
-// 0 = admin, 1 = member (default for new users), 2 = guest (read-only).
+// 0 = admin, 1 = member (default for new users), 2 = guest (events/resources view only),
+// 3 = play tester (data + decks/recordings; no card rating contributions).
 type Role int
 
 const (
-	RoleAdmin  Role = 0
-	RoleMember Role = 1
-	RoleGuest  Role = 2
+	RoleAdmin      Role = 0
+	RoleMember     Role = 1
+	RoleGuest      Role = 2
+	RolePlayTester Role = 3
 )
 
 // Valid reports whether r is a known role constant.
 func (r Role) Valid() bool {
 	switch r {
-	case RoleAdmin, RoleMember, RoleGuest:
+	case RoleAdmin, RoleMember, RoleGuest, RolePlayTester:
 		return true
 	default:
 		return false
@@ -28,6 +30,22 @@ func (u *User) CanWriteContent() bool {
 		return false
 	}
 	return u.Role.CanWriteContent()
+}
+
+// CanWriteDecksAndRecordings reports whether u may create or mutate decks and recordings.
+func (u *User) CanWriteDecksAndRecordings() bool {
+	if u == nil || u.Role == nil {
+		return false
+	}
+	return u.Role.CanWriteDecksAndRecordings()
+}
+
+// CanAccessData reports whether u may use Data-tab analytics endpoints.
+func (u *User) CanAccessData() bool {
+	if u == nil || u.Role == nil {
+		return false
+	}
+	return u.Role.CanAccessData()
 }
 
 // UserSettings holds per-user app preferences (from user_settings).

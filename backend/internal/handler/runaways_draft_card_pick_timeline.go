@@ -29,7 +29,11 @@ func (h *runawaysDraftHTTP) getRunawaysDraftCardPickTimeline(w http.ResponseWrit
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.sessionUser(w, r); !ok {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireDataAccess(w, u) {
 		return
 	}
 

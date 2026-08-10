@@ -281,7 +281,7 @@ func (h *recordingsHTTP) createRecording(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	if !requireWriteAccess(w, u) {
+	if !requireDecksAndRecordingsWriteAccess(w, u) {
 		return
 	}
 
@@ -420,7 +420,7 @@ func (h *recordingsHTTP) createRecordingComment(w http.ResponseWriter, r *http.R
 	if !ok {
 		return
 	}
-	if !requireWriteAccess(w, u) {
+	if !requireDecksAndRecordingsWriteAccess(w, u) {
 		return
 	}
 
@@ -466,7 +466,7 @@ func (h *recordingsHTTP) deleteRecording(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	if !requireWriteAccess(w, u) {
+	if !requireDecksAndRecordingsWriteAccess(w, u) {
 		return
 	}
 

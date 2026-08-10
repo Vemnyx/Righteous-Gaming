@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
-import { canWriteContent, isAdminRole } from "../constants/roles";
+import { canWriteDecksAndRecordings, isAdminRole } from "../constants/roles";
 import { CARD_FORMAT_NAMES } from "../constants/cardFormat";
 import { resolveRecordingPlayback, youtubeEmbedSrc } from "../utils/recordingMedia";
 
@@ -109,7 +109,7 @@ export function RecordingDetailPage({ isLight, recordingId, active, onBack, onRe
   const { user, sessionProfile } = useAuth();
   const myUserId = typeof sessionProfile?.id === "number" ? sessionProfile.id : null;
   const isAdmin = isAdminRole(sessionProfile?.role);
-  const canWrite = canWriteContent(sessionProfile?.role);
+  const canWrite = canWriteDecksAndRecordings(sessionProfile?.role);
   const [meta, setMeta] = useState(
     /** @type {{ id: number, user_id: number, url: string, label?: string | null, format: number, start_seconds?: number | null, created_at: string, owner_username?: string | null, owner_email?: string, first_hero_name?: string | null, first_hero_art_image_url?: string | null, second_hero_name?: string | null, second_hero_art_image_url?: string | null } | null} */ (
       null,

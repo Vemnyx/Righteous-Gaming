@@ -646,7 +646,11 @@ func (h *cardRatingsHTTP) listCardRaters(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.sessionUser(w, r); !ok {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireDataAccess(w, u) {
 		return
 	}
 	activeOnly := strings.TrimSpace(r.URL.Query().Get("active")) == "true"
@@ -836,7 +840,11 @@ func (h *cardRatingsHTTP) getCardRaterAnalytics(w http.ResponseWriter, r *http.R
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.sessionUser(w, r); !ok {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireDataAccess(w, u) {
 		return
 	}
 	idStr := strings.TrimSpace(r.PathValue("id"))
@@ -1158,7 +1166,11 @@ func (h *cardRatingsHTTP) getCardRaterCompare(w http.ResponseWriter, r *http.Req
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.sessionUser(w, r); !ok {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireDataAccess(w, u) {
 		return
 	}
 	idStr := strings.TrimSpace(r.PathValue("id"))
@@ -1253,7 +1265,11 @@ func (h *cardRatingsHTTP) getCardRaterCardRatingNotes(w http.ResponseWriter, r *
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.sessionUser(w, r); !ok {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireDataAccess(w, u) {
 		return
 	}
 	raterStr := strings.TrimSpace(r.PathValue("id"))
@@ -1302,7 +1318,11 @@ func (h *cardRatingsHTTP) getCardRaterCardSessionRatings(w http.ResponseWriter, 
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.sessionUser(w, r); !ok {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireDataAccess(w, u) {
 		return
 	}
 	raterStr := strings.TrimSpace(r.PathValue("id"))

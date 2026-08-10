@@ -58,7 +58,11 @@ func (h *runawaysDraftHTTP) getRunawaysDraftArchetypes(w http.ResponseWriter, r 
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.sessionUser(w, r); !ok {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireDataAccess(w, u) {
 		return
 	}
 

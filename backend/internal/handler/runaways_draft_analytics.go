@@ -161,7 +161,11 @@ func (h *runawaysDraftHTTP) getRunawaysDraftMeta(w http.ResponseWriter, r *http.
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.sessionUser(w, r); !ok {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireDataAccess(w, u) {
 		return
 	}
 
@@ -226,7 +230,11 @@ func (h *runawaysDraftHTTP) getRunawaysDraftAnalytics(w http.ResponseWriter, r *
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.sessionUser(w, r); !ok {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireDataAccess(w, u) {
 		return
 	}
 
@@ -278,7 +286,11 @@ func (h *runawaysDraftHTTP) listRunawaysDraftDecks(w http.ResponseWriter, r *htt
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.sessionUser(w, r); !ok {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireDataAccess(w, u) {
 		return
 	}
 
@@ -313,7 +325,11 @@ func (h *runawaysDraftHTTP) getRunawaysDraftDeck(w http.ResponseWriter, r *http.
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.sessionUser(w, r); !ok {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireDataAccess(w, u) {
 		return
 	}
 

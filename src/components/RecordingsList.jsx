@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
-import { canWriteContent } from "../constants/roles";
+import { canWriteDecksAndRecordings } from "../constants/roles";
 import { CARD_FORMAT_NAMES, isValidCardFormatId } from "../constants/cardFormat";
 import { extFromFilename, MAX_UPLOAD_SIZE_LABEL, uploadPublicAsset, uploadSizeError } from "../utils/uploadPublicAsset";
 import { youtubeVideoIdFromInput } from "../utils/youtube";
@@ -159,7 +159,7 @@ function RecordingRowHeroArt({ side, src, name }) {
 export function RecordingsList({ isLight, active, onOpenRecording }) {
   const { user, sessionProfile } = useAuth();
   const myUserId = typeof sessionProfile?.id === "number" ? sessionProfile.id : null;
-  const canWrite = canWriteContent(sessionProfile?.role);
+  const canWrite = canWriteDecksAndRecordings(sessionProfile?.role);
 
   const [rows, setRows] = useState(/** @type {RecordingRow[]} */ ([]));
   const [total, setTotal] = useState(0);
