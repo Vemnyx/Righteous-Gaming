@@ -222,6 +222,21 @@ func insertCardReturning(ctx context.Context, q cardQuerier, in CreateCardInput)
 			ImageURL: in.ImageURL,
 		}}
 	}
+	// Schema allows one printing per (card_id, set_code); keep the first of each set.
+	deduped := make([]CreateCardPrintingInput, 0, len(printings))
+	seenSet := make(map[string]struct{}, len(printings))
+	for _, p := range printings {
+		key := strings.ToLower(strings.TrimSpace(p.SetCode))
+		if key == "" {
+			continue
+		}
+		if _, ok := seenSet[key]; ok {
+			continue
+		}
+		seenSet[key] = struct{}{}
+		deduped = append(deduped, p)
+	}
+	printings = deduped
 	c.Printings = make([]CardPrinting, 0, len(printings))
 	for _, p := range printings {
 		var printingID int

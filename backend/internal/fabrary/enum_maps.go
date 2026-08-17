@@ -11,6 +11,7 @@ var fabSubtypeKeyToSmallint = map[string]int16{
 	"Landmark": 33, "Log": 34, "Lute": 35, "Legs": 36, "NonAttack": 37, "OffHand": 38, "Orb": 39, "Pistol": 40,
 	"PitFighter": 41, "Polearm": 42, "Quiver": 43, "Rock": 44, "Shuriken": 45, "Scepter": 46, "Scroll": 47,
 	"Scythe": 48, "Song": 49, "Staff": 50, "Sword": 51, "Trap": 52, "Wrench": 53, "Young": 54,
+	"Zombie": 55,
 }
 
 var fabTalentKeyToSmallint = map[string]int16{
@@ -60,4 +61,5 @@ var fabKeywordKeyToSmallint = map[string]int16{
 	"Starfall": 63, "Steal": 64, "Stealth": 65, "Surge": 66, "Suspense": 67, "Temper": 68, "Tower": 69,
 	"Transform": 70, "Transcend": 71, "Unlimited": 72, "Universal": 73, "Unfreeze": 74, "Unity": 75,
 	"Wager": 76, "Ward": 77, "WateryGrave": 78,
+	"Cure": 79, "Decay": 80, "Fragment": 81, "Incarnate": 82, "Traverse": 83, "Unique": 84, "Usurp": 85,
 }

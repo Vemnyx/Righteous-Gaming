@@ -59,9 +59,10 @@ export const CardSubtype = Object.freeze({
   Trap: 52,
   Wrench: 53,
   Young: 54,
+  Zombie: 55,
 });
 
-/** Legacy string token for each ID 0..54 (`Subtype` enum values in TypeScript). */
+/** Legacy string token for each ID 0..55 (`Subtype` enum values in TypeScript). */
 export const CARD_SUBTYPE_TOKENS = Object.freeze([
   "1H",
   "2H",
@@ -118,6 +119,7 @@ export const CARD_SUBTYPE_TOKENS = Object.freeze([
   "Trap",
   "Wrench",
   "Young",
+  "Zombie",
 ]);
 
 /** @readonly */

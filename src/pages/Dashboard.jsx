@@ -21,11 +21,12 @@ import { DeckDetailPage } from "../components/DeckDetailPage";
 import { RecordingsList } from "../components/RecordingsList";
 import { RecordingDetailPage } from "../components/RecordingDetailPage";
 import { SetsAdmin } from "../components/SetsAdmin";
+import { PlayTesting } from "../components/PlayTesting";
 import { UserAccountMenu } from "../components/UserAccountMenu";
 import { UserSettings } from "../components/UserSettings";
 import { UserProfile } from "../components/UserProfile";
 import { sessionProfileDisplayName } from "../auth/sessionProfile";
-import { canAccessCardRaterResource, canAccessData, isAdminRole } from "../constants/roles";
+import { canAccessCardRaterResource, canAccessData, canAccessPlayTesting, isAdminRole } from "../constants/roles";
 
 /** Persisted before opening Create User so Back restores the dashboard URL (e.g. `/admin/users`). */
 const SESSION_CREATE_USER_RETURN_KEY = "rg-dashboard-return-url";
@@ -58,6 +59,7 @@ const RESOURCE_SUB_LINKS = [
   { segment: "recordings", label: "Recordings", path: "/resources/recordings" },
   { segment: "events", label: "Events", path: "/resources/events" },
   { segment: "card-rater", label: "Card Rater", path: "/resources/card-rater" },
+  { segment: "play-testing", label: "Play Testing", path: "/resources/play-testing" },
 ];
 
 /** @type {ResourceSubLink[]} */
@@ -159,7 +161,8 @@ function buildDashboardPathname(
       resourcesChild === "recordings" ||
       resourcesChild === "events" ||
       resourcesChild === "card-rater" ||
-      resourcesChild === "card-rater-play"
+      resourcesChild === "card-rater-play" ||
+      resourcesChild === "play-testing"
         ? resourcesChild
         : DEFAULT_RESOURCES_SEGMENT;
     if (
@@ -493,6 +496,18 @@ function parseDashboardPathname(pathname) {
         };
       }
       return { kind: "invalid" };
+    }
+    if (b === "play-testing") {
+      if (c !== undefined || rest.length > 0) return { kind: "invalid" };
+      return {
+        kind: "ok",
+        tabId: RESOURCES_TAB_ID,
+        resourcesChild: "play-testing",
+        resourcesCardIdentifier: null,
+        resourcesCardRaterId: null,
+        adminChild: null,
+        adminAnnouncementForm: null,
+      };
     }
     return { kind: "invalid" };
   }
@@ -1094,6 +1109,7 @@ export default function Dashboard({ onNavigate }) {
   const isAdmin = isAdminRole(sessionProfile?.role);
   const canUseCardRaterResource = canAccessCardRaterResource(sessionProfile?.role);
   const canUseDataTab = canAccessData(sessionProfile?.role);
+  const canUsePlayTesting = canAccessPlayTesting(sessionProfile?.role);
 
   const tabs = useMemo(() => {
     return ALL_TABS.filter((t) => {
@@ -1104,9 +1120,12 @@ export default function Dashboard({ onNavigate }) {
   }, [isAdmin, canUseDataTab]);
 
   const visibleResourceSubLinks = useMemo(() => {
-    if (canUseCardRaterResource) return RESOURCE_SUB_LINKS;
-    return RESOURCE_SUB_LINKS.filter((l) => l.segment !== "card-rater");
-  }, [canUseCardRaterResource]);
+    return RESOURCE_SUB_LINKS.filter((l) => {
+      if (l.segment === "card-rater" && !canUseCardRaterResource) return false;
+      if (l.segment === "play-testing" && !canUsePlayTesting) return false;
+      return true;
+    });
+  }, [canUseCardRaterResource, canUsePlayTesting]);
 
   const resourcesTabLabel = useMemo(() => {
     if (activeTab !== RESOURCES_TAB_ID) {
@@ -1583,6 +1602,13 @@ export default function Dashboard({ onNavigate }) {
   const showCardRaterBlocked =
     !canUseCardRaterResource &&
     (resourcesChild === "card-rater" || resourcesChild === "card-rater-play");
+
+  useEffect(() => {
+    if (resourcesChild !== "play-testing") return;
+    if (canUsePlayTesting) return;
+    setResourcesChild(DEFAULT_RESOURCES_SEGMENT);
+    replaceDashboardUrl(RESOURCES_TAB_ID, DEFAULT_RESOURCES_SEGMENT, null, null, null, null);
+  }, [resourcesChild, canUsePlayTesting]);
 
   return (
     <div className={isLight ? shellLight : shellDark}>
@@ -2107,6 +2133,20 @@ export default function Dashboard({ onNavigate }) {
                   active={activeTab === RESOURCES_TAB_ID && resourcesChild === "events"}
                   onOpenEvent={openEventDetail}
                 />
+              ) : resourcesChild === "play-testing" ? (
+                canUsePlayTesting ? (
+                  <PlayTesting
+                    isLight={isLight}
+                    active={activeTab === RESOURCES_TAB_ID && resourcesChild === "play-testing"}
+                  />
+                ) : (
+                  <div
+                    className="flex min-h-[min(40vh,18rem)] flex-1 flex-col items-center justify-center px-4 text-center"
+                    aria-label="Play Testing"
+                  >
+                    <p className="text-[0.9rem] text-[#f4f0fa]/65">Play Testing is admin-only for now.</p>
+                  </div>
+                )
               ) : showCardRaterBlocked ? (
                 <CardRaterBlockedNotice
                   isLight={isLight}

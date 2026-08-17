@@ -48,6 +48,12 @@ export function canAccessData(role) {
   return n === ROLE_ADMIN || n === ROLE_MEMBER || n === ROLE_PLAY_TESTER;
 }
 
+/** Play Testing resource is admin-only for now. */
+/** @param {number | null | undefined} role */
+export function canAccessPlayTesting(role) {
+  return isAdminRole(role);
+}
+
 /** @param {number | null | undefined} role */
 export function roleLabel(role) {
   if (Number(role) === ROLE_ADMIN) return "Admin";

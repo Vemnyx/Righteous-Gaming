@@ -87,6 +87,12 @@ const (
 	CardHeroYoji
 	CardHeroZen
 	CardHeroZyggy
+	CardHeroBaalghor
+	CardHeroKilljoy
+	CardHeroMalice
+	CardHeroMortimer
+	CardHeroViserai2
+	CardHeroZane
 )
 
 var cardHeroNames = map[CardHero]string{
@@ -170,6 +176,12 @@ var cardHeroNames = map[CardHero]string{
 	CardHeroYoji:        "Yoji",
 	CardHeroZen:         "Zen",
 	CardHeroZyggy:       "Zyggy",
+	CardHeroBaalghor:    "Baalghor",
+	CardHeroKilljoy:     "Killjoy",
+	CardHeroMalice:      "Malice",
+	CardHeroMortimer:    "Mortimer",
+	CardHeroViserai2:    "Viserai2",
+	CardHeroZane:        "Zane",
 }
 
 // Valid reports whether h is a defined CardHero constant.
@@ -269,5 +281,11 @@ func CardHeroes() []CardHero {
 		CardHeroYoji,
 		CardHeroZen,
 		CardHeroZyggy,
+		CardHeroBaalghor,
+		CardHeroKilljoy,
+		CardHeroMalice,
+		CardHeroMortimer,
+		CardHeroViserai2,
+		CardHeroZane,
 	}
 }

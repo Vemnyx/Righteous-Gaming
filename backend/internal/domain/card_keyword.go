@@ -86,6 +86,13 @@ const (
 	CardKeywordWager
 	CardKeywordWard
 	CardKeywordWateryGrave
+	CardKeywordCure
+	CardKeywordDecay
+	CardKeywordFragment
+	CardKeywordIncarnate
+	CardKeywordTraverse
+	CardKeywordUnique
+	CardKeywordUsurp
 )
 
 var cardKeywordNames = map[CardKeyword]string{
@@ -168,6 +175,13 @@ var cardKeywordNames = map[CardKeyword]string{
 	CardKeywordWager:          "Wager",
 	CardKeywordWard:           "Ward",
 	CardKeywordWateryGrave:    "Watery Grave",
+	CardKeywordCure:           "Cure",
+	CardKeywordDecay:          "Decay",
+	CardKeywordFragment:       "Fragment",
+	CardKeywordIncarnate:      "Incarnate",
+	CardKeywordTraverse:       "Traverse",
+	CardKeywordUnique:         "Unique",
+	CardKeywordUsurp:          "Usurp",
 }
 
 // Valid reports whether k is a defined CardKeyword constant.
@@ -266,5 +280,12 @@ func CardKeywords() []CardKeyword {
 		CardKeywordWager,
 		CardKeywordWard,
 		CardKeywordWateryGrave,
+		CardKeywordCure,
+		CardKeywordDecay,
+		CardKeywordFragment,
+		CardKeywordIncarnate,
+		CardKeywordTraverse,
+		CardKeywordUnique,
+		CardKeywordUsurp,
 	}
 }

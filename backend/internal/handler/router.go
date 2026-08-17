@@ -20,6 +20,7 @@ func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient 
 	rdh := &runawaysDraftHTTP{app: application, svc: userSvc}
 	rec := &recordingsHTTP{app: application, svc: userSvc}
 	eh := &eventsHTTP{app: application, svc: userSvc, scrape: scrapeClient}
+	pth := &playTestingHTTP{app: application, svc: userSvc}
 
 	mux.HandleFunc("POST /api/users", uh.createUser)
 	mux.HandleFunc("GET /api/session/me", uh.sessionMe)
@@ -104,6 +105,10 @@ func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient 
 	mux.HandleFunc("GET /api/admin/events", eh.adminListEvents)
 	mux.HandleFunc("POST /api/admin/events", eh.adminCreateEvent)
 	mux.HandleFunc("DELETE /api/admin/events/{id}", eh.adminDeleteEvent)
+
+	mux.HandleFunc("GET /api/play-testing/meta", pth.getMeta)
+	mux.HandleFunc("GET /api/play-testing/sessions", pth.listSessions)
+	mux.HandleFunc("POST /api/play-testing/sessions", pth.createSession)
 
 	return mux
 }

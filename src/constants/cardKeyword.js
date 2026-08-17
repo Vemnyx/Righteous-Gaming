@@ -82,9 +82,16 @@ export const CardKeyword = Object.freeze({
   Wager: 76,
   Ward: 77,
   WateryGrave: 78,
+  Cure: 79,
+  Decay: 80,
+  Fragment: 81,
+  Incarnate: 82,
+  Traverse: 83,
+  Unique: 84,
+  Usurp: 85,
 });
 
-/** Ordered display names for each ID 0..78. */
+/** Ordered display names for each ID 0..85. */
 export const CARD_KEYWORD_NAMES = Object.freeze([
   "Ambush",
   "Amp",
@@ -165,6 +172,13 @@ export const CARD_KEYWORD_NAMES = Object.freeze([
   "Wager",
   "Ward",
   "Watery Grave",
+  "Cure",
+  "Decay",
+  "Fragment",
+  "Incarnate",
+  "Traverse",
+  "Unique",
+  "Usurp",
 ]);
 
 /**

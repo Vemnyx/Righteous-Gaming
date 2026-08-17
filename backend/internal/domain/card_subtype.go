@@ -63,6 +63,7 @@ const (
 	CardSubtypeTrap
 	CardSubtypeWrench
 	CardSubtypeYoung
+	CardSubtypeZombie
 )
 
 var cardSubtypeNames = map[CardSubtype]string{
@@ -121,6 +122,7 @@ var cardSubtypeNames = map[CardSubtype]string{
 	CardSubtypeTrap:       "Trap",
 	CardSubtypeWrench:     "Wrench",
 	CardSubtypeYoung:      "Young",
+	CardSubtypeZombie:     "Zombie",
 }
 
 var cardSubtypeByToken map[string]CardSubtype
@@ -157,10 +159,10 @@ func CardSubtypeFromToken(tok string) (CardSubtype, bool) {
 	return sub, ok
 }
 
-// CardSubtypes returns IDs 0..CardSubtypeYoung in order.
+// CardSubtypes returns IDs 0..CardSubtypeZombie in order.
 func CardSubtypes() []CardSubtype {
 	out := make([]CardSubtype, 0, len(cardSubtypeNames))
-	for s := CardSubtype(0); s <= CardSubtypeYoung; s++ {
+	for s := CardSubtype(0); s <= CardSubtypeZombie; s++ {
 		out = append(out, s)
 	}
 	return out

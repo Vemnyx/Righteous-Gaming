@@ -4,7 +4,16 @@ import { useAuth } from "../auth/AuthContext";
 /** @typedef {{ id: number, name: string, code: string, image_url?: string | null }} CatalogSetRow */
 
 /**
- * Omens of the Third Age / Omen of the Third Age — fabrary sync is only offered for this set name.
+ * Sets that can sync from fabrary’s published latest-set TypeScript dump.
+ * Map normalized set name -> Release.* token used in that file.
+ */
+const FABRARY_LATEST_SET_SYNC = {
+  "omens of the third age": "Release.OmensOfTheThirdAge",
+  "omen of the third age": "Release.OmensOfTheThirdAge",
+  "usurp the shadow throne": "Release.UsurpTheShadowThrone",
+};
+
+/**
  * @param {CatalogSetRow} row
  */
 function rowShowsFabrarySync(row) {
@@ -12,7 +21,18 @@ function rowShowsFabrarySync(row) {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, " ");
-  return n === "omens of the third age" || n === "omen of the third age";
+  return Object.prototype.hasOwnProperty.call(FABRARY_LATEST_SET_SYNC, n);
+}
+
+/**
+ * @param {CatalogSetRow} row
+ */
+function fabraryReleaseTokenForSet(row) {
+  const n = String(row?.name ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+  return FABRARY_LATEST_SET_SYNC[n] || "";
 }
 
 /**
@@ -79,6 +99,8 @@ export function SetsAdmin({ isLight, active }) {
       try {
         const token = await user.getIdToken();
         const params = new URLSearchParams({ set_name: row.name });
+        const fabRelease = fabraryReleaseTokenForSet(row);
+        if (fabRelease) params.set("fab_release", fabRelease);
         const res = await fetch(`/api/admin/catalog/sync-fabrary-latest-set?${params.toString()}`, {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
@@ -144,10 +166,11 @@ export function SetsAdmin({ isLight, active }) {
         <div>
           <h2 className="m-0 text-left text-lg font-semibold tracking-tight text-[#f4f0fa]">Sets</h2>
           <p className="m-0 mt-1 max-w-2xl text-[0.85rem] leading-snug text-[#f4f0fa]/70">
-            Catalog sets stored in the database.             For{" "}
-            <span className="font-semibold text-[#f4f0fa]/88">Omens of the Third Age</span> (or{" "}
-            <span className="font-semibold text-[#f4f0fa]/88">Omen of the Third Age</span>), use Sync to pull new cards
-            from fabrary’s published latest-set file.
+            Catalog sets stored in the database. For sets that appear in fabrary’s published latest-set
+            file (currently{" "}
+            <span className="font-semibold text-[#f4f0fa]/88">Omens of the Third Age</span> and{" "}
+            <span className="font-semibold text-[#f4f0fa]/88">Usurp the Shadow Throne</span>), use Sync to pull
+            new cards.
           </p>
         </div>
       </div>

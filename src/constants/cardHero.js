@@ -83,9 +83,15 @@ export const CardHero = Object.freeze({
   Yoji: 77,
   Zen: 78,
   Zyggy: 79,
+  Baalghor: 80,
+  Killjoy: 81,
+  Malice: 82,
+  Mortimer: 83,
+  Viserai2: 84,
+  Zane: 85,
 });
 
-/** Ordered display names for each ID 0..79. */
+/** Ordered display names for each ID 0..85. */
 export const CARD_HERO_NAMES = Object.freeze([
   "Arakni",
   "Aurora",
@@ -167,6 +173,12 @@ export const CARD_HERO_NAMES = Object.freeze([
   "Yoji",
   "Zen",
   "Zyggy",
+  "Baalghor",
+  "Killjoy",
+  "Malice",
+  "Mortimer",
+  "Viserai2",
+  "Zane",
 ]);
 
 /**
