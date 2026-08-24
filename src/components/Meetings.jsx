@@ -1,10 +1,30 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
 import { canWriteContent } from "../constants/roles";
 import { extFromFilename, MAX_UPLOAD_SIZE_LABEL, uploadPublicAsset, uploadSizeError } from "../utils/uploadPublicAsset";
 
 /** @typedef {{ id: number, meeting_at: string, summary: string, video_url?: string | null, created_by_user_id: number, created_at: string, updated_at: string }} MeetingRow */
+
+const CALENDAR_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+const CALENDAR_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const CALENDAR_YEARS = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 2 + i);
+const CALENDAR_HOURS = Array.from({ length: 12 }, (_, i) => String(i + 1));
+const CALENDAR_MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
+const CALENDAR_PERIODS = /** @type {const} */ (["AM", "PM"]);
 
 /**
  * @param {string | undefined | null} errText
@@ -30,16 +50,57 @@ function formatMeetingWhen(iso) {
   return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }
 
-/** @returns {string} datetime-local value */
-function toLocalInputValue(date) {
-  const d = date instanceof Date ? date : new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+/** @param {Date} date */
+function toDateInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-/** @param {string} localValue */
-function localInputToISO(localValue) {
-  const d = new Date(localValue);
+/** @param {string} value */
+function dateFromInputValue(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  }
+  return new Date(year, month - 1, day);
+}
+
+/** @param {string} value */
+function formatSelectedDate(value) {
+  if (!value) return "No date selected";
+  return dateFromInputValue(value).toLocaleDateString(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+/**
+ * @param {string} value
+ * @param {string} hour
+ * @param {string} minute
+ * @param {string} period
+ */
+function formatSelectedDateTime(value, hour, minute, period) {
+  if (!value) return "Select a date & time";
+  return `${formatSelectedDate(value)} at ${hour}:${minute} ${period}`;
+}
+
+/**
+ * @param {string} value
+ * @param {string} hour
+ * @param {string} minute
+ * @param {string} period
+ */
+function meetingDateTimeToISO(value, hour, minute, period) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const baseHour = Number(hour) % 12;
+  const hour24 = period === "PM" ? baseHour + 12 : baseHour;
+  const d = new Date(year, month - 1, day, hour24, Number(minute), 0, 0);
   if (Number.isNaN(d.getTime())) return null;
   return d.toISOString();
 }
@@ -65,7 +126,12 @@ export function Meetings({ isLight, active }) {
   const [reloadSeq, setReloadSeq] = useState(0);
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [createAt, setCreateAt] = useState(() => toLocalInputValue(new Date()));
+  const [meetingDate, setMeetingDate] = useState("");
+  const [meetingHour, setMeetingHour] = useState("7");
+  const [meetingMinute, setMeetingMinute] = useState("00");
+  const [meetingPeriod, setMeetingPeriod] = useState(/** @type {"AM" | "PM"} */ ("PM"));
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarMonthDate, setCalendarMonthDate] = useState(() => dateFromInputValue(""));
   const [createSummary, setCreateSummary] = useState("");
   const [createFile, setCreateFile] = useState(/** @type {File | null} */ (null));
   const [createSubmitting, setCreateSubmitting] = useState(false);
@@ -77,6 +143,19 @@ export function Meetings({ isLight, active }) {
   const [videoSubmitting, setVideoSubmitting] = useState(false);
   const [videoError, setVideoError] = useState(/** @type {string | null} */ (null));
   const [videoUploadPct, setVideoUploadPct] = useState(/** @type {number | null} */ (null));
+
+  const calendarDays = useMemo(() => {
+    const year = calendarMonthDate.getFullYear();
+    const month = calendarMonthDate.getMonth();
+    const firstWeekday = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    /** @type {Array<number | null>} */
+    const days = [];
+    for (let i = 0; i < firstWeekday; i += 1) days.push(null);
+    for (let day = 1; day <= daysInMonth; day += 1) days.push(day);
+    while (days.length % 7 !== 0) days.push(null);
+    return days;
+  }, [calendarMonthDate]);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -117,7 +196,14 @@ export function Meetings({ isLight, active }) {
   }, []);
 
   const openCreate = () => {
-    setCreateAt(toLocalInputValue(new Date()));
+    const now = new Date();
+    const hours = now.getHours();
+    setMeetingDate(toDateInputValue(now));
+    setMeetingHour(String(hours % 12 || 12));
+    setMeetingMinute(String(now.getMinutes()).padStart(2, "0"));
+    setMeetingPeriod(hours >= 12 ? "PM" : "AM");
+    setCalendarMonthDate(new Date(now.getFullYear(), now.getMonth(), 1));
+    setCalendarOpen(false);
     setCreateSummary("");
     setCreateFile(null);
     setCreateError(null);
@@ -128,8 +214,19 @@ export function Meetings({ isLight, active }) {
   const closeCreate = () => {
     if (createSubmitting) return;
     setCreateOpen(false);
+    setCalendarOpen(false);
     setCreateError(null);
     setCreateUploadPct(null);
+  };
+
+  const openCalendarModal = () => {
+    setCalendarMonthDate(dateFromInputValue(meetingDate));
+    setCalendarOpen(true);
+  };
+
+  const selectCalendarDay = (day) => {
+    const nextDate = new Date(calendarMonthDate.getFullYear(), calendarMonthDate.getMonth(), day);
+    setMeetingDate(toDateInputValue(nextDate));
   };
 
   const openAttachVideo = (row) => {
@@ -149,7 +246,7 @@ export function Meetings({ isLight, active }) {
 
   const submitCreate = async () => {
     if (!user) return;
-    const meetingAtISO = localInputToISO(createAt);
+    const meetingAtISO = meetingDateTimeToISO(meetingDate, meetingHour, meetingMinute, meetingPeriod);
     if (!meetingAtISO) {
       setCreateError("Choose a valid meeting date and time.");
       return;
@@ -197,6 +294,7 @@ export function Meetings({ isLight, active }) {
       if (!res.ok) throw new Error(parseApiError(await res.text()));
       setCreateUploadPct(100);
       setCreateOpen(false);
+      setCalendarOpen(false);
       setReloadSeq((n) => n + 1);
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : "Failed to create meeting");
@@ -391,16 +489,17 @@ export function Meetings({ isLight, active }) {
                   </button>
                 </div>
                 <div className="grid gap-4">
-                  <label className="grid gap-1.5 text-left text-[0.85rem] text-[#f4f0fa]/85">
+                  <div className="grid gap-1.5 text-left text-[0.85rem] text-[#f4f0fa]/85">
                     <span className="font-medium">Date &amp; time</span>
-                    <input
-                      type="datetime-local"
-                      className="rounded-lg border border-white/20 bg-black/35 px-3 py-2 text-[#f4f0fa]"
-                      value={createAt}
-                      onChange={(e) => setCreateAt(e.target.value)}
+                    <button
+                      type="button"
+                      className="rounded-lg border border-white/20 bg-black/35 px-3 py-2.5 text-left text-[#f4f0fa] transition-colors hover:border-white/35 hover:bg-black/45 disabled:opacity-45"
+                      onClick={openCalendarModal}
                       disabled={createSubmitting}
-                    />
-                  </label>
+                    >
+                      {formatSelectedDateTime(meetingDate, meetingHour, meetingMinute, meetingPeriod)}
+                    </button>
+                  </div>
                   <label className="grid gap-1.5 text-left text-[0.85rem] text-[#f4f0fa]/85">
                     <span className="font-medium">Summary</span>
                     <textarea
@@ -441,6 +540,152 @@ export function Meetings({ isLight, active }) {
                     </button>
                   </div>
                 </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {calendarOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[220] flex items-end justify-center bg-black/60 p-3 backdrop-blur-[2px] sm:items-center sm:p-4"
+              role="presentation"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) setCalendarOpen(false);
+              }}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Select meeting date and time"
+                className="w-full max-w-md overflow-hidden rounded-2xl border border-white/20 bg-[#160d22] p-4 shadow-2xl sm:p-5"
+              >
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <h3 className="m-0 text-base font-semibold text-[#f4f0fa]">Meeting date &amp; time</h3>
+                  <button type="button" className={`${btnBase} ${btnTheme}`} onClick={() => setCalendarOpen(false)}>
+                    Close
+                  </button>
+                </div>
+
+                <div className="mb-3 grid grid-cols-2 gap-2">
+                  <label className="grid gap-1 text-[0.8rem] text-[#f4f0fa]/75">
+                    <span>Month</span>
+                    <select
+                      className="rounded-lg border border-white/20 bg-black/35 px-2 py-2 text-[#f4f0fa]"
+                      value={calendarMonthDate.getMonth()}
+                      onChange={(e) => {
+                        const month = Number(e.target.value);
+                        setCalendarMonthDate((current) => new Date(current.getFullYear(), month, 1));
+                      }}
+                    >
+                      {CALENDAR_MONTHS.map((label, index) => (
+                        <option key={label} value={index}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-[0.8rem] text-[#f4f0fa]/75">
+                    <span>Year</span>
+                    <select
+                      className="rounded-lg border border-white/20 bg-black/35 px-2 py-2 text-[#f4f0fa]"
+                      value={calendarMonthDate.getFullYear()}
+                      onChange={(e) => {
+                        const year = Number(e.target.value);
+                        setCalendarMonthDate((current) => new Date(year, current.getMonth(), 1));
+                      }}
+                    >
+                      {CALENDAR_YEARS.map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="mb-3 grid grid-cols-3 gap-2">
+                  <label className="grid gap-1 text-[0.8rem] text-[#f4f0fa]/75">
+                    <span>Hour</span>
+                    <select
+                      className="rounded-lg border border-white/20 bg-black/35 px-2 py-2 text-[#f4f0fa]"
+                      value={meetingHour}
+                      onChange={(e) => setMeetingHour(e.target.value)}
+                    >
+                      {CALENDAR_HOURS.map((hour) => (
+                        <option key={hour} value={hour}>
+                          {hour}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-[0.8rem] text-[#f4f0fa]/75">
+                    <span>Minute</span>
+                    <select
+                      className="rounded-lg border border-white/20 bg-black/35 px-2 py-2 text-[#f4f0fa]"
+                      value={meetingMinute}
+                      onChange={(e) => setMeetingMinute(e.target.value)}
+                    >
+                      {CALENDAR_MINUTES.map((minute) => (
+                        <option key={minute} value={minute}>
+                          {minute}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-[0.8rem] text-[#f4f0fa]/75">
+                    <span>AM/PM</span>
+                    <select
+                      className="rounded-lg border border-white/20 bg-black/35 px-2 py-2 text-[#f4f0fa]"
+                      value={meetingPeriod}
+                      onChange={(e) => setMeetingPeriod(/** @type {"AM" | "PM"} */ (e.target.value))}
+                    >
+                      {CALENDAR_PERIODS.map((period) => (
+                        <option key={period} value={period}>
+                          {period}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[0.72rem] font-medium uppercase tracking-wide text-[#f4f0fa]/45">
+                  {CALENDAR_WEEKDAYS.map((day) => (
+                    <span key={day}>{day}</span>
+                  ))}
+                </div>
+                <div className="mb-4 grid grid-cols-7 gap-1">
+                  {calendarDays.map((day, index) => {
+                    if (day == null) {
+                      return <span key={`empty-${index}`} className="aspect-square" />;
+                    }
+                    const selected =
+                      meetingDate ===
+                      toDateInputValue(new Date(calendarMonthDate.getFullYear(), calendarMonthDate.getMonth(), day));
+                    return (
+                      <button
+                        key={`day-${day}`}
+                        type="button"
+                        className={`aspect-square rounded-lg border text-[0.85rem] font-medium transition-colors ${
+                          selected
+                            ? "border-emerald-400/55 bg-emerald-950/55 text-emerald-50"
+                            : "border-white/15 bg-black/25 text-[#f4f0fa] hover:border-white/30 hover:bg-black/40"
+                        }`}
+                        onClick={() => selectCalendarDay(day)}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p className="mb-3 m-0 text-center text-[0.85rem] text-[#f4f0fa]/70">
+                  {formatSelectedDateTime(meetingDate, meetingHour, meetingMinute, meetingPeriod)}
+                </p>
+                <button type="button" className={`${btnPrimary} w-full`} onClick={() => setCalendarOpen(false)}>
+                  Done
+                </button>
               </div>
             </div>,
             document.body,
