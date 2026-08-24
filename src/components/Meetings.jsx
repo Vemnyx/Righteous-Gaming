@@ -424,7 +424,7 @@ export function Meetings({ isLight, active }) {
                     </button>
                   ) : (
                     <div role="region" aria-label={`Meeting ${formatMeetingWhen(row.meeting_at)}`} className="px-5 py-4 sm:px-6 sm:py-5">
-                      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+                      <div className="mb-3">
                         <button
                           type="button"
                           onClick={() => toggleRow(row.id)}
@@ -433,11 +433,6 @@ export function Meetings({ isLight, active }) {
                         >
                           {formatMeetingWhen(row.meeting_at)}
                         </button>
-                        {!hasVideo && canManage ? (
-                          <button type="button" className={`${btnBase} ${btnTheme}`} onClick={() => openAttachVideo(row)}>
-                            Add recording
-                          </button>
-                        ) : null}
                       </div>
                       <p className="m-0 whitespace-pre-wrap text-[0.95rem] leading-relaxed text-[#f4f0fa]/85">
                         {row.summary}
@@ -453,9 +448,17 @@ export function Meetings({ isLight, active }) {
                             Your browser does not support the video tag.
                           </video>
                         ) : (
-                          <p className="m-0 rounded-xl border border-dashed border-white/15 bg-black/20 px-3 py-4 text-[0.85rem] text-[#f4f0fa]/5">
-                            No recording uploaded for this meeting.
-                          </p>
+                          <div className="flex min-h-[12rem] w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 bg-black/20 px-4 py-8 sm:min-h-[14rem]">
+                            {canManage ? (
+                              <button type="button" className={`${btnBase} ${btnTheme}`} onClick={() => openAttachVideo(row)}>
+                                Add recording
+                              </button>
+                            ) : (
+                              <p className="m-0 text-center text-[0.85rem] text-[#f4f0fa]/5">
+                                No recording uploaded for this meeting.
+                              </p>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
