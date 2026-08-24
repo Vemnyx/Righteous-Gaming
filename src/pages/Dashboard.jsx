@@ -22,11 +22,12 @@ import { RecordingsList } from "../components/RecordingsList";
 import { RecordingDetailPage } from "../components/RecordingDetailPage";
 import { SetsAdmin } from "../components/SetsAdmin";
 import { PlayTesting } from "../components/PlayTesting";
+import { Meetings } from "../components/Meetings";
 import { UserAccountMenu } from "../components/UserAccountMenu";
 import { UserSettings } from "../components/UserSettings";
 import { UserProfile } from "../components/UserProfile";
 import { sessionProfileDisplayName } from "../auth/sessionProfile";
-import { canAccessCardRaterResource, canAccessData, canAccessPlayTesting, isAdminRole } from "../constants/roles";
+import { canAccessCardRaterResource, canAccessData, canAccessMeetings, canAccessPlayTesting, isAdminRole } from "../constants/roles";
 
 /** Persisted before opening Create User so Back restores the dashboard URL (e.g. `/admin/users`). */
 const SESSION_CREATE_USER_RETURN_KEY = "rg-dashboard-return-url";
@@ -60,6 +61,7 @@ const RESOURCE_SUB_LINKS = [
   { segment: "events", label: "Events", path: "/resources/events" },
   { segment: "card-rater", label: "Card Rater", path: "/resources/card-rater" },
   { segment: "play-testing", label: "Play Testing", path: "/resources/play-testing" },
+  { segment: "meetings", label: "Meetings", path: "/resources/meetings" },
 ];
 
 /** @type {ResourceSubLink[]} */
@@ -162,7 +164,8 @@ function buildDashboardPathname(
       resourcesChild === "events" ||
       resourcesChild === "card-rater" ||
       resourcesChild === "card-rater-play" ||
-      resourcesChild === "play-testing"
+      resourcesChild === "play-testing" ||
+      resourcesChild === "meetings"
         ? resourcesChild
         : DEFAULT_RESOURCES_SEGMENT;
     if (
@@ -503,6 +506,18 @@ function parseDashboardPathname(pathname) {
         kind: "ok",
         tabId: RESOURCES_TAB_ID,
         resourcesChild: "play-testing",
+        resourcesCardIdentifier: null,
+        resourcesCardRaterId: null,
+        adminChild: null,
+        adminAnnouncementForm: null,
+      };
+    }
+    if (b === "meetings") {
+      if (c !== undefined || rest.length > 0) return { kind: "invalid" };
+      return {
+        kind: "ok",
+        tabId: RESOURCES_TAB_ID,
+        resourcesChild: "meetings",
         resourcesCardIdentifier: null,
         resourcesCardRaterId: null,
         adminChild: null,
@@ -1110,6 +1125,7 @@ export default function Dashboard({ onNavigate }) {
   const canUseCardRaterResource = canAccessCardRaterResource(sessionProfile?.role);
   const canUseDataTab = canAccessData(sessionProfile?.role);
   const canUsePlayTesting = canAccessPlayTesting(sessionProfile?.role);
+  const canUseMeetings = canAccessMeetings(sessionProfile?.role);
 
   const tabs = useMemo(() => {
     return ALL_TABS.filter((t) => {
@@ -1123,9 +1139,10 @@ export default function Dashboard({ onNavigate }) {
     return RESOURCE_SUB_LINKS.filter((l) => {
       if (l.segment === "card-rater" && !canUseCardRaterResource) return false;
       if (l.segment === "play-testing" && !canUsePlayTesting) return false;
+      if (l.segment === "meetings" && !canUseMeetings) return false;
       return true;
     });
-  }, [canUseCardRaterResource, canUsePlayTesting]);
+  }, [canUseCardRaterResource, canUsePlayTesting, canUseMeetings]);
 
   const resourcesTabLabel = useMemo(() => {
     if (activeTab !== RESOURCES_TAB_ID) {
@@ -1609,6 +1626,13 @@ export default function Dashboard({ onNavigate }) {
     setResourcesChild(DEFAULT_RESOURCES_SEGMENT);
     replaceDashboardUrl(RESOURCES_TAB_ID, DEFAULT_RESOURCES_SEGMENT, null, null, null, null);
   }, [resourcesChild, canUsePlayTesting]);
+
+  useEffect(() => {
+    if (resourcesChild !== "meetings") return;
+    if (canUseMeetings) return;
+    setResourcesChild(DEFAULT_RESOURCES_SEGMENT);
+    replaceDashboardUrl(RESOURCES_TAB_ID, DEFAULT_RESOURCES_SEGMENT, null, null, null, null);
+  }, [resourcesChild, canUseMeetings]);
 
   return (
     <div className={isLight ? shellLight : shellDark}>
@@ -2145,6 +2169,20 @@ export default function Dashboard({ onNavigate }) {
                     aria-label="Play Testing"
                   >
                     <p className="text-[0.9rem] text-[#f4f0fa]/65">Play Testing is admin-only for now.</p>
+                  </div>
+                )
+              ) : resourcesChild === "meetings" ? (
+                canUseMeetings ? (
+                  <Meetings
+                    isLight={isLight}
+                    active={activeTab === RESOURCES_TAB_ID && resourcesChild === "meetings"}
+                  />
+                ) : (
+                  <div
+                    className="flex min-h-[min(40vh,18rem)] flex-1 flex-col items-center justify-center px-4 text-center"
+                    aria-label="Meetings"
+                  >
+                    <p className="text-[0.9rem] text-[#f4f0fa]/65">Meetings are not available for Guest accounts.</p>
                   </div>
                 )
               ) : showCardRaterBlocked ? (

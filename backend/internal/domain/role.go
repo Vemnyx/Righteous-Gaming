@@ -50,6 +50,17 @@ func (r Role) CanAccessData() bool {
 	}
 }
 
+// CanAccessMeetings reports whether the role may view the Meetings resource.
+// Guests are excluded; admins, members, and play testers may view.
+func (r Role) CanAccessMeetings() bool {
+	switch r {
+	case RoleAdmin, RoleMember, RolePlayTester:
+		return true
+	default:
+		return false
+	}
+}
+
 // CountsForTeamSnapshot reports whether the user should appear in event team views.
 func (r Role) CountsForTeamSnapshot() bool {
 	switch r {

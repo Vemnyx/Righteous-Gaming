@@ -18,6 +18,9 @@ func TestRoleGuestPermissions(t *testing.T) {
 	if RoleGuest.CanAccessCardRaterResource() {
 		t.Fatal("guest should not access card rater resource")
 	}
+	if RoleGuest.CanAccessMeetings() {
+		t.Fatal("guest should not access meetings")
+	}
 	if !RoleGuest.Valid() {
 		t.Fatal("guest should be a valid role")
 	}
@@ -41,6 +44,9 @@ func TestRolePlayTesterPermissions(t *testing.T) {
 	}
 	if RolePlayTester.CanAccessCardRaterResource() {
 		t.Fatal("play tester should not access card rater resource")
+	}
+	if !RolePlayTester.CanAccessMeetings() {
+		t.Fatal("play tester should access meetings")
 	}
 	if !RolePlayTester.Valid() {
 		t.Fatal("play tester should be a valid role")
@@ -74,6 +80,12 @@ func TestRoleMemberAndAdminPermissions(t *testing.T) {
 	}
 	if !RoleAdmin.CanAccessData() {
 		t.Fatal("admin should access data")
+	}
+	if !RoleMember.CanAccessMeetings() {
+		t.Fatal("member should access meetings")
+	}
+	if !RoleAdmin.CanAccessMeetings() {
+		t.Fatal("admin should access meetings")
 	}
 	if !RoleMember.CountsForTeamSnapshot() {
 		t.Fatal("member should count for team snapshot")

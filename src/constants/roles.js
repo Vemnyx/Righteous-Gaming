@@ -54,6 +54,13 @@ export function canAccessPlayTesting(role) {
   return isAdminRole(role);
 }
 
+/** Meetings resource: everyone except Guests. */
+/** @param {number | null | undefined} role */
+export function canAccessMeetings(role) {
+  const n = Number(role);
+  return n === ROLE_ADMIN || n === ROLE_MEMBER || n === ROLE_PLAY_TESTER;
+}
+
 /** @param {number | null | undefined} role */
 export function roleLabel(role) {
   if (Number(role) === ROLE_ADMIN) return "Admin";

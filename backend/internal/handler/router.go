@@ -110,5 +110,11 @@ func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient 
 	mux.HandleFunc("GET /api/play-testing/sessions", pth.listSessions)
 	mux.HandleFunc("POST /api/play-testing/sessions", pth.createSession)
 
+	mh := &meetingsHTTP{app: application, svc: userSvc}
+	mux.HandleFunc("GET /api/meetings", mh.listMeetings)
+	mux.HandleFunc("POST /api/meetings", mh.createMeeting)
+	mux.HandleFunc("PATCH /api/meetings/{id}/video", mh.attachMeetingVideo)
+	mux.HandleFunc("POST /api/meetings/{id}/video", mh.attachMeetingVideo)
+
 	return mux
 }
