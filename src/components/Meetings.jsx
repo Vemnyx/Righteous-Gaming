@@ -264,6 +264,8 @@ export function Meetings({ isLight, active }) {
     : "border-white/[0.28] bg-black/20 text-[#f4f0fa] hover:border-white/40 hover:bg-black/30";
   const btnPrimary =
     "rounded-lg border border-emerald-400/45 bg-emerald-950/45 px-3 py-1.5 text-[0.8125rem] font-semibold text-emerald-100 transition-colors hover:border-emerald-300/55 hover:bg-emerald-900/45 disabled:cursor-not-allowed disabled:opacity-45";
+  const btnAddMeeting =
+    "rounded-xl border border-emerald-400/50 bg-emerald-950/50 px-5 py-3 text-[1rem] font-semibold text-emerald-50 shadow-[0_8px_24px_rgba(16,185,129,0.18)] transition-colors hover:border-emerald-300/60 hover:bg-emerald-900/55 disabled:cursor-not-allowed disabled:opacity-45 sm:px-6 sm:py-3.5 sm:text-[1.05rem]";
 
   return (
     <div className="-mx-8 -mt-4 flex min-h-0 flex-1 flex-col gap-3 px-3 text-left sm:-mx-10 sm:-mt-6 sm:px-4" aria-label="Meetings">
@@ -275,7 +277,7 @@ export function Meetings({ isLight, active }) {
           </p>
         </div>
         {canManage ? (
-          <button type="button" className={btnPrimary} onClick={openCreate}>
+          <button type="button" className={btnAddMeeting} onClick={openCreate}>
             Add meeting
           </button>
         ) : null}

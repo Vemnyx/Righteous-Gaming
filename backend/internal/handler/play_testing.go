@@ -19,7 +19,7 @@ type playTestingHTTP struct {
 	svc *service.UserService
 }
 
-func (h *playTestingHTTP) requireAdmin(w http.ResponseWriter, r *http.Request) (*domain.User, bool) {
+func (h *playTestingHTTP) requirePlayTestingAccess(w http.ResponseWriter, r *http.Request) (*domain.User, bool) {
 	idToken := bearerIDToken(r.Header.Get("Authorization"))
 	if idToken == "" {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -39,11 +39,13 @@ func (h *playTestingHTTP) requireAdmin(w http.ResponseWriter, r *http.Request) (
 			http.Error(w, "User not found", http.StatusNotFound)
 			return nil, false
 		}
-		log.Error("play testing admin auth", "error", err)
+		log.Error("play testing access auth", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return nil, false
 	}
-	if u.Role == nil || *u.Role != domain.RoleAdmin {
+	// Temporary owner-only gate while Play Testing is in early access.
+	email := strings.ToLower(strings.TrimSpace(u.Email))
+	if email != "programmerjake95@gmail.com" {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return nil, false
 	}
@@ -140,7 +142,7 @@ func (h *playTestingHTTP) getMeta(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.requireAdmin(w, r); !ok {
+	if _, ok := h.requirePlayTestingAccess(w, r); !ok {
 		return
 	}
 	heroes, err := h.app.Repo.ListPlayTestingHeroes(r.Context())
@@ -174,7 +176,7 @@ func (h *playTestingHTTP) listSessions(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, ok := h.requireAdmin(w, r); !ok {
+	if _, ok := h.requirePlayTestingAccess(w, r); !ok {
 		return
 	}
 	sessions, err := h.app.Repo.ListPlayTestingSessions(r.Context())
@@ -197,7 +199,7 @@ func (h *playTestingHTTP) createSession(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	u, ok := h.requireAdmin(w, r)
+	u, ok := h.requirePlayTestingAccess(w, r)
 	if !ok {
 		return
 	}

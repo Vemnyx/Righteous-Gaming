@@ -48,10 +48,16 @@ export function canAccessData(role) {
   return n === ROLE_ADMIN || n === ROLE_MEMBER || n === ROLE_PLAY_TESTER;
 }
 
-/** Play Testing resource is admin-only for now. */
-/** @param {number | null | undefined} role */
-export function canAccessPlayTesting(role) {
-  return isAdminRole(role);
+/** Temporary allowlist while Play Testing is owner-only. */
+export const PLAY_TESTING_ALLOWED_EMAILS = Object.freeze(["programmerjake95@gmail.com"]);
+
+/** Play Testing resource — temporarily limited to an allowlisted account. */
+/** @param {number | null | undefined} _role */
+/** @param {{ email?: string | null } | null | undefined} [profile] */
+export function canAccessPlayTesting(_role, profile) {
+  const email = profile?.email != null ? String(profile.email).trim().toLowerCase() : "";
+  if (!email) return false;
+  return PLAY_TESTING_ALLOWED_EMAILS.includes(email);
 }
 
 /** Meetings resource: everyone except Guests. */

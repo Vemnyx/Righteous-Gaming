@@ -1124,7 +1124,7 @@ export default function Dashboard({ onNavigate }) {
   const isAdmin = isAdminRole(sessionProfile?.role);
   const canUseCardRaterResource = canAccessCardRaterResource(sessionProfile?.role);
   const canUseDataTab = canAccessData(sessionProfile?.role);
-  const canUsePlayTesting = canAccessPlayTesting(sessionProfile?.role);
+  const canUsePlayTesting = canAccessPlayTesting(sessionProfile?.role, sessionProfile);
   const canUseMeetings = canAccessMeetings(sessionProfile?.role);
 
   const tabs = useMemo(() => {
@@ -2168,7 +2168,7 @@ export default function Dashboard({ onNavigate }) {
                     className="flex min-h-[min(40vh,18rem)] flex-1 flex-col items-center justify-center px-4 text-center"
                     aria-label="Play Testing"
                   >
-                    <p className="text-[0.9rem] text-[#f4f0fa]/65">Play Testing is admin-only for now.</p>
+                    <p className="text-[0.9rem] text-[#f4f0fa]/65">Play Testing is not available for your account yet.</p>
                   </div>
                 )
               ) : resourcesChild === "meetings" ? (
