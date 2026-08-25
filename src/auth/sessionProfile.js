@@ -24,8 +24,12 @@ export function userSettingsFromProfile(profile) {
  * @returns {string}
  */
 export function sessionProfileDisplayName(profile) {
-  const uname = profile?.username != null ? String(profile.username).trim() : "";
-  if (uname) return uname;
+  const first = profile?.first_name != null ? String(profile.first_name).trim() : "";
+  const last = profile?.last_name != null ? String(profile.last_name).trim() : "";
+  const full = `${first} ${last}`.trim();
+  if (full) return full;
+  const discord = profile?.username != null ? String(profile.username).trim() : "";
+  if (discord) return discord;
   const email = profile?.email != null ? String(profile.email).trim() : "";
   if (email) {
     const local = email.split("@")[0]?.trim();

@@ -12,9 +12,6 @@ function parseApiError(errText) {
   try {
     const j = JSON.parse(raw);
     if (j && typeof j.message === "string" && j.message.trim() !== "") return j.message.trim();
-    if (j && typeof j.field === "string" && j.field === "username" && typeof j.message === "string") {
-      return j.message.trim();
-    }
   } catch {
     /* use raw */
   }
@@ -27,13 +24,13 @@ function parseApiError(errText) {
 export function UserProfile({ isLight, active }) {
   const { user, sessionProfile, sessionProfileLoading, updateSessionProfile } = useAuth();
   const [email, setEmail] = useState("");
-  const [username, setUsername] = useState("");
+  const [discordName, setDiscordName] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
-  const [usernameError, setUsernameError] = useState(/** @type {string | null} */ (null));
+  const [discordNameError, setDiscordNameError] = useState(/** @type {string | null} */ (null));
 
   useEffect(() => {
     if (!active || !user || sessionProfileLoading) return undefined;
@@ -41,13 +38,13 @@ export function UserProfile({ isLight, active }) {
     (async () => {
       setLoading(true);
       setError(null);
-      setUsernameError(null);
+      setDiscordNameError(null);
       try {
         const token = await user.getIdToken();
         const profile = await fetchUserProfileFromApi(token);
         if (!cancelled) {
           setEmail(profile.email ?? "");
-          setUsername(profile.username != null ? String(profile.username) : "");
+          setDiscordName(profile.username != null ? String(profile.username) : "");
           setFirstName(profile.first_name != null ? String(profile.first_name) : "");
           setLastName(profile.last_name != null ? String(profile.last_name) : "");
         }
@@ -55,7 +52,7 @@ export function UserProfile({ isLight, active }) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Failed to load profile");
           setEmail(sessionProfile?.email != null ? String(sessionProfile.email) : "");
-          setUsername(sessionProfile?.username != null ? String(sessionProfile.username) : "");
+          setDiscordName(sessionProfile?.username != null ? String(sessionProfile.username) : "");
           setFirstName(sessionProfile?.first_name != null ? String(sessionProfile.first_name) : "");
           setLastName(sessionProfile?.last_name != null ? String(sessionProfile.last_name) : "");
         }
@@ -79,12 +76,12 @@ export function UserProfile({ isLight, active }) {
   const onSave = useCallback(async () => {
     if (!user || saving || loading) return;
     setError(null);
-    setUsernameError(null);
+    setDiscordNameError(null);
     setSaving(true);
     try {
       const token = await user.getIdToken();
       const saved = await saveUserProfileFromApi(token, {
-        username: username.trim(),
+        username: discordName.trim(),
         first_name: firstName.trim(),
         last_name: lastName.trim(),
       });
@@ -93,20 +90,21 @@ export function UserProfile({ isLight, active }) {
         first_name: saved.first_name ?? null,
         last_name: saved.last_name ?? null,
       });
-      setUsername(saved.username != null ? String(saved.username) : "");
+      setDiscordName(saved.username != null ? String(saved.username) : "");
       setFirstName(saved.first_name != null ? String(saved.first_name) : "");
       setLastName(saved.last_name != null ? String(saved.last_name) : "");
     } catch (e) {
       const msg = e instanceof Error ? parseApiError(e.message) : "Failed to save profile";
-      if (msg.toLowerCase().includes("username")) {
-        setUsernameError(msg);
+      const lower = msg.toLowerCase();
+      if (lower.includes("username") || lower.includes("discord")) {
+        setDiscordNameError(msg);
       } else {
         setError(msg);
       }
     } finally {
       setSaving(false);
     }
-  }, [user, saving, loading, username, firstName, lastName, updateSessionProfile]);
+  }, [user, saving, loading, discordName, firstName, lastName, updateSessionProfile]);
 
   const sectionCls = isLight
     ? "rounded-xl border border-white/[0.18] bg-black/25 p-5 shadow-sm"
@@ -138,21 +136,6 @@ export function UserProfile({ isLight, active }) {
               <input type="email" className={inputCls} value={email} disabled readOnly />
             </label>
             <label className="flex flex-col gap-1.5">
-              <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">Username</span>
-              <input
-                type="text"
-                className={`${inputCls}${usernameError ? " border-red-400/55" : ""}`}
-                value={username}
-                autoComplete="nickname"
-                disabled={saving || !user}
-                onChange={(e) => {
-                  setUsername(e.target.value);
-                  setUsernameError(null);
-                }}
-              />
-              {usernameError ? <span className="text-[0.82rem] text-red-200/90">{usernameError}</span> : null}
-            </label>
-            <label className="flex flex-col gap-1.5">
               <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">First name</span>
               <input
                 type="text"
@@ -173,6 +156,24 @@ export function UserProfile({ isLight, active }) {
                 disabled={saving || !user}
                 onChange={(e) => setLastName(e.target.value)}
               />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">Discord name</span>
+              <input
+                type="text"
+                className={`${inputCls}${discordNameError ? " border-red-400/55" : ""}`}
+                value={discordName}
+                autoComplete="nickname"
+                disabled={saving || !user}
+                onChange={(e) => {
+                  setDiscordName(e.target.value);
+                  setDiscordNameError(null);
+                }}
+              />
+              <span className="text-[0.8rem] text-[#f4f0fa]/55">
+                Shown on decks, recordings, and other member-attributed content.
+              </span>
+              {discordNameError ? <span className="text-[0.82rem] text-red-200/90">{discordNameError}</span> : null}
             </label>
             <div>
               <button type="button" className={btnPrimary} disabled={saving || !user} onClick={() => void onSave()}>

@@ -282,7 +282,7 @@ func (r *Repository) ListUsersPaged(ctx context.Context, limit, offset int) ([]U
 	}
 
 	const q = `
-SELECT id, email, username, COALESCE(uid, ''), role, created_at, registered_at, default_password_changed
+SELECT id, email, username, first_name, last_name, COALESCE(uid, ''), role, created_at, registered_at, default_password_changed
 FROM users
 ORDER BY id ASC
 LIMIT $1 OFFSET $2`
@@ -296,7 +296,7 @@ LIMIT $1 OFFSET $2`
 	for rows.Next() {
 		var u User
 		if err := rows.Scan(
-			&u.ID, &u.Email, &u.Username, &u.UID, &u.Role, &u.CreatedAt, &u.RegisteredAt, &u.DefaultPasswordChanged,
+			&u.ID, &u.Email, &u.Username, &u.FirstName, &u.LastName, &u.UID, &u.Role, &u.CreatedAt, &u.RegisteredAt, &u.DefaultPasswordChanged,
 		); err != nil {
 			return nil, 0, fmt.Errorf("repository: list users paged scan: %w", err)
 		}

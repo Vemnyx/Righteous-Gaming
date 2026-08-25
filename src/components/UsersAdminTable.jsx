@@ -107,12 +107,14 @@ export function UsersAdminTable({ isLight, active, onCreateUser }) {
       ) : null}
 
       <div className={`overflow-x-auto rounded-xl border bg-black/20 ${tableChromeBorder}`}>
-        <table className="w-full min-w-[36rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
+        <table className="w-full min-w-[42rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
           <thead>
             <tr className={`border-b text-[0.68rem] uppercase tracking-wider text-[#f4f0fa]/55 ${tableHeadBorder}`}>
               <th className="px-3 py-2.5 font-semibold sm:px-4">ID</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Email</th>
-              <th className="px-3 py-2.5 font-semibold sm:px-4">Username</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">First name</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Last name</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Discord name</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">UID</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Role</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Created At</th>
@@ -123,13 +125,13 @@ export function UsersAdminTable({ isLight, active, onCreateUser }) {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-[#f4f0fa]/55">
+                <td colSpan={10} className="px-4 py-10 text-center text-[#f4f0fa]/55">
                   Loading…
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-[#f4f0fa]/55">
+                <td colSpan={10} className="px-4 py-10 text-center text-[#f4f0fa]/55">
                   No users found.
                 </td>
               </tr>
@@ -143,6 +145,12 @@ export function UsersAdminTable({ isLight, active, onCreateUser }) {
                     {row.id}
                   </td>
                   <td className="max-w-[11rem] truncate px-3 py-2.5 sm:max-w-none sm:px-4">{row.email}</td>
+                  <td className="max-w-[8rem] truncate px-3 py-2.5 text-[#f4f0fa]/80 sm:px-4">
+                    {row.first_name ?? "—"}
+                  </td>
+                  <td className="max-w-[8rem] truncate px-3 py-2.5 text-[#f4f0fa]/80 sm:px-4">
+                    {row.last_name ?? "—"}
+                  </td>
                   <td className="max-w-[8rem] truncate px-3 py-2.5 text-[#f4f0fa]/80 sm:px-4">
                     {row.username ?? "—"}
                   </td>

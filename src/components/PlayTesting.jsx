@@ -39,10 +39,10 @@ function parseApiError(errText) {
  * @returns {string | null}
  */
 function heroPortraitURL(hero) {
-  const card = hero?.card_image_url != null ? String(hero.card_image_url).trim() : "";
-  if (card) return card;
   const art = hero?.art_image_url != null ? String(hero.art_image_url).trim() : "";
-  return art || null;
+  if (art) return art;
+  const card = hero?.card_image_url != null ? String(hero.card_image_url).trim() : "";
+  return card || null;
 }
 
 /**
@@ -110,24 +110,25 @@ function newDraftTimeframe(mode = "now_open") {
 }
 
 /**
- * @param {{ hero: PlayTestingHero | SessionHero, selected?: boolean, onClick?: () => void, size?: "sm" | "md" }} props
+ * @param {{ hero: PlayTestingHero | SessionHero, selected?: boolean, onClick?: () => void, size?: "sm" | "md" | "lg" }} props
  */
 function HeroAvatar({ hero, selected = false, onClick, size = "md" }) {
   const url = heroPortraitURL(hero);
-  const dim = size === "sm" ? "size-9" : "size-12";
+  const dim = size === "lg" ? "size-16 sm:size-[4.5rem]" : size === "sm" ? "size-9" : "size-12";
   const ring = selected
     ? "ring-2 ring-emerald-300/90 ring-offset-2 ring-offset-[#120818]"
     : "ring-1 ring-white/20";
   const base = `${dim} shrink-0 overflow-hidden rounded-full bg-black/40 ${ring}`;
+  const initialSize = size === "lg" ? "text-[1.05rem]" : "text-[0.7rem]";
   const inner = url ? (
     <img
       src={url}
       alt=""
-      className="h-full w-full object-cover object-[center_22%]"
+      className="h-full w-full object-cover object-center"
       draggable={false}
     />
   ) : (
-    <span className="flex h-full w-full items-center justify-center text-[0.7rem] font-semibold text-[#f4f0fa]/75">
+    <span className={`flex h-full w-full items-center justify-center ${initialSize} font-semibold text-[#f4f0fa]/75`}>
       {(hero.name || "?").trim().charAt(0).toUpperCase()}
     </span>
   );
@@ -153,16 +154,16 @@ function HeroAvatar({ hero, selected = false, onClick, size = "md" }) {
 }
 
 /**
- * @param {{ heroes: Array<PlayTestingHero | SessionHero>, emptyLabel: string }} props
+ * @param {{ heroes: Array<PlayTestingHero | SessionHero>, emptyLabel: string, size?: "sm" | "md" | "lg" }} props
  */
-function HeroAvatarRow({ heroes, emptyLabel }) {
+function HeroAvatarRow({ heroes, emptyLabel, size = "sm" }) {
   if (!heroes.length) {
-    return <p className="m-0 text-[0.78rem] text-[#f4f0fa]/45">{emptyLabel}</p>;
+    return <p className="m-0 text-[0.9rem] text-[#f4f0fa]/55">{emptyLabel}</p>;
   }
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className={`flex flex-wrap ${size === "lg" ? "gap-2.5" : "gap-1.5"}`}>
       {heroes.map((h) => (
-        <HeroAvatar key={h.hero_id ?? h.id} hero={h} size="sm" />
+        <HeroAvatar key={h.hero_id ?? h.id} hero={h} size={size} />
       ))}
     </div>
   );
@@ -173,6 +174,7 @@ function HeroAvatarRow({ heroes, emptyLabel }) {
  */
 export function PlayTesting({ isLight, active }) {
   const { user } = useAuth();
+  const [viewTab, setViewTab] = useState(/** @type {"looking-for-games" | "notes"} */ ("looking-for-games"));
   const [sessions, setSessions] = useState(/** @type {PlayTestingSession[]} */ ([]));
   const [heroes, setHeroes] = useState(/** @type {PlayTestingHero[]} */ ([]));
   const [loading, setLoading] = useState(false);
@@ -322,82 +324,113 @@ export function PlayTesting({ isLight, active }) {
   const btnPrimary =
     "rounded-lg border border-emerald-400/45 bg-emerald-950/45 px-3 py-1.5 text-[0.8125rem] font-semibold text-emerald-100 transition-colors hover:border-emerald-300/55 hover:bg-emerald-900/45 disabled:cursor-not-allowed disabled:opacity-45";
 
+  /**
+   * @param {"looking-for-games" | "notes"} id
+   * @param {string} label
+   */
+  const viewTabBtn = (id, label) => {
+    const on = viewTab === id;
+    return (
+      <button
+        type="button"
+        role="tab"
+        aria-selected={on}
+        className={`rounded-md px-2.5 py-1 text-[0.8125rem] font-medium transition ${
+          on ? "bg-white/10 text-[#f4f0fa]" : "text-[#f4f0fa]/55 hover:bg-white/[0.06] hover:text-[#f4f0fa]/85"
+        }`}
+        onClick={() => setViewTab(id)}
+      >
+        {label}
+      </button>
+    );
+  };
+
   return (
     <div className="flex w-full flex-1 flex-col gap-4 px-1 py-2 sm:px-2" aria-label="Play Testing">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="m-0 text-left text-lg font-semibold tracking-tight text-[#f4f0fa]">Play Testing</h2>
-          <p className="m-0 mt-1 max-w-2xl text-[0.85rem] leading-snug text-[#f4f0fa]/70">
-            Schedule sessions with heroes to test and opponents to face.
-          </p>
+      <div>
+        <h2 className="m-0 text-left text-lg font-semibold tracking-tight text-[#f4f0fa]">Play Testing</h2>
+        <div className="mt-3 inline-flex flex-wrap gap-0.5 rounded-lg bg-black/15 p-0.5" role="tablist" aria-label="Play Testing sections">
+          {viewTabBtn("looking-for-games", "Looking For Games")}
+          {viewTabBtn("notes", "Notes")}
         </div>
-        <button type="button" className={btnPrimary} onClick={openModal}>
-          New session
-        </button>
       </div>
 
-      {error ? (
-        <div
-          className="rounded-xl border border-red-400/35 bg-red-950/40 px-4 py-3 text-left text-[0.875rem] text-red-100/95"
-          role="alert"
-        >
-          {error}
-        </div>
+      {viewTab === "looking-for-games" ? (
+        <>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <p className="m-0 max-w-2xl text-[0.85rem] leading-snug text-[#f4f0fa]/70">
+              Schedule sessions with heroes to test and opponents to face.
+            </p>
+            <button type="button" className={btnPrimary} onClick={openModal}>
+              New session
+            </button>
+          </div>
+
+          {error ? (
+            <div
+              className="rounded-xl border border-red-400/35 bg-red-950/40 px-4 py-3 text-left text-[0.875rem] text-red-100/95"
+              role="alert"
+            >
+              {error}
+            </div>
+          ) : null}
+
+          {loading && sessions.length === 0 ? (
+            <p className="m-0 text-[0.9rem] text-[#f4f0fa]/65">Loading sessions…</p>
+          ) : sessions.length === 0 ? (
+            <div className="flex min-h-[12rem] flex-1 items-center justify-center rounded-xl border border-dashed border-white/15 bg-black/20 px-4 text-center">
+              <p className="m-0 text-[0.9rem] text-[#f4f0fa]/55">No play testing sessions yet.</p>
+            </div>
+          ) : (
+            <ul className="m-0 grid list-none grid-cols-1 gap-4 p-0 sm:grid-cols-2">
+              {sessions.map((session) => (
+                <li
+                  key={session.id}
+                  className="rounded-xl border border-white/[0.14] bg-black/30 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:p-6"
+                >
+                  <div className="mb-4">
+                    <span className="rounded-md border border-white/15 bg-white/[0.06] px-2.5 py-1 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]">
+                      {cardFormatName(session.format) ?? `Format ${session.format}`}
+                    </span>
+                  </div>
+
+                  <div className="grid gap-4">
+                    <div>
+                      <p className="mb-2 mt-0 text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/7">
+                        Test with
+                      </p>
+                      <HeroAvatarRow heroes={session.heroes_with || []} emptyLabel="Any / unspecified" size="lg" />
+                    </div>
+                    <div>
+                      <p className="mb-2 mt-0 text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/7">
+                        Against
+                      </p>
+                      <HeroAvatarRow heroes={session.heroes_against || []} emptyLabel="Any / unspecified" size="lg" />
+                    </div>
+                    <div>
+                      <p className="mb-2 mt-0 text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/7">
+                        When
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {(session.timeframes || []).map((tf, idx) => (
+                          <span
+                            key={tf.id ?? idx}
+                            className="rounded-md border border-white/12 bg-black/35 px-2.5 py-1.5 text-[0.875rem] text-[#f4f0fa]"
+                          >
+                            {formatTimeframeLabel(tf.starts_at, tf.ends_at)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       ) : null}
 
-      {loading && sessions.length === 0 ? (
-        <p className="m-0 text-[0.9rem] text-[#f4f0fa]/65">Loading sessions…</p>
-      ) : sessions.length === 0 ? (
-        <div className="flex min-h-[12rem] flex-1 items-center justify-center rounded-xl border border-dashed border-white/15 bg-black/20 px-4 text-center">
-          <p className="m-0 text-[0.9rem] text-[#f4f0fa]/55">No play testing sessions yet.</p>
-        </div>
-      ) : (
-        <ul className="m-0 grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 xl:grid-cols-3">
-          {sessions.map((session) => (
-            <li
-              key={session.id}
-              className="rounded-xl border border-white/[0.14] bg-black/30 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-            >
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <span className="rounded-md border border-white/15 bg-white/[0.06] px-2 py-0.5 text-[0.75rem] font-semibold tracking-wide text-[#f4f0fa]/88">
-                  {cardFormatName(session.format) ?? `Format ${session.format}`}
-                </span>
-                <span className="text-[0.72rem] text-[#f4f0fa]/45">#{session.id}</span>
-              </div>
-
-              <div className="grid gap-3">
-                <div>
-                  <p className="mb-1.5 mt-0 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/5">
-                    Test with
-                  </p>
-                  <HeroAvatarRow heroes={session.heroes_with || []} emptyLabel="Any / unspecified" />
-                </div>
-                <div>
-                  <p className="mb-1.5 mt-0 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/5">
-                    Against
-                  </p>
-                  <HeroAvatarRow heroes={session.heroes_against || []} emptyLabel="Any / unspecified" />
-                </div>
-                <div>
-                  <p className="mb-1.5 mt-0 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/5">
-                    When
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(session.timeframes || []).map((tf, idx) => (
-                      <span
-                        key={tf.id ?? idx}
-                        className="rounded-md border border-white/12 bg-black/35 px-2 py-1 text-[0.75rem] text-[#f4f0fa]/8"
-                      >
-                        {formatTimeframeLabel(tf.starts_at, tf.ends_at)}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      {viewTab === "notes" ? <div className="min-h-0 flex-1" aria-label="Notes" /> : null}
 
       {modalOpen && typeof document !== "undefined"
         ? createPortal(

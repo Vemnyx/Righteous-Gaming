@@ -198,10 +198,29 @@ func (s *UserService) UpdateUserProfileForIDToken(ctx context.Context, idToken s
 		return domain.UserMeProfile{}, fmt.Errorf("service: update user profile: %w", err)
 	}
 
-	if username != nil && strings.TrimSpace(row.UID) != "" {
-		params := (&firebaseauth.UserToUpdate{}).DisplayName(*username)
-		if _, err := s.fb.UpdateUser(ctx, row.UID, params); err != nil {
-			return domain.UserMeProfile{}, fmt.Errorf("service: firebase update display name: %w", err)
+	if strings.TrimSpace(row.UID) != "" {
+		displayName := ""
+		if firstName != nil {
+			displayName = strings.TrimSpace(*firstName)
+		}
+		if lastName != nil {
+			ln := strings.TrimSpace(*lastName)
+			if ln != "" {
+				if displayName != "" {
+					displayName = displayName + " " + ln
+				} else {
+					displayName = ln
+				}
+			}
+		}
+		if displayName == "" && username != nil {
+			displayName = strings.TrimSpace(*username)
+		}
+		if displayName != "" {
+			params := (&firebaseauth.UserToUpdate{}).DisplayName(displayName)
+			if _, err := s.fb.UpdateUser(ctx, row.UID, params); err != nil {
+				return domain.UserMeProfile{}, fmt.Errorf("service: firebase update display name: %w", err)
+			}
 		}
 	}
 

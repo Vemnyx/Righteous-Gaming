@@ -41,6 +41,8 @@ type adminListedUserJSON struct {
 	ID                     int        `json:"id"`
 	Email                  string     `json:"email"`
 	Username               *string    `json:"username,omitempty"`
+	FirstName              *string    `json:"first_name,omitempty"`
+	LastName               *string    `json:"last_name,omitempty"`
 	UID                    string     `json:"uid"`
 	Role                   int        `json:"role"`
 	CreatedAt              time.Time  `json:"created_at"`
@@ -96,11 +98,12 @@ func (h *userHTTP) adminListUsers(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]adminListedUserJSON, 0, len(rows))
 	for _, row := range rows {
-		uname := row.Username
 		out = append(out, adminListedUserJSON{
 			ID:                     row.ID,
 			Email:                  row.Email,
-			Username:               uname,
+			Username:               row.Username,
+			FirstName:              row.FirstName,
+			LastName:               row.LastName,
 			UID:                    row.UID,
 			Role:                   row.Role,
 			CreatedAt:              row.CreatedAt,
@@ -363,7 +366,7 @@ func (h *userHTTP) saveMyProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, service.ErrUsernameNotAvailable) {
-			writeFieldError(w, http.StatusConflict, "username", "Username is not available.")
+			writeFieldError(w, http.StatusConflict, "username", "Discord name is not available.")
 			return
 		}
 		if errors.Is(err, service.ErrUnauthenticated) {
