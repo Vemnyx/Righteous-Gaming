@@ -14,7 +14,7 @@ import {
 
 /** @typedef {{ id?: number, starts_at: string, ends_at?: string | null, sort_order: number }} SessionTimeframe */
 
-/** @typedef {{ id: number, user_id: number, format: number, created_at: string, heroes_with: SessionHero[], heroes_against: SessionHero[], timeframes: SessionTimeframe[] }} PlayTestingSession */
+/** @typedef {{ id: number, user_id: number, format: number, created_at: string, owner_first_name?: string | null, owner_username?: string | null, heroes_with: SessionHero[], heroes_against: SessionHero[], timeframes: SessionTimeframe[] }} PlayTestingSession */
 
 /** @typedef {{ key: string, mode: "now_open" | "range", startsLocal: string, endsLocal: string }} DraftTimeframe */
 
@@ -58,7 +58,7 @@ function heroLegalForFormat(hero, formatId) {
   return preferYoung ? hero.young === true : hero.young !== true;
 }
 
-/** @param {string | undefined | null} iso */
+/** @param {string | undefined | null} startsAt @param {string | undefined | null} endsAt */
 function formatTimeframeLabel(startsAt, endsAt) {
   const start = startsAt ? new Date(startsAt) : null;
   if (!start || Number.isNaN(start.getTime())) return "—";
@@ -81,6 +81,18 @@ function formatTimeframeLabel(startsAt, endsAt) {
     minute: "2-digit",
   });
   return `${startLabel} – ${endLabel}`;
+}
+
+/**
+ * @param {{ owner_first_name?: string | null, owner_username?: string | null }} session
+ */
+function sessionOwnerLabel(session) {
+  const first = session.owner_first_name != null ? String(session.owner_first_name).trim() : "";
+  const discord = session.owner_username != null ? String(session.owner_username).trim() : "";
+  if (first && discord) return `${first} · ${discord}`;
+  if (first) return first;
+  if (discord) return discord;
+  return "";
 }
 
 /** @returns {string} datetime-local value */
@@ -114,22 +126,30 @@ function newDraftTimeframe(mode = "now_open") {
  */
 function HeroAvatar({ hero, selected = false, onClick, size = "md" }) {
   const url = heroPortraitURL(hero);
+  const name = (hero.name || "").trim() || "Unknown hero";
   const dim = size === "lg" ? "size-16 sm:size-[4.5rem]" : size === "sm" ? "size-9" : "size-12";
   const ring = selected
     ? "ring-2 ring-emerald-300/90 ring-offset-2 ring-offset-[#120818]"
     : "ring-1 ring-white/20";
-  const base = `${dim} shrink-0 overflow-hidden rounded-full bg-black/40 ${ring}`;
+  const base = `group relative ${dim} shrink-0 overflow-visible rounded-full bg-black/40 ${ring}`;
   const initialSize = size === "lg" ? "text-[1.05rem]" : "text-[0.7rem]";
-  const inner = url ? (
-    <img
-      src={url}
-      alt=""
-      className="h-full w-full object-cover object-center"
-      draggable={false}
-    />
-  ) : (
-    <span className={`flex h-full w-full items-center justify-center ${initialSize} font-semibold text-[#f4f0fa]/75`}>
-      {(hero.name || "?").trim().charAt(0).toUpperCase()}
+  const portrait = (
+    <span className="block h-full w-full overflow-hidden rounded-full">
+      {url ? (
+        <img src={url} alt={name} className="h-full w-full object-cover object-center" draggable={false} />
+      ) : (
+        <span className={`flex h-full w-full items-center justify-center ${initialSize} font-semibold text-[#f4f0fa]/75`}>
+          {name.charAt(0).toUpperCase()}
+        </span>
+      )}
+    </span>
+  );
+  const tooltip = (
+    <span
+      role="tooltip"
+      className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-white/20 bg-[#1a1028] px-2 py-1 text-[0.75rem] font-medium text-[#f4f0fa] opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+    >
+      {name}
     </span>
   );
 
@@ -137,18 +157,21 @@ function HeroAvatar({ hero, selected = false, onClick, size = "md" }) {
     return (
       <button
         type="button"
-        title={hero.name}
+        title={name}
+        aria-label={name}
         aria-pressed={selected}
         onClick={onClick}
         className={`${base} transition hover:ring-white/45`}
       >
-        {inner}
+        {portrait}
+        {tooltip}
       </button>
     );
   }
   return (
-    <span title={hero.name} className={base}>
-      {inner}
+    <span title={name} aria-label={name} className={base}>
+      {portrait}
+      {tooltip}
     </span>
   );
 }
@@ -207,7 +230,19 @@ export function PlayTesting({ isLight, active }) {
       const nextSessions = Array.isArray(sessionsData.sessions) ? sessionsData.sessions : [];
       const nextHeroes = Array.isArray(metaData.heroes) ? metaData.heroes : [];
       setSessions(
-        nextSessions.filter((s) => s && typeof s.id === "number" && typeof s.format === "number"),
+        nextSessions
+          .filter((s) => s && typeof s.id === "number" && typeof s.format === "number")
+          .map((s) => ({
+            ...s,
+            owner_first_name:
+              s.owner_first_name != null && String(s.owner_first_name).trim() !== ""
+                ? String(s.owner_first_name).trim()
+                : null,
+            owner_username:
+              s.owner_username != null && String(s.owner_username).trim() !== ""
+                ? String(s.owner_username).trim()
+                : null,
+          })),
       );
       setHeroes(
         nextHeroes.filter((h) => h && typeof h.id === "number" && typeof h.name === "string"),
@@ -383,32 +418,39 @@ export function PlayTesting({ isLight, active }) {
             </div>
           ) : (
             <ul className="m-0 grid list-none grid-cols-1 gap-4 p-0 sm:grid-cols-2">
-              {sessions.map((session) => (
+              {sessions.map((session) => {
+                const ownerLabel = sessionOwnerLabel(session);
+                return (
                 <li
                   key={session.id}
                   className="rounded-xl border border-white/[0.14] bg-black/30 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:p-6"
                 >
-                  <div className="mb-4">
+                  <div className="mb-4 flex items-start justify-between gap-3">
                     <span className="rounded-md border border-white/15 bg-white/[0.06] px-2.5 py-1 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]">
                       {cardFormatName(session.format) ?? `Format ${session.format}`}
                     </span>
+                    {ownerLabel ? (
+                      <span className="max-w-[55%] text-right text-[0.875rem] font-medium leading-snug text-[#f4f0fa]">
+                        {ownerLabel}
+                      </span>
+                    ) : null}
                   </div>
 
                   <div className="grid gap-4">
                     <div>
-                      <p className="mb-2 mt-0 text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/7">
+                      <p className="mb-2 mt-0 text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/90">
                         Test with
                       </p>
                       <HeroAvatarRow heroes={session.heroes_with || []} emptyLabel="Any / unspecified" size="lg" />
                     </div>
                     <div>
-                      <p className="mb-2 mt-0 text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/7">
-                        Against
+                      <p className="mb-2 mt-0 text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/90">
+                        Requesting
                       </p>
                       <HeroAvatarRow heroes={session.heroes_against || []} emptyLabel="Any / unspecified" size="lg" />
                     </div>
                     <div>
-                      <p className="mb-2 mt-0 text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/7">
+                      <p className="mb-2 mt-0 text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/90">
                         When
                       </p>
                       <div className="flex flex-wrap gap-2">
@@ -424,7 +466,8 @@ export function PlayTesting({ isLight, active }) {
                     </div>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </>

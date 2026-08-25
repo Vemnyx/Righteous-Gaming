@@ -78,13 +78,15 @@ type playTestingTimeframeJSON struct {
 }
 
 type playTestingSessionJSON struct {
-	ID         int                          `json:"id"`
-	UserID     int                          `json:"user_id"`
-	Format     int16                        `json:"format"`
-	CreatedAt  time.Time                    `json:"created_at"`
-	HeroesWith []playTestingSessionHeroJSON `json:"heroes_with"`
+	ID            int                          `json:"id"`
+	UserID        int                          `json:"user_id"`
+	Format        int16                        `json:"format"`
+	CreatedAt     time.Time                    `json:"created_at"`
+	OwnerFirstName *string                     `json:"owner_first_name,omitempty"`
+	OwnerUsername  *string                     `json:"owner_username,omitempty"`
+	HeroesWith    []playTestingSessionHeroJSON `json:"heroes_with"`
 	HeroesAgainst []playTestingSessionHeroJSON `json:"heroes_against"`
-	Timeframes []playTestingTimeframeJSON   `json:"timeframes"`
+	Timeframes    []playTestingTimeframeJSON   `json:"timeframes"`
 }
 
 type createPlayTestingTimeframeBody struct {
@@ -102,13 +104,15 @@ type createPlayTestingSessionBody struct {
 
 func sessionToJSON(s *repository.PlayTestingSession) playTestingSessionJSON {
 	out := playTestingSessionJSON{
-		ID:            s.ID,
-		UserID:        s.UserID,
-		Format:        s.Format,
-		CreatedAt:     s.CreatedAt,
-		HeroesWith:    []playTestingSessionHeroJSON{},
-		HeroesAgainst: []playTestingSessionHeroJSON{},
-		Timeframes:    []playTestingTimeframeJSON{},
+		ID:             s.ID,
+		UserID:         s.UserID,
+		Format:         s.Format,
+		CreatedAt:      s.CreatedAt,
+		OwnerFirstName: s.OwnerFirstName,
+		OwnerUsername:  s.OwnerUsername,
+		HeroesWith:     []playTestingSessionHeroJSON{},
+		HeroesAgainst:  []playTestingSessionHeroJSON{},
+		Timeframes:     []playTestingTimeframeJSON{},
 	}
 	for _, h := range s.Heroes {
 		item := playTestingSessionHeroJSON{

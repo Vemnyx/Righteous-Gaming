@@ -41,12 +41,14 @@ type PlayTestingSessionTimeframe struct {
 
 // PlayTestingSession is a play-testing session with nested heroes and timeframes.
 type PlayTestingSession struct {
-	ID         int
-	UserID     int
-	Format     int16
-	CreatedAt  time.Time
-	Heroes     []PlayTestingSessionHero
-	Timeframes []PlayTestingSessionTimeframe
+	ID                int
+	UserID            int
+	Format            int16
+	CreatedAt         time.Time
+	OwnerFirstName    *string
+	OwnerUsername     *string
+	Heroes            []PlayTestingSessionHero
+	Timeframes        []PlayTestingSessionTimeframe
 }
 
 // CreatePlayTestingSessionInput creates a session and its children.
@@ -102,9 +104,10 @@ func (r *Repository) ListPlayTestingSessions(ctx context.Context) ([]PlayTesting
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-SELECT id, user_id, format, created_at
-FROM play_testing_sessions
-ORDER BY created_at DESC, id DESC`
+SELECT s.id, s.user_id, s.format, s.created_at, u.first_name, u.username
+FROM play_testing_sessions s
+INNER JOIN users u ON u.id = s.user_id
+ORDER BY s.created_at DESC, s.id DESC`
 
 	rows, err := r.pool.Query(ctx, q)
 	if err != nil {
@@ -116,7 +119,9 @@ ORDER BY created_at DESC, id DESC`
 	ids := make([]int, 0, 32)
 	for rows.Next() {
 		var s PlayTestingSession
-		if err := rows.Scan(&s.ID, &s.UserID, &s.Format, &s.CreatedAt); err != nil {
+		if err := rows.Scan(
+			&s.ID, &s.UserID, &s.Format, &s.CreatedAt, &s.OwnerFirstName, &s.OwnerUsername,
+		); err != nil {
 			return nil, fmt.Errorf("repository: scan play testing session: %w", err)
 		}
 		s.Heroes = []PlayTestingSessionHero{}
@@ -286,6 +291,11 @@ RETURNING id, starts_at, ends_at, sort_order`
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("repository: commit play testing session: %w", err)
+	}
+
+	const ownerQ = `SELECT first_name, username FROM users WHERE id = $1`
+	if err := r.pool.QueryRow(ctx, ownerQ, s.UserID).Scan(&s.OwnerFirstName, &s.OwnerUsername); err != nil {
+		return nil, fmt.Errorf("repository: load play testing session owner: %w", err)
 	}
 
 	heroesBySession, err := r.listPlayTestingSessionHeroes(ctx, []int{s.ID})
