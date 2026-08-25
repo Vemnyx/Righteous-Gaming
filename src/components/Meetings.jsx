@@ -411,13 +411,13 @@ export function Meetings({ isLight, active }) {
                       className={`flex w-full min-h-[5.5rem] overflow-hidden p-0 text-left transition-colors sm:min-h-[6rem] ${rowHeaderBtn}`}
                     >
                       <div className="flex min-w-0 flex-1 flex-col justify-center gap-1.5 px-5 py-4 sm:px-6 sm:py-5">
-                        <p className="m-0 text-[0.95rem] font-semibold text-[#f4f0fa]/9 sm:text-base">
+                        <p className="m-0 text-[0.95rem] font-semibold text-[#f4f0fa] sm:text-base">
                           {formatMeetingWhen(row.meeting_at)}
                         </p>
-                        <p className="m-0 line-clamp-2 text-[0.9rem] leading-snug text-[#f4f0fa]/65 sm:text-[0.95rem]">
+                        <p className="m-0 line-clamp-2 text-[0.9rem] leading-snug text-[#f4f0fa] sm:text-[0.95rem]">
                           {summaryPreview(row.summary)}
                         </p>
-                        <p className="m-0 text-[0.75rem] text-[#f4f0fa]/45">
+                        <p className="m-0 text-[0.75rem] text-[#f4f0fa]">
                           {hasVideo ? "Recording available" : "No recording yet"}
                         </p>
                       </div>
