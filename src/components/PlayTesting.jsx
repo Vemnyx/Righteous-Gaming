@@ -370,8 +370,10 @@ export function PlayTesting({ isLight, active }) {
         type="button"
         role="tab"
         aria-selected={on}
-        className={`rounded-md px-2.5 py-1 text-[0.8125rem] font-medium transition ${
-          on ? "bg-white/10 text-[#f4f0fa]" : "text-[#f4f0fa]/55 hover:bg-white/[0.06] hover:text-[#f4f0fa]/85"
+        className={`rounded-xl border px-5 py-3 text-[0.95rem] font-semibold transition sm:px-6 sm:py-3.5 sm:text-[1.05rem] ${
+          on
+            ? "border-white/30 bg-white/[0.12] text-[#f4f0fa] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+            : "border-white/15 bg-black/25 text-[#f4f0fa]/7 hover:border-white/25 hover:bg-black/35 hover:text-[#f4f0fa]"
         }`}
         onClick={() => setViewTab(id)}
       >
@@ -382,12 +384,13 @@ export function PlayTesting({ isLight, active }) {
 
   return (
     <div className="flex w-full flex-1 flex-col gap-4 px-1 py-2 sm:px-2" aria-label="Play Testing">
-      <div>
-        <h2 className="m-0 text-left text-lg font-semibold tracking-tight text-[#f4f0fa]">Play Testing</h2>
-        <div className="mt-3 inline-flex flex-wrap gap-0.5 rounded-lg bg-black/15 p-0.5" role="tablist" aria-label="Play Testing sections">
-          {viewTabBtn("looking-for-games", "Looking For Games")}
-          {viewTabBtn("notes", "Notes")}
-        </div>
+      <div
+        className="inline-flex flex-wrap gap-2 rounded-2xl border border-white/[0.12] bg-black/20 p-2 sm:gap-2.5 sm:p-2.5"
+        role="tablist"
+        aria-label="Play Testing sections"
+      >
+        {viewTabBtn("looking-for-games", "Looking For Games")}
+        {viewTabBtn("notes", "Notes")}
       </div>
 
       {viewTab === "looking-for-games" ? (
