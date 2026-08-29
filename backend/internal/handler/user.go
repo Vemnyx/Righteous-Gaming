@@ -122,6 +122,77 @@ func (h *userHTTP) adminListUsers(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *userHTTP) adminUpdateUserProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch && r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	idToken := bearerIDToken(r.Header.Get("Authorization"))
+	if idToken == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	userID, err := strconv.Atoi(strings.TrimSpace(r.PathValue("id")))
+	if err != nil || userID <= 0 {
+		http.Error(w, "invalid user id", http.StatusBadRequest)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var body patchUserProfileRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeMessageError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if body.Username == nil && body.FirstName == nil && body.LastName == nil {
+		writeMessageError(w, http.StatusBadRequest, "no profile fields to update")
+		return
+	}
+	updated, err := h.svc.UpdateUserProfileForAdmin(r.Context(), idToken, userID, service.UserProfilePatch{
+		Username:  body.Username,
+		FirstName: body.FirstName,
+		LastName:  body.LastName,
+	})
+	if err != nil {
+		if errors.Is(err, service.ErrValidation) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, service.ErrUsernameNotAvailable) {
+			writeFieldError(w, http.StatusConflict, "username", "Discord name is not available.")
+			return
+		}
+		if errors.Is(err, service.ErrUnauthenticated) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if errors.Is(err, service.ErrForbidden) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		if errors.Is(err, service.ErrUserNotFound) {
+			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
+		log.Error("failed to update user profile as admin", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(adminListedUserJSON{
+		ID:                     updated.ID,
+		Email:                  updated.Email,
+		Username:               updated.Username,
+		FirstName:              updated.FirstName,
+		LastName:               updated.LastName,
+		UID:                    updated.UID,
+		Role:                   updated.Role,
+		CreatedAt:              updated.CreatedAt,
+		RegisteredAt:           updated.RegisteredAt,
+		DefaultPasswordChanged: updated.DefaultPasswordChanged,
+	})
+}
+
 func clampIntQuery(s string, fallback, min, max int) int {
 	s = strings.TrimSpace(s)
 	if s == "" {

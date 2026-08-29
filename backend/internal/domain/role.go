@@ -64,7 +64,7 @@ func (r Role) CanAccessMeetings() bool {
 // CountsForTeamSnapshot reports whether the user should appear in event team views.
 func (r Role) CountsForTeamSnapshot() bool {
 	switch r {
-	case RoleAdmin, RoleMember:
+	case RoleAdmin, RoleMember, RolePlayTester:
 		return true
 	default:
 		return false

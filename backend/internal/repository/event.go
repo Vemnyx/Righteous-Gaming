@@ -27,17 +27,17 @@ type Event struct {
 }
 
 type EventData struct {
-	ID            int
-	EventID       int
-	EventType     int16
-	StartDate     time.Time
-	EndDate       time.Time
-	CoverageSlug  string
-	CoverageURL   string
-	Label         *string
-	Format        *int16
-	StreamURLs    []string
-	CreatedAt     time.Time
+	ID           int
+	EventID      int
+	EventType    int16
+	StartDate    time.Time
+	EndDate      time.Time
+	CoverageSlug string
+	CoverageURL  string
+	Label        *string
+	Format       *int16
+	StreamURLs   []string
+	CreatedAt    time.Time
 }
 
 type EventRound struct {
@@ -436,7 +436,7 @@ SELECT id, first_name, last_name, email, username
 FROM users
 WHERE first_name IS NOT NULL AND btrim(first_name) <> ''
   AND last_name IS NOT NULL AND btrim(last_name) <> ''
-  AND role IN (0, 1)
+  AND role IN (0, 1, 3)
 ORDER BY id ASC`)
 	if err != nil {
 		return nil, err

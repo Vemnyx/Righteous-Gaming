@@ -150,7 +150,46 @@ func (s *UserService) UpdateUserProfileForIDToken(ctx context.Context, idToken s
 		}
 		return domain.UserMeProfile{}, fmt.Errorf("service: user by uid: %w", err)
 	}
+	return s.applyUserProfilePatch(ctx, row, patch)
+}
 
+// UpdateUserProfileForAdmin verifies the caller is an admin, then updates another user's profile fields.
+func (s *UserService) UpdateUserProfileForAdmin(ctx context.Context, idToken string, userID int, patch UserProfilePatch) (*repository.User, error) {
+	idToken = strings.TrimSpace(idToken)
+	if idToken == "" {
+		return nil, fmt.Errorf("%w: id token required", ErrValidation)
+	}
+	if userID <= 0 {
+		return nil, fmt.Errorf("%w: invalid user id", ErrValidation)
+	}
+	if patch.Username == nil && patch.FirstName == nil && patch.LastName == nil {
+		return nil, fmt.Errorf("%w: no profile fields to update", ErrValidation)
+	}
+	caller, err := s.UserForIDToken(ctx, idToken)
+	if err != nil {
+		return nil, err
+	}
+	if caller.Role == nil || *caller.Role != domain.RoleAdmin {
+		return nil, fmt.Errorf("%w", ErrForbidden)
+	}
+	row, err := s.repo.UserByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			return nil, fmt.Errorf("%w", ErrUserNotFound)
+		}
+		return nil, fmt.Errorf("service: user by id: %w", err)
+	}
+	if _, err := s.applyUserProfilePatch(ctx, row, patch); err != nil {
+		return nil, err
+	}
+	updated, err := s.repo.UserByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("service: reload user: %w", err)
+	}
+	return updated, nil
+}
+
+func (s *UserService) applyUserProfilePatch(ctx context.Context, row *repository.User, patch UserProfilePatch) (domain.UserMeProfile, error) {
 	username := row.Username
 	firstName := row.FirstName
 	lastName := row.LastName

@@ -51,8 +51,8 @@ func TestRolePlayTesterPermissions(t *testing.T) {
 	if !RolePlayTester.Valid() {
 		t.Fatal("play tester should be a valid role")
 	}
-	if RolePlayTester.CountsForTeamSnapshot() {
-		t.Fatal("play tester should not count for team snapshot")
+	if !RolePlayTester.CountsForTeamSnapshot() {
+		t.Fatal("play tester should count for team snapshot")
 	}
 }
 

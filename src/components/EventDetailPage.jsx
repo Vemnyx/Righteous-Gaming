@@ -754,36 +754,6 @@ export function EventDetailPage({ isLight, active, eventId }) {
   }, [active, user, eventId]);
 
   useEffect(() => {
-    if (!active || !user || eventData.length > 0) return undefined;
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const token = await user.getIdToken();
-        const res = await fetch(`/api/events/${eventId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok || cancelled) return;
-        const data = await res.json();
-        const next = Array.isArray(data.event_data) ? data.event_data : [];
-        if (next.length === 0 || cancelled) return;
-        setEvent(data.event ?? null);
-        setEventData(next);
-        setDataIdx(0);
-        setStreamTabIdx(0);
-      } catch {
-        /* ignore background poll errors */
-      }
-    };
-    const timer = setInterval(() => {
-      void poll();
-    }, 60_000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [active, user, eventId, eventData.length]);
-
-  useEffect(() => {
     if (!active || !user || !event) return undefined;
     let cancelled = false;
     (async () => {
@@ -806,29 +776,6 @@ export function EventDetailPage({ isLight, active, eventId }) {
       cancelled = true;
     };
   }, [active, user, eventId, event]);
-
-  const refreshTeamSummary = useCallback(async () => {
-    if (!user || !eventId || !event) return;
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch(`/api/events/${eventId}/team-summary`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      setTeamMatches(Array.isArray(data.matches) ? data.matches : []);
-    } catch {
-      /* keep last good snapshot during background refresh */
-    }
-  }, [user, eventId, event]);
-
-  useEffect(() => {
-    if (!active || mainTab !== "team") return undefined;
-    const timer = setInterval(() => {
-      void refreshTeamSummary();
-    }, 60_000);
-    return () => clearInterval(timer);
-  }, [active, mainTab, refreshTeamSummary]);
 
   useEffect(() => {
     roundsInitializedRef.current = false;
@@ -876,14 +823,6 @@ export function EventDetailPage({ isLight, active, eventId }) {
   useEffect(() => {
     if (!active || !activeData || (!showCoverage && !showMeta)) return;
     void loadRounds();
-  }, [active, activeData, showCoverage, showMeta, loadRounds]);
-
-  useEffect(() => {
-    if (!active || !activeData || (!showCoverage && !showMeta)) return undefined;
-    const timer = setInterval(() => {
-      void loadRounds();
-    }, 60_000);
-    return () => clearInterval(timer);
   }, [active, activeData, showCoverage, showMeta, loadRounds]);
 
   const loadEventMeta = useCallback(async () => {
@@ -1361,9 +1300,8 @@ export function EventDetailPage({ isLight, active, eventId }) {
           <p className="m-0 text-[0.9375rem] font-medium text-[#f4f0fa]">Coverage coming soon</p>
           <p className="mx-auto mt-2 max-w-md text-[0.85rem] leading-relaxed text-[#f4f0fa]/60">
             FabTCG hasn&apos;t published coverage links for this event yet. Pairings, results, and standings will
-            appear here automatically once they&apos;re available.
+            appear here once they&apos;re available — refresh the page to check again.
           </p>
-          <p className="m-0 mt-3 text-[0.75rem] text-[#f4f0fa]/45">Checking for updates every minute…</p>
         </div>
       ) : null}
 
