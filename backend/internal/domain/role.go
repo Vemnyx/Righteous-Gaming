@@ -61,6 +61,17 @@ func (r Role) CanAccessMeetings() bool {
 	}
 }
 
+// CanAccessPlayTesting reports whether the role may use Looking for Games.
+// All signed-in roles, including Guests, may access it.
+func (r Role) CanAccessPlayTesting() bool {
+	switch r {
+	case RoleAdmin, RoleMember, RoleGuest, RolePlayTester:
+		return true
+	default:
+		return false
+	}
+}
+
 // CanAccessReleaseTeams reports whether the role may use Release Teams.
 func (r Role) CanAccessReleaseTeams() bool {
 	return r.CanAccessMeetings()

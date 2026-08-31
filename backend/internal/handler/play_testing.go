@@ -48,13 +48,11 @@ func (h *playTestingHTTP) requirePlayTestingAccess(w http.ResponseWriter, r *htt
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return nil, false
 	}
-	switch *u.Role {
-	case domain.RoleAdmin, domain.RoleMember, domain.RolePlayTester:
-		return u, true
-	default:
+	if !u.Role.CanAccessPlayTesting() {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return nil, false
 	}
+	return u, true
 }
 
 type playTestingHeroJSON struct {

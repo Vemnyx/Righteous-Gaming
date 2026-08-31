@@ -48,11 +48,14 @@ export function canAccessData(role) {
   return n === ROLE_ADMIN || n === ROLE_MEMBER || n === ROLE_PLAY_TESTER;
 }
 
-/** Play Testing / Looking For Games: same audience as Meetings & Release Teams. */
+/** Looking for Games: available to every signed-in role (including Guests). */
 /** @param {number | null | undefined} role */
 /** @param {{ email?: string | null } | null | undefined} [_profile] */
 export function canAccessPlayTesting(role, _profile) {
-  return canAccessMeetings(role);
+  const n = Number(role);
+  return (
+    n === ROLE_ADMIN || n === ROLE_MEMBER || n === ROLE_GUEST || n === ROLE_PLAY_TESTER
+  );
 }
 
 /** Meetings resource: everyone except Guests. */

@@ -21,6 +21,9 @@ func TestRoleGuestPermissions(t *testing.T) {
 	if RoleGuest.CanAccessMeetings() {
 		t.Fatal("guest should not access meetings")
 	}
+	if !RoleGuest.CanAccessPlayTesting() {
+		t.Fatal("guest should access looking for games")
+	}
 	if !RoleGuest.Valid() {
 		t.Fatal("guest should be a valid role")
 	}

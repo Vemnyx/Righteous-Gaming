@@ -90,7 +90,6 @@ export function PlayTestingDetail({ isLight, active, sessionId, onBack }) {
 
   const isOwner = session != null && myUserId != null && session.user_id === myUserId;
   const isClosed = session?.status === 1 || session?.bucket === "past";
-  const myNotePublished = Boolean(myNote?.published);
   const hasUnpublishedDraft = Boolean(myNote && !myNote.published);
 
   const legalHeroes = useMemo(() => {
@@ -371,68 +370,225 @@ export function PlayTestingDetail({ isLight, active, sessionId, onBack }) {
 
         {session ? (
           <div className="grid gap-5">
-            <section className={shell}>
-              <div className="mb-5 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <span className="inline-flex rounded-md border border-white/15 bg-white/[0.06] px-3 py-1.5 text-[1rem] font-semibold tracking-wide text-[#f4f0fa]">
-                    {cardFormatName(session.format) ?? `Format ${session.format}`}
-                  </span>
-                  {isClosed ? (
-                    <p className="mb-0 mt-2 text-[0.85rem] text-[#f4f0fa]/55">Past session</p>
-                  ) : null}
-                </div>
-                <div className="flex max-w-[65%] flex-col items-end gap-1.5">
-                  {ownerLabel ? (
-                    <span className="text-right text-[1rem] font-medium leading-snug text-[#f4f0fa]">
-                      {ownerLabel}
+            <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
+              <section className={shell}>
+                <div className="mb-5 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="inline-flex rounded-md border border-white/15 bg-white/[0.06] px-3 py-1.5 text-[1rem] font-semibold tracking-wide text-[#f4f0fa]">
+                      {cardFormatName(session.format) ?? `Format ${session.format}`}
                     </span>
-                  ) : null}
-                  <div className="flex flex-wrap justify-end gap-2">
-                    {hasTimeframes ? (
-                      (session.timeframes || []).map((tf, idx) => (
-                        <span
-                          key={tf.id ?? idx}
-                          className="rounded-md border border-white/12 bg-black/35 px-2.5 py-1.5 text-[0.95rem] text-[#f4f0fa]"
-                        >
-                          {formatTimeframeLabel(tf.starts_at, tf.ends_at)}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="rounded-md border border-white/12 bg-black/35 px-2.5 py-1.5 text-[0.95rem] text-[#f4f0fa]">
-                        {whenEmptyLabel}
+                    {isClosed ? (
+                      <p className="mb-0 mt-2 text-[0.85rem] text-[#f4f0fa]/55">Past session</p>
+                    ) : null}
+                  </div>
+                  <div className="flex max-w-[65%] flex-col items-end gap-1.5">
+                    {ownerLabel ? (
+                      <span className="text-right text-[1rem] font-medium leading-snug text-[#f4f0fa]">
+                        {ownerLabel}
                       </span>
-                    )}
+                    ) : null}
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {hasTimeframes ? (
+                        (session.timeframes || []).map((tf, idx) => (
+                          <span
+                            key={tf.id ?? idx}
+                            className="rounded-md border border-white/12 bg-black/35 px-2.5 py-1.5 text-[0.95rem] text-[#f4f0fa]"
+                          >
+                            {formatTimeframeLabel(tf.starts_at, tf.ends_at)}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="rounded-md border border-white/12 bg-black/35 px-2.5 py-1.5 text-[0.95rem] text-[#f4f0fa]">
+                          {whenEmptyLabel}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
-                <div className="min-w-0 flex-1">
-                  <p className="mb-2.5 mt-0 text-[0.9rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/90">
-                    Playing
-                  </p>
-                  <HeroAvatarRow heroes={session.heroes_with || []} emptyLabel="Any / unspecified" size="xl" />
+                <div className="grid gap-4">
+                  <div>
+                    <p className="mb-2.5 mt-0 text-[0.9rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/90">
+                      Playing
+                    </p>
+                    <HeroAvatarRow heroes={session.heroes_with || []} emptyLabel="Any / unspecified" size="xl" />
+                  </div>
+                  <div>
+                    <p className="mb-2.5 mt-0 text-[0.9rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/90">
+                      Requesting
+                    </p>
+                    <HeroAvatarRow
+                      heroes={session.heroes_against || []}
+                      emptyLabel="Any / unspecified"
+                      size="xl"
+                    />
+                  </div>
                 </div>
-                <div className="min-w-0 flex-1 sm:text-right">
-                  <p className="mb-2.5 mt-0 text-[0.9rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/90">
-                    Requesting
-                  </p>
-                  <HeroAvatarRow
-                    heroes={session.heroes_against || []}
-                    emptyLabel="Any / unspecified"
-                    size="xl"
-                    align="end"
-                  />
+              </section>
+
+              <section className={shell}>
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="m-0 text-[1.05rem] font-semibold text-[#f4f0fa]">Interested players</h3>
+                  {!isOwner && !isClosed ? (
+                    <button
+                      type="button"
+                      className={btnPrimary}
+                      onClick={() => {
+                        setInterestEditing(true);
+                        setInterestError(null);
+                        if (myInterest) {
+                          setInterestHeroIds(
+                            (myInterest.heroes || []).map((h) => h.hero_id).filter((id) => typeof id === "number"),
+                          );
+                          setInterestNote(typeof myInterest.note === "string" ? myInterest.note : "");
+                        }
+                      }}
+                    >
+                      {myInterest ? "Edit my interest" : "I'm interested"}
+                    </button>
+                  ) : null}
                 </div>
-              </div>
-            </section>
+
+                {interestEditing && !isOwner ? (
+                  <div className="mb-5 rounded-lg border border-white/12 bg-black/25 p-3 sm:p-4">
+                    <p className="mb-2 mt-0 text-[0.85rem] font-medium text-[#f4f0fa]/85">
+                      Heroes you can play ({CARD_FORMAT_NAMES[session.format] ?? "format"})
+                    </p>
+                    {legalHeroes.length === 0 ? (
+                      <p className="m-0 text-[0.85rem] text-[#f4f0fa]/5">No legal heroes for this format.</p>
+                    ) : (
+                      <div className="mb-3 grid max-h-56 grid-cols-1 gap-1.5 overflow-y-auto">
+                        {legalHeroes.map((hero) => {
+                          const selected = interestHeroIds.includes(hero.id);
+                          return (
+                            <button
+                              key={hero.id}
+                              type="button"
+                              onClick={() => toggleInterestHero(hero.id)}
+                              className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-[0.85rem] transition ${
+                                selected
+                                  ? "border-emerald-400/45 bg-emerald-950/40 text-emerald-100"
+                                  : "border-white/12 bg-black/30 text-[#f4f0fa]/85 hover:border-white/25"
+                              }`}
+                            >
+                              <HeroAvatar hero={hero} selected={selected} size="sm" />
+                              <span className="min-w-0 truncate">{hero.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <label className="grid gap-1.5 text-[0.85rem] text-[#f4f0fa]/85">
+                      <span className="font-medium">
+                        Short note <span className="font-normal text-[#f4f0fa]/45">(optional)</span>
+                      </span>
+                      <textarea
+                        className="min-h-[4.5rem] resize-y rounded-lg border border-white/20 bg-black/35 px-3 py-2 text-[#f4f0fa]"
+                        value={interestNote}
+                        maxLength={INTEREST_NOTE_MAX}
+                        onChange={(e) => setInterestNote(e.target.value)}
+                        placeholder="Availability, preferred matchup, etc."
+                      />
+                      <span className="text-[0.75rem] text-[#f4f0fa]/45">
+                        {[...interestNote].length}/{INTEREST_NOTE_MAX}
+                      </span>
+                    </label>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className={`${btnBase} ${btnTheme}`}
+                        disabled={interestSubmitting}
+                        onClick={() => {
+                          setInterestEditing(false);
+                          setInterestError(null);
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      {myInterest ? (
+                        <button
+                          type="button"
+                          className={`${btnBase} ${btnTheme}`}
+                          disabled={interestSubmitting}
+                          onClick={() => void withdrawInterest(myUserId)}
+                        >
+                          Withdraw
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className={btnPrimary}
+                        disabled={interestSubmitting}
+                        onClick={() => void saveInterest()}
+                      >
+                        {interestSubmitting ? "Saving…" : "Save interest"}
+                      </button>
+                    </div>
+                    {interestError ? <p className="mt-3 mb-0 text-[0.85rem] text-red-200">{interestError}</p> : null}
+                  </div>
+                ) : null}
+
+                {interests.length === 0 ? (
+                  <p className="m-0 text-[0.9rem] text-[#f4f0fa]/55">No one has signed up yet.</p>
+                ) : (
+                  <ul className="m-0 grid list-none gap-3 p-0">
+                    {interests.map((row) => {
+                      const label =
+                        [row.first_name, row.username].filter(Boolean).join(" · ") || `User ${row.user_id}`;
+                      const canRemove = isOwner || row.user_id === myUserId;
+                      return (
+                        <li
+                          key={row.id}
+                          className="rounded-lg border border-white/10 bg-black/25 p-3 sm:p-4"
+                        >
+                          <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <p className="m-0 text-[0.95rem] font-semibold text-[#f4f0fa]">{label}</p>
+                              {row.note ? (
+                                <p className="mb-0 mt-1 text-[0.85rem] leading-snug text-[#f4f0fa]/75">
+                                  {row.note}
+                                </p>
+                              ) : null}
+                            </div>
+                            {canRemove ? (
+                              <button
+                                type="button"
+                                className={`${btnBase} ${btnTheme}`}
+                                disabled={interestSubmitting}
+                                onClick={() => void withdrawInterest(row.user_id)}
+                              >
+                                {row.user_id === myUserId ? "Withdraw" : "Remove"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <HeroAvatarRow
+                            heroes={(row.heroes || []).map((h) => ({
+                              ...h,
+                              id: h.hero_id,
+                            }))}
+                            emptyLabel="No heroes listed"
+                            size="md"
+                          />
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {interestError && !interestEditing ? (
+                  <p className="mt-3 mb-0 text-[0.85rem] text-red-200">{interestError}</p>
+                ) : null}
+              </section>
+            </div>
 
             <section className={shell}>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <h3 className="m-0 text-[1.05rem] font-semibold text-[#f4f0fa]">Session notes</h3>
-                {isOwner && !noteEditing ? (
+                {isOwner &&
+                !noteEditing &&
+                publishedNote &&
+                !isEmptyRichHtml(publishedNote.body) ? (
                   <button type="button" className={btnPrimary} onClick={beginEditNote}>
-                    {hasUnpublishedDraft ? "Continue draft" : myNotePublished ? "Edit notes" : "Add notes"}
+                    Edit notes
                   </button>
                 ) : null}
               </div>
@@ -494,161 +650,22 @@ export function PlayTestingDetail({ isLight, active, sessionId, onBack }) {
                 <div className="rounded-lg border border-white/10 bg-black/25 p-3 sm:p-4">
                   <RichTextHtml html={publishedNote.body} />
                 </div>
-              ) : isOwner && hasUnpublishedDraft ? (
-                <p className="m-0 text-[0.9rem] text-[#f4f0fa]/55">You have an unpublished draft.</p>
+              ) : isOwner ? (
+                <div className="flex min-h-[12rem] flex-col items-center justify-center gap-3 px-4 py-8 text-center">
+                  {hasUnpublishedDraft ? (
+                    <p className="m-0 text-[0.95rem] text-[#f4f0fa]/55">You have an unpublished draft.</p>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={beginEditNote}
+                    className="rounded-xl border border-emerald-400/50 bg-emerald-950/50 px-8 py-3.5 text-[1.1rem] font-semibold text-emerald-100 shadow-[0_4px_16px_rgba(16,80,50,0.25)] transition hover:border-emerald-300/60 hover:bg-emerald-900/55 sm:px-10 sm:py-4 sm:text-[1.2rem]"
+                  >
+                    {hasUnpublishedDraft ? "Continue draft" : "Add notes"}
+                  </button>
+                </div>
               ) : (
                 <p className="m-0 text-[0.9rem] text-[#f4f0fa]/55">No published notes yet.</p>
               )}
-            </section>
-
-            <section className={shell}>
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="m-0 text-[1.05rem] font-semibold text-[#f4f0fa]">Interested players</h3>
-                {!isOwner && !isClosed ? (
-                  <button
-                    type="button"
-                    className={btnPrimary}
-                    onClick={() => {
-                      setInterestEditing(true);
-                      setInterestError(null);
-                      if (myInterest) {
-                        setInterestHeroIds(
-                          (myInterest.heroes || []).map((h) => h.hero_id).filter((id) => typeof id === "number"),
-                        );
-                        setInterestNote(typeof myInterest.note === "string" ? myInterest.note : "");
-                      }
-                    }}
-                  >
-                    {myInterest ? "Edit my interest" : "I'm interested"}
-                  </button>
-                ) : null}
-              </div>
-
-              {interestEditing && !isOwner ? (
-                <div className="mb-5 rounded-lg border border-white/12 bg-black/25 p-3 sm:p-4">
-                  <p className="mb-2 mt-0 text-[0.85rem] font-medium text-[#f4f0fa]/85">
-                    Heroes you can play ({CARD_FORMAT_NAMES[session.format] ?? "format"})
-                  </p>
-                  {legalHeroes.length === 0 ? (
-                    <p className="m-0 text-[0.85rem] text-[#f4f0fa]/5">No legal heroes for this format.</p>
-                  ) : (
-                    <div className="mb-3 grid max-h-56 grid-cols-1 gap-1.5 overflow-y-auto sm:grid-cols-2">
-                      {legalHeroes.map((hero) => {
-                        const selected = interestHeroIds.includes(hero.id);
-                        return (
-                          <button
-                            key={hero.id}
-                            type="button"
-                            onClick={() => toggleInterestHero(hero.id)}
-                            className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-[0.85rem] transition ${
-                              selected
-                                ? "border-emerald-400/45 bg-emerald-950/40 text-emerald-100"
-                                : "border-white/12 bg-black/30 text-[#f4f0fa]/85 hover:border-white/25"
-                            }`}
-                          >
-                            <HeroAvatar hero={hero} selected={selected} size="sm" />
-                            <span className="min-w-0 truncate">{hero.name}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <label className="grid gap-1.5 text-[0.85rem] text-[#f4f0fa]/85">
-                    <span className="font-medium">
-                      Short note <span className="font-normal text-[#f4f0fa]/45">(optional)</span>
-                    </span>
-                    <textarea
-                      className="min-h-[4.5rem] resize-y rounded-lg border border-white/20 bg-black/35 px-3 py-2 text-[#f4f0fa]"
-                      value={interestNote}
-                      maxLength={INTEREST_NOTE_MAX}
-                      onChange={(e) => setInterestNote(e.target.value)}
-                      placeholder="Availability, preferred matchup, etc."
-                    />
-                    <span className="text-[0.75rem] text-[#f4f0fa]/45">
-                      {[...interestNote].length}/{INTEREST_NOTE_MAX}
-                    </span>
-                  </label>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      className={`${btnBase} ${btnTheme}`}
-                      disabled={interestSubmitting}
-                      onClick={() => {
-                        setInterestEditing(false);
-                        setInterestError(null);
-                      }}
-                    >
-                      Cancel
-                    </button>
-                    {myInterest ? (
-                      <button
-                        type="button"
-                        className={`${btnBase} ${btnTheme}`}
-                        disabled={interestSubmitting}
-                        onClick={() => void withdrawInterest(myUserId)}
-                      >
-                        Withdraw
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      className={btnPrimary}
-                      disabled={interestSubmitting}
-                      onClick={() => void saveInterest()}
-                    >
-                      {interestSubmitting ? "Saving…" : "Save interest"}
-                    </button>
-                  </div>
-                  {interestError ? <p className="mt-3 mb-0 text-[0.85rem] text-red-200">{interestError}</p> : null}
-                </div>
-              ) : null}
-
-              {interests.length === 0 ? (
-                <p className="m-0 text-[0.9rem] text-[#f4f0fa]/55">No one has signed up yet.</p>
-              ) : (
-                <ul className="m-0 grid list-none gap-3 p-0">
-                  {interests.map((row) => {
-                    const label = [row.first_name, row.username].filter(Boolean).join(" · ") || `User ${row.user_id}`;
-                    const canRemove = isOwner || row.user_id === myUserId;
-                    return (
-                      <li
-                        key={row.id}
-                        className="rounded-lg border border-white/10 bg-black/25 p-3 sm:p-4"
-                      >
-                        <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <p className="m-0 text-[0.95rem] font-semibold text-[#f4f0fa]">{label}</p>
-                            {row.note ? (
-                              <p className="mb-0 mt-1 text-[0.85rem] leading-snug text-[#f4f0fa]/75">{row.note}</p>
-                            ) : null}
-                          </div>
-                          {canRemove ? (
-                            <button
-                              type="button"
-                              className={`${btnBase} ${btnTheme}`}
-                              disabled={interestSubmitting}
-                              onClick={() => void withdrawInterest(row.user_id)}
-                            >
-                              {row.user_id === myUserId ? "Withdraw" : "Remove"}
-                            </button>
-                          ) : null}
-                        </div>
-                        <HeroAvatarRow
-                          heroes={(row.heroes || []).map((h) => ({
-                            ...h,
-                            id: h.hero_id,
-                          }))}
-                          emptyLabel="No heroes listed"
-                          size="md"
-                        />
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              {interestError && !interestEditing ? (
-                <p className="mt-3 mb-0 text-[0.85rem] text-red-200">{interestError}</p>
-              ) : null}
             </section>
           </div>
         ) : null}

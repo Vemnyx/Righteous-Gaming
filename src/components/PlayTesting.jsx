@@ -110,6 +110,90 @@ export function sessionOwnerLabel(session) {
 const OPEN_ENDED_MS = 24 * 60 * 60 * 1000;
 const CALENDAR_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+/** Stable per-owner palette for calendar chips / day accents (dark UI). */
+const OWNER_CALENDAR_COLORS = Object.freeze([
+  {
+    chip: "border-emerald-400/45 bg-emerald-950/70 text-emerald-50",
+    day: "border-emerald-400/50 bg-emerald-950/35",
+    dayHover: "hover:border-emerald-300/60 hover:bg-emerald-950/45",
+    dot: "bg-emerald-400",
+    legend: "bg-emerald-400",
+  },
+  {
+    chip: "border-sky-400/45 bg-sky-950/70 text-sky-50",
+    day: "border-sky-400/50 bg-sky-950/35",
+    dayHover: "hover:border-sky-300/60 hover:bg-sky-950/45",
+    dot: "bg-sky-400",
+    legend: "bg-sky-400",
+  },
+  {
+    chip: "border-amber-400/45 bg-amber-950/70 text-amber-50",
+    day: "border-amber-400/50 bg-amber-950/35",
+    dayHover: "hover:border-amber-300/60 hover:bg-amber-950/45",
+    dot: "bg-amber-400",
+    legend: "bg-amber-400",
+  },
+  {
+    chip: "border-rose-400/45 bg-rose-950/70 text-rose-50",
+    day: "border-rose-400/50 bg-rose-950/35",
+    dayHover: "hover:border-rose-300/60 hover:bg-rose-950/45",
+    dot: "bg-rose-400",
+    legend: "bg-rose-400",
+  },
+  {
+    chip: "border-teal-400/45 bg-teal-950/70 text-teal-50",
+    day: "border-teal-400/50 bg-teal-950/35",
+    dayHover: "hover:border-teal-300/60 hover:bg-teal-950/45",
+    dot: "bg-teal-400",
+    legend: "bg-teal-400",
+  },
+  {
+    chip: "border-orange-400/45 bg-orange-950/70 text-orange-50",
+    day: "border-orange-400/50 bg-orange-950/35",
+    dayHover: "hover:border-orange-300/60 hover:bg-orange-950/45",
+    dot: "bg-orange-400",
+    legend: "bg-orange-400",
+  },
+  {
+    chip: "border-lime-400/45 bg-lime-950/70 text-lime-50",
+    day: "border-lime-400/50 bg-lime-950/35",
+    dayHover: "hover:border-lime-300/60 hover:bg-lime-950/45",
+    dot: "bg-lime-400",
+    legend: "bg-lime-400",
+  },
+  {
+    chip: "border-cyan-400/45 bg-cyan-950/70 text-cyan-50",
+    day: "border-cyan-400/50 bg-cyan-950/35",
+    dayHover: "hover:border-cyan-300/60 hover:bg-cyan-950/45",
+    dot: "bg-cyan-400",
+    legend: "bg-cyan-400",
+  },
+  {
+    chip: "border-fuchsia-400/40 bg-fuchsia-950/65 text-fuchsia-50",
+    day: "border-fuchsia-400/45 bg-fuchsia-950/30",
+    dayHover: "hover:border-fuchsia-300/55 hover:bg-fuchsia-950/40",
+    dot: "bg-fuchsia-400",
+    legend: "bg-fuchsia-400",
+  },
+  {
+    chip: "border-indigo-400/45 bg-indigo-950/70 text-indigo-50",
+    day: "border-indigo-400/50 bg-indigo-950/35",
+    dayHover: "hover:border-indigo-300/60 hover:bg-indigo-950/45",
+    dot: "bg-indigo-400",
+    legend: "bg-indigo-400",
+  },
+]);
+
+/**
+ * @param {number | null | undefined} userId
+ * @returns {(typeof OWNER_CALENDAR_COLORS)[number]}
+ */
+function ownerCalendarColor(userId) {
+  const n = typeof userId === "number" && Number.isFinite(userId) ? userId : 0;
+  const idx = ((n % OWNER_CALENDAR_COLORS.length) + OWNER_CALENDAR_COLORS.length) % OWNER_CALENDAR_COLORS.length;
+  return OWNER_CALENDAR_COLORS[idx];
+}
+
 /** @param {Date} d */
 function toDateKey(d) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -557,6 +641,20 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
     return map;
   }, [sessions]);
 
+  const calendarOwnerLegend = useMemo(() => {
+    /** @type {Map<number, { userId: number, label: string, color: (typeof OWNER_CALENDAR_COLORS)[number] }>} */
+    const byUser = new Map();
+    for (const daySessions of sessionsByDay.values()) {
+      for (const session of daySessions) {
+        const uid = session.user_id;
+        if (typeof uid !== "number" || byUser.has(uid)) continue;
+        const label = sessionOwnerLabel(session) || `User ${uid}`;
+        byUser.set(uid, { userId: uid, label, color: ownerCalendarColor(uid) });
+      }
+    }
+    return [...byUser.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }, [sessionsByDay]);
+
   const selectedDaySessions = useMemo(() => {
     if (!selectedDayKey) return [];
     return sessionsByDay.get(selectedDayKey) || [];
@@ -729,18 +827,20 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
         ? "No upcoming sessions."
         : "No past sessions.";
 
+  /** @param {SessionListTab} tab */
+  const selectListTab = (tab) => {
+    setListTab(tab);
+    if (calendarView) {
+      setCalendarView(false);
+      setSelectedDayKey(null);
+    }
+  };
+
   return (
     <div className={PANEL_TABS_BLEED} aria-label="Looking for Games">
-      {!calendarView ? (
-        <PanelTabList ariaLabel="Session status">
-          {panelTabButton("current", listTab === "current", "Current", () => setListTab("current"))}
-          {panelTabButton("upcoming", listTab === "upcoming", "Upcoming", () => setListTab("upcoming"))}
-          {panelTabButton("past", listTab === "past", "Past", () => setListTab("past"))}
-        </PanelTabList>
-      ) : null}
-
-      <div className={PANEL_TABS_CONTENT_PAD} role="tabpanel">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <PanelTabList
+        ariaLabel="Session status"
+        endSlot={
           <label className="inline-flex cursor-pointer items-center gap-2.5">
             <span className="text-[0.95rem] font-semibold text-[#f4f0fa]">Calendar</span>
             <button
@@ -765,7 +865,24 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
               />
             </button>
           </label>
-          <button type="button" className={btnPrimary} onClick={openModal}>
+        }
+      >
+        {panelTabButton("current", !calendarView && listTab === "current", "Current", () =>
+          selectListTab("current"),
+        )}
+        {panelTabButton("upcoming", !calendarView && listTab === "upcoming", "Upcoming", () =>
+          selectListTab("upcoming"),
+        )}
+        {panelTabButton("past", !calendarView && listTab === "past", "Past", () => selectListTab("past"))}
+      </PanelTabList>
+
+      <div className={PANEL_TABS_CONTENT_PAD} role="tabpanel">
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className="rounded-xl border border-emerald-400/50 bg-emerald-950/50 px-6 py-3 text-[1.05rem] font-semibold text-emerald-100 shadow-[0_4px_16px_rgba(16,80,50,0.25)] transition hover:border-emerald-300/60 hover:bg-emerald-900/55 sm:px-8 sm:py-3.5 sm:text-[1.15rem]"
+            onClick={openModal}
+          >
             New session
           </button>
         </div>
@@ -827,39 +944,58 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
                       new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day),
                     );
                     const daySessions = sessionsByDay.get(key) || [];
+                    const hasSessions = daySessions.length > 0;
                     const selected = selectedDayKey === key;
                     const isToday = key === todayKey;
                     const preview = daySessions.slice(0, 2);
                     const overflow = daySessions.length - preview.length;
+                    const ownerIds = [...new Set(daySessions.map((s) => s.user_id).filter((id) => typeof id === "number"))];
+                    const primaryColor = hasSessions ? ownerCalendarColor(ownerIds[0]) : null;
+                    let dayClass =
+                      "border-white/10 bg-black/25 hover:border-white/25 hover:bg-black/35";
+                    if (selected) {
+                      dayClass = "border-violet-300/55 bg-violet-950/45";
+                    } else if (hasSessions && primaryColor) {
+                      dayClass = `${primaryColor.day} ${primaryColor.dayHover}`;
+                    } else if (isToday) {
+                      dayClass = "border-white/25 bg-black/35 hover:border-white/35 hover:bg-black/40";
+                    }
                     return (
                       <button
                         key={key}
                         type="button"
                         onClick={() => setSelectedDayKey(key)}
-                        className={`flex min-h-[5.5rem] flex-col gap-1 rounded-lg border p-1.5 text-left transition-colors sm:min-h-[6.5rem] sm:p-2 ${
-                          selected
-                            ? "border-violet-300/55 bg-violet-950/45"
-                            : isToday
-                              ? "border-emerald-400/35 bg-emerald-950/25 hover:border-emerald-300/50"
-                              : "border-white/10 bg-black/25 hover:border-white/25 hover:bg-black/35"
-                        }`}
+                        className={`flex min-h-[5.5rem] flex-col gap-1 rounded-lg border p-1.5 text-left transition-colors sm:min-h-[6.5rem] sm:p-2 ${dayClass}`}
                       >
-                        <span
-                          className={`text-[0.8rem] font-semibold ${
-                            isToday ? "text-emerald-200" : "text-[#f4f0fa]/85"
-                          }`}
-                        >
-                          {day}
+                        <span className="flex items-center justify-between gap-1">
+                          <span
+                            className={`text-[0.8rem] font-semibold ${
+                              hasSessions ? "text-[#f4f0fa]" : isToday ? "text-[#f4f0fa]/90" : "text-[#f4f0fa]/85"
+                            }`}
+                          >
+                            {day}
+                          </span>
+                          {ownerIds.length > 0 ? (
+                            <span className="flex items-center gap-0.5" aria-hidden>
+                              {ownerIds.slice(0, 4).map((uid) => (
+                                <span
+                                  key={uid}
+                                  className={`size-1.5 rounded-full ${ownerCalendarColor(uid).dot}`}
+                                />
+                              ))}
+                            </span>
+                          ) : null}
                         </span>
                         <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden">
                           {preview.map((session) => {
                             const owner = sessionOwnerLabel(session);
                             const format =
                               cardFormatName(session.format) ?? `Format ${session.format}`;
+                            const color = ownerCalendarColor(session.user_id);
                             return (
                               <span
                                 key={session.id}
-                                className="truncate rounded border border-white/10 bg-black/40 px-1 py-0.5 text-[0.65rem] leading-tight text-[#f4f0fa]/90"
+                                className={`truncate rounded border px-1 py-0.5 text-[0.65rem] leading-tight ${color.chip}`}
                                 title={owner ? `${format} · ${owner}` : format}
                               >
                                 {format}
@@ -877,6 +1013,21 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
                     );
                   })}
                 </div>
+
+                {calendarOwnerLegend.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 border-t border-white/10 pt-3">
+                    {calendarOwnerLegend.map((entry) => (
+                      <span
+                        key={entry.userId}
+                        className="inline-flex max-w-full items-center gap-1.5 text-[0.75rem] text-[#f4f0fa]/75"
+                        title={entry.label}
+                      >
+                        <span className={`size-2.5 shrink-0 rounded-full ${entry.color.legend}`} aria-hidden />
+                        <span className="truncate">{entry.label}</span>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
               {selectedDayKey ? (
