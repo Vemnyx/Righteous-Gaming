@@ -1,8 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
 import { cardFormatName } from "../constants/cardFormat";
 import { canWriteDecksAndRecordings, isAdminRole } from "../constants/roles";
+import { RichTextEditor } from "./RichTextEditor";
+import { RichTextHtml } from "./RichTextHtml";
+import {
+  PANEL_TABS_BLEED,
+  PANEL_TABS_CONTENT_PAD,
+  PANEL_TABS_HEADER_PAD,
+  PanelTabList,
+  panelTabButton,
+} from "./PanelTabs";
+import { bodyToRichHtml, isEmptyRichHtml } from "../utils/richTextDomPurify";
 
 /** @typedef {{ id: number, name: string, young?: boolean, card_image_url?: string | null, art_image_url?: string | null, formats?: number[] }} ReleaseHero */
 
@@ -96,9 +106,13 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
   const [addUserId, setAddUserId] = useState(/** @type {number | ""} */ (""));
 
   const [noteModalOpen, setNoteModalOpen] = useState(false);
-  const [noteBody, setNoteBody] = useState("");
+  const [noteEditorKey, setNoteEditorKey] = useState(0);
+  const [noteInitialHtml, setNoteInitialHtml] = useState("<p></p>");
   const [noteSubmitting, setNoteSubmitting] = useState(false);
   const [noteError, setNoteError] = useState(/** @type {string | null} */ (null));
+  const noteEditorRef = useRef(
+    /** @type {{ getHTML: () => string, isEmpty?: () => boolean } | null} */ (null),
+  );
   const [expandedNoteId, setExpandedNoteId] = useState(/** @type {number | null} */ (null));
 
   const [deckImportOpen, setDeckImportOpen] = useState(false);
@@ -121,37 +135,17 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
   const innerShell = "rounded-xl border border-white/12 bg-black/25";
   const btnBase =
     "inline-flex items-center justify-center rounded-lg border px-3 py-1.5 text-[0.85rem] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50";
+  const btnAction =
+    "inline-flex min-w-[11rem] items-center justify-center self-start rounded-lg border px-6 py-2.5 text-[0.95rem] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50";
   const btnTheme = isLight
     ? "border-[rgba(152,117,207,0.55)] bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] text-white hover:brightness-110"
     : "border-purple-300/40 bg-purple-900/45 text-[#f4f0fa] hover:bg-purple-800/55";
   const btnGhost =
-    "border-white/20 bg-transparent text-[#f4f0fa]/85 hover:border-white/35 hover:bg-white/5";
+    "border-white/20 bg-transparent text-[#f4f0fa] hover:border-white/35 hover:bg-white/5";
   const inputCls =
     "w-full rounded-lg border border-white/20 bg-black/35 px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none focus:border-purple-300/55";
-
-  /**
-   * Tab control meant to sit in the top-left of a shared panel header.
-   * @param {string} id
-   * @param {boolean} on
-   * @param {string} label
-   * @param {() => void} onClick
-   */
-  const panelTabBtn = (id, on, label, onClick) => (
-    <button
-      key={id}
-      type="button"
-      role="tab"
-      aria-selected={on}
-      className={`relative min-w-[8.5rem] px-7 py-3.5 text-[1.05rem] font-semibold tracking-wide transition sm:min-w-[10.5rem] sm:px-9 sm:py-4 sm:text-[1.2rem] ${
-        on
-          ? "bg-black/25 text-[#f4f0fa] after:absolute after:inset-x-3 after:bottom-0 after:h-[3px] after:rounded-full after:bg-white/55 sm:after:inset-x-4"
-          : "text-[#f4f0fa]/55 hover:bg-black/15 hover:text-[#f4f0fa]/85"
-      }`}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
+  const textMuted = "text-[#f4f0fa]/80";
+  const textFaint = "text-[#f4f0fa]/70";
 
   const isPast = session?.status === 1;
   const isCurrent = session?.status === 0;
@@ -411,14 +405,31 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
   };
 
   const openNoteModal = () => {
-    setNoteBody(myNote?.body ?? "");
+    setNoteInitialHtml(bodyToRichHtml(myNote?.body) || "<p></p>");
+    setNoteEditorKey((k) => k + 1);
     setNoteError(null);
     setNoteModalOpen(true);
   };
 
+  const noteUploadPath = useCallback(
+    (/** @type {File} */ _file, /** @type {string} */ ext) => {
+      const sid = sessionId ?? "unknown";
+      const hid = selectedHeroId ?? "hero";
+      const uid = myUserId ?? "user";
+      return `release-teams/${sid}/heroes/${hid}/notes/${uid}/inline-${Date.now()}.${ext}`;
+    },
+    [sessionId, selectedHeroId, myUserId],
+  );
+
+  const getIdToken = useCallback(async () => {
+    if (!user) throw new Error("Not signed in");
+    return user.getIdToken();
+  }, [user]);
+
   const saveNote = async () => {
     if (!user || !sessionId || selectedHeroId == null) return;
-    if (!noteBody.trim()) {
+    const html = noteEditorRef.current?.getHTML() ?? "";
+    if (noteEditorRef.current?.isEmpty?.() || isEmptyRichHtml(html)) {
       setNoteError("Enter a note.");
       return;
     }
@@ -428,7 +439,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
       const headers = await authHeaders();
       const res = await fetch(
         `/api/release-teams/sessions/${sessionId}/heroes/${selectedHeroId}/notes`,
-        { method: "POST", headers, body: JSON.stringify({ body: noteBody }) },
+        { method: "POST", headers, body: JSON.stringify({ body: html }) },
       );
       if (!res.ok) throw new Error(parseApiError(await res.text()));
       setNoteModalOpen(false);
@@ -546,39 +557,42 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
 
   if (sessionId) {
     return (
-      <div className="flex w-full flex-col gap-4 px-1 pb-8 pt-1 sm:px-0">
-        <div className="flex flex-wrap items-center gap-3">
-          <button type="button" className={`${btnBase} ${btnGhost}`} onClick={onCloseSession}>
-            ← Back
-          </button>
-          {session ? (
-            <div className="min-w-0 flex-1">
-              <h2 className="m-0 truncate text-[1.15rem] font-semibold text-white">{session.title}</h2>
-              <p className="m-0 text-[0.85rem] text-[#f4f0fa]/65">
-                {cardFormatName(session.format)}
-                {session.set_name ? ` · ${session.set_name}` : ""}
-                {isPast ? " · Past (read-only)" : ""}
-              </p>
-            </div>
-          ) : null}
-          {isAdmin && isCurrent ? (
-            <button type="button" className={`${btnBase} ${btnGhost}`} onClick={() => void closeSession()}>
-              Close session
+      <div className={PANEL_TABS_BLEED} aria-label="Release team session">
+        <div className={`${PANEL_TABS_HEADER_PAD} pb-4`}>
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" className={`${btnBase} ${btnGhost}`} onClick={onCloseSession}>
+              ← Back
             </button>
+            {session ? (
+              <div className="min-w-0 flex-1">
+                <h2 className="m-0 truncate text-[1.15rem] font-semibold text-white">{session.title}</h2>
+                <p className={`m-0 text-[0.85rem] ${textMuted}`}>
+                  {cardFormatName(session.format)}
+                  {session.set_name ? ` · ${session.set_name}` : ""}
+                  {isPast ? " · Past (read-only)" : ""}
+                </p>
+              </div>
+            ) : null}
+            {isAdmin && isCurrent ? (
+              <button type="button" className={`${btnBase} ${btnGhost}`} onClick={() => void closeSession()}>
+                Close session
+              </button>
+            ) : null}
+          </div>
+
+          {sessionError ? (
+            <p
+              className="mt-3 rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100"
+              role="alert"
+            >
+              {sessionError}
+            </p>
           ) : null}
-        </div>
 
-        {sessionError ? (
-          <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100" role="alert">
-            {sessionError}
-          </p>
-        ) : null}
-
-        {sessionLoading && !session ? (
-          <p className="text-[0.9rem] text-[#f4f0fa]/65">Loading session…</p>
-        ) : session ? (
-          <>
-            <label className="flex max-w-xs flex-col gap-1 text-[0.8rem] text-[#f4f0fa]/7">
+          {sessionLoading && !session ? (
+            <p className={`mt-3 text-[0.9rem] ${textMuted}`}>Loading session…</p>
+          ) : session ? (
+            <label className={`mt-4 flex max-w-xs flex-col gap-1 text-[0.85rem] ${textMuted}`}>
               Hero
               <select
                 className={inputCls}
@@ -596,20 +610,21 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                 ))}
               </select>
             </label>
+          ) : null}
+        </div>
 
-            <div className={`overflow-hidden rounded-2xl ${cardShell}`}>
-              <div className="flex flex-wrap items-stretch border-b border-white/[0.12] bg-black/20">
-                <div className="flex min-w-0 flex-wrap" role="tablist" aria-label="Hero sections">
-                  {panelTabBtn("team", heroTab === "team", "Team", () => setHeroTab("team"))}
-                  {panelTabBtn("decklists", heroTab === "decklists", "Decklists", () => setHeroTab("decklists"))}
-                  {panelTabBtn("notes", heroTab === "notes", "Notes", () => setHeroTab("notes"))}
-                  {panelTabBtn("recordings", heroTab === "recordings", "Recordings", () =>
-                    setHeroTab("recordings"),
-                  )}
-                </div>
-              </div>
+        {session ? (
+          <>
+            <PanelTabList ariaLabel="Hero sections">
+              {panelTabButton("team", heroTab === "team", "Team", () => setHeroTab("team"))}
+              {panelTabButton("decklists", heroTab === "decklists", "Decklists", () => setHeroTab("decklists"))}
+              {panelTabButton("notes", heroTab === "notes", "Notes", () => setHeroTab("notes"))}
+              {panelTabButton("recordings", heroTab === "recordings", "Recordings", () =>
+                setHeroTab("recordings"),
+              )}
+            </PanelTabList>
 
-              <div className="p-4 sm:p-5" role="tabpanel">
+            <div className={PANEL_TABS_CONTENT_PAD} role="tabpanel">
                 {heroDataError ? (
                   <p
                     className="mb-3 rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100"
@@ -620,7 +635,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                 ) : null}
 
                 {heroDataLoading && members.length === 0 && heroTab === "team" ? (
-                  <p className="text-[0.9rem] text-[#f4f0fa]/65">Loading…</p>
+                  <p className={`text-[0.9rem] ${textMuted}`}>Loading…</p>
                 ) : null}
 
             {heroTab === "team" && selectedHero ? (
@@ -668,7 +683,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                   ) : null}
                   <ul className="m-0 flex list-none flex-col gap-2 p-0">
                     {members.length === 0 ? (
-                      <li className="text-[0.9rem] text-[#f4f0fa]/55">No members yet.</li>
+                      <li className={`text-[0.9rem] ${textFaint}`}>No members yet.</li>
                     ) : (
                       members.map((m) => (
                         <li
@@ -676,7 +691,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                           className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/25 px-3 py-2"
                         >
                           <div>
-                            <p className="m-0 text-[0.95rem] font-medium text-[#f4f0fa]">{personLabel(m)}</p>
+                            <p className="m-0 text-[0.95rem] font-medium text-white">{personLabel(m)}</p>
                             {m.is_captain ? (
                               <p className="m-0 text-[0.75rem] font-semibold uppercase tracking-wide text-emerald-300/90">
                                 Team Captain
@@ -708,7 +723,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                     )}
                   </ul>
                 </div>
-                <div className={`flex items-center justify-center p-4 ${innerShell}`}>
+                <div className="flex items-center justify-center">
                   {heroCardImageURL(selectedHero) ? (
                     <img
                       src={heroCardImageURL(selectedHero)}
@@ -717,7 +732,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                       draggable={false}
                     />
                   ) : (
-                    <p className="m-0 text-[#f4f0fa]/5">No card image</p>
+                    <p className={`m-0 ${textFaint}`}>No card image</p>
                   )}
                 </div>
               </div>
@@ -727,19 +742,19 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
               <div className="flex flex-col gap-3">
                 {canMutateTeam && canSubmitContent ? (
                   <div>
-                    <button type="button" className={`${btnBase} ${btnTheme}`} onClick={() => void openDeckImport()}>
+                    <button type="button" className={`${btnAction} ${btnTheme}`} onClick={() => void openDeckImport()}>
                       Submit decklist
                     </button>
-                    <p className="mt-1 text-[0.75rem] text-[#f4f0fa]/5">
+                    <p className={`mt-1.5 text-[0.8rem] ${textFaint}`}>
                       Imports from Fabrary with {cardFormatName(session.format)} / {selectedHero?.name} expected on the
                       deck.
                     </p>
                   </div>
                 ) : null}
                 <div className={`overflow-x-auto ${innerShell}`}>
-                  <table className="w-full min-w-[28rem] border-collapse text-left text-[0.9rem]">
+                  <table className="w-full min-w-[28rem] border-collapse text-left text-[0.9rem] text-[#f4f0fa]">
                     <thead>
-                      <tr className="border-b border-white/15 text-[#f4f0fa]/65">
+                      <tr className={`border-b border-white/15 ${textMuted}`}>
                         <th className="px-4 py-3 font-medium">Deck</th>
                         <th className="px-4 py-3 font-medium">Submitted by</th>
                         <th className="px-4 py-3 font-medium">Link</th>
@@ -748,7 +763,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                     <tbody>
                       {decks.length === 0 ? (
                         <tr>
-                          <td colSpan={3} className="px-4 py-6 text-[#f4f0fa]/5">
+                          <td colSpan={3} className={`px-4 py-6 ${textFaint}`}>
                             No decklists yet.
                           </td>
                         </tr>
@@ -757,17 +772,17 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                           <tr key={d.id} className="border-b border-white/10">
                             <td className="px-4 py-3">
                               <a
-                                className="font-medium text-purple-200 underline-offset-2 hover:underline"
+                                className="font-medium text-purple-100 underline-offset-2 hover:underline"
                                 href={`/resources/decks/${d.deck_id}`}
                               >
                                 {d.deck_name}
                               </a>
                             </td>
-                            <td className="px-4 py-3 text-[#f4f0fa]/8">{personLabel(d)}</td>
+                            <td className="px-4 py-3 text-[#f4f0fa]">{personLabel(d)}</td>
                             <td className="px-4 py-3">
                               {d.fabrary_link ? (
                                 <a
-                                  className="text-purple-200 underline-offset-2 hover:underline"
+                                  className="text-purple-100 underline-offset-2 hover:underline"
                                   href={d.fabrary_link}
                                   target="_blank"
                                   rel="noreferrer"
@@ -789,28 +804,51 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
 
             {heroTab === "notes" ? (
               <div className="flex flex-col gap-3">
-                {canMutateTeam ? (
-                  <button type="button" className={`${btnBase} ${btnTheme}`} onClick={openNoteModal}>
-                    {myNote ? "Update my note" : "Add note"}
-                  </button>
-                ) : null}
                 <ul className="m-0 flex list-none flex-col gap-2 p-0">
-                  {notes.length === 0 ? (
-                    <li className="text-[0.9rem] text-[#f4f0fa]/55">No notes yet.</li>
+                  {canMutateTeam && !myNote ? (
+                    <li>
+                      <div
+                        className={`${innerShell} flex min-h-[9rem] items-center justify-center px-5 py-8`}
+                      >
+                        <button
+                          type="button"
+                          className={`${btnAction} ${btnTheme}`}
+                          onClick={openNoteModal}
+                        >
+                          Add Notes
+                        </button>
+                      </div>
+                    </li>
+                  ) : null}
+                  {notes.length === 0 && !(canMutateTeam && !myNote) ? (
+                    <li className={`text-[0.9rem] ${textFaint}`}>No notes yet.</li>
                   ) : (
                     notes.map((row) => {
-                      const expanded = expandedNoteId === row.id;
+                      const canEditMine = Boolean(canMutateTeam && row.user_id === myUserId);
+                      const expanded = !canEditMine && expandedNoteId === row.id;
                       return (
                         <li key={row.id}>
                           <div className={`${innerShell} overflow-hidden`}>
                             {!expanded ? (
                               <button
                                 type="button"
-                                onClick={() => setExpandedNoteId(row.id)}
+                                onClick={() => {
+                                  if (canEditMine) openNoteModal();
+                                  else setExpandedNoteId(row.id);
+                                }}
                                 className="flex w-full flex-col gap-1 px-5 py-4 text-left hover:bg-white/[0.03]"
                               >
-                                <p className="m-0 font-semibold text-[#f4f0fa]">{personLabel(row)}</p>
-                                <p className="m-0 line-clamp-2 text-[0.9rem] text-[#f4f0fa]/7">{row.body}</p>
+                                <p className="m-0 font-semibold text-white">
+                                  {personLabel(row)}
+                                  {canEditMine ? (
+                                    <span className={`ml-2 text-[0.8rem] font-medium ${textFaint}`}>
+                                      · Click to edit
+                                    </span>
+                                  ) : null}
+                                </p>
+                                <div className="max-h-[3.2rem] overflow-hidden text-[0.9rem] text-[#f4f0fa] [&_img]:hidden">
+                                  <RichTextHtml html={row.body} />
+                                </div>
                               </button>
                             ) : (
                               <div className="px-5 py-4">
@@ -821,9 +859,9 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                                 >
                                   {personLabel(row)}
                                 </button>
-                                <p className="mt-3 whitespace-pre-wrap text-[0.95rem] leading-relaxed text-[#f4f0fa]/85">
-                                  {row.body}
-                                </p>
+                                <div className="mt-3 text-[#f4f0fa]">
+                                  <RichTextHtml html={row.body} />
+                                </div>
                               </div>
                             )}
                           </div>
@@ -840,7 +878,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                 {canMutateTeam && canSubmitContent ? (
                   <button
                     type="button"
-                    className={`${btnBase} ${btnTheme}`}
+                    className={`${btnAction} ${btnTheme}`}
                     onClick={() => {
                       setRecError(null);
                       setRecordingModalOpen(true);
@@ -850,9 +888,9 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                   </button>
                 ) : null}
                 <div className={`overflow-x-auto ${innerShell}`}>
-                  <table className="w-full min-w-[28rem] border-collapse text-left text-[0.9rem]">
+                  <table className="w-full min-w-[28rem] border-collapse text-left text-[0.9rem] text-[#f4f0fa]">
                     <thead>
-                      <tr className="border-b border-white/15 text-[#f4f0fa]/65">
+                      <tr className={`border-b border-white/15 ${textMuted}`}>
                         <th className="px-4 py-3 font-medium">Recording</th>
                         <th className="px-4 py-3 font-medium">By</th>
                         <th className="px-4 py-3 font-medium">Open</th>
@@ -861,7 +899,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                     <tbody>
                       {recordings.length === 0 ? (
                         <tr>
-                          <td colSpan={3} className="px-4 py-6 text-[#f4f0fa]/5">
+                          <td colSpan={3} className={`px-4 py-6 ${textFaint}`}>
                             No recordings yet.
                           </td>
                         </tr>
@@ -871,10 +909,10 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                             <td className="px-4 py-3 text-[#f4f0fa]">
                               {rec.label?.trim() || "Untitled recording"}
                             </td>
-                            <td className="px-4 py-3 text-[#f4f0fa]/8">{personLabel(rec)}</td>
+                            <td className="px-4 py-3 text-[#f4f0fa]">{personLabel(rec)}</td>
                             <td className="px-4 py-3">
                               <a
-                                className="text-purple-200 underline-offset-2 hover:underline"
+                                className="text-purple-100 underline-offset-2 hover:underline"
                                 href={`/resources/recordings/${rec.recording_id}`}
                               >
                                 View
@@ -888,7 +926,6 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                 </div>
               </div>
             ) : null}
-              </div>
             </div>
           </>
         ) : null}
@@ -902,18 +939,28 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                   if (e.target === e.currentTarget && !noteSubmitting) setNoteModalOpen(false);
                 }}
               >
-                <div role="dialog" aria-modal="true" className={`w-full max-w-lg rounded-2xl p-5 ${cardShell}`}>
-                  <h3 className="m-0 text-[1.05rem] font-semibold text-white">
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  className={`flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl p-5 ${cardShell}`}
+                >
+                  <h3 className="m-0 shrink-0 text-[1.05rem] font-semibold text-white">
                     {myNote ? "Update note" : "Add note"}
                   </h3>
-                  <textarea
-                    className={`${inputCls} mt-3 min-h-[10rem]`}
-                    value={noteBody}
-                    onChange={(e) => setNoteBody(e.target.value)}
-                    placeholder="Team notes for this hero…"
-                  />
-                  {noteError ? <p className="mt-2 text-[0.85rem] text-red-200">{noteError}</p> : null}
-                  <div className="mt-4 flex justify-end gap-2">
+                  <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
+                    <RichTextEditor
+                      key={noteEditorKey}
+                      ref={noteEditorRef}
+                      initialHtml={noteInitialHtml}
+                      getIdToken={getIdToken}
+                      isLight={isLight}
+                      placeholder="Team notes for this hero… Add images via Image, paste, or drag & drop."
+                      minHeightClass="min-h-[12rem]"
+                      buildUploadPath={noteUploadPath}
+                    />
+                  </div>
+                  {noteError ? <p className="mt-2 shrink-0 text-[0.85rem] text-red-200">{noteError}</p> : null}
+                  <div className="mt-4 flex shrink-0 justify-end gap-2">
                     <button
                       type="button"
                       className={`${btnBase} ${btnGhost}`}
@@ -948,7 +995,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
               >
                 <div role="dialog" aria-modal="true" className={`w-full max-w-md rounded-2xl p-5 ${cardShell}`}>
                   <h3 className="m-0 text-[1.05rem] font-semibold text-white">Submit decklist</h3>
-                  <label className="mt-3 flex flex-col gap-1 text-[0.8rem] text-[#f4f0fa]/7">
+                  <label className={`mt-3 flex flex-col gap-1 text-[0.85rem] ${textMuted}`}>
                     Fabrary URL
                     <input
                       className={inputCls}
@@ -957,7 +1004,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                       placeholder="https://fabrary.net/decks/…"
                     />
                   </label>
-                  <label className="mt-3 flex flex-col gap-1 text-[0.8rem] text-[#f4f0fa]/7">
+                  <label className={`mt-3 flex flex-col gap-1 text-[0.85rem] ${textMuted}`}>
                     Deck source
                     <select
                       className={inputCls}
@@ -1007,18 +1054,18 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
               >
                 <div role="dialog" aria-modal="true" className={`w-full max-w-md rounded-2xl p-5 ${cardShell}`}>
                   <h3 className="m-0 text-[1.05rem] font-semibold text-white">Add recording</h3>
-                  <p className="mt-1 text-[0.8rem] text-[#f4f0fa]/55">
+                  <p className={`mt-1 text-[0.85rem] ${textMuted}`}>
                     Format and first hero are set to {cardFormatName(session?.format)} / {selectedHero?.name}.
                   </p>
-                  <label className="mt-3 flex flex-col gap-1 text-[0.8rem] text-[#f4f0fa]/7">
+                  <label className={`mt-3 flex flex-col gap-1 text-[0.85rem] ${textMuted}`}>
                     URL
                     <input className={inputCls} value={recUrl} onChange={(e) => setRecUrl(e.target.value)} />
                   </label>
-                  <label className="mt-3 flex flex-col gap-1 text-[0.8rem] text-[#f4f0fa]/7">
+                  <label className={`mt-3 flex flex-col gap-1 text-[0.85rem] ${textMuted}`}>
                     Label (optional)
                     <input className={inputCls} value={recLabel} onChange={(e) => setRecLabel(e.target.value)} />
                   </label>
-                  <label className="mt-3 flex flex-col gap-1 text-[0.8rem] text-[#f4f0fa]/7">
+                  <label className={`mt-3 flex flex-col gap-1 text-[0.85rem] ${textMuted}`}>
                     Opposing hero
                     <select
                       className={inputCls}
@@ -1065,16 +1112,13 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
   }
 
   return (
-    <div className="flex w-full flex-col gap-4 px-1 pb-8 pt-1 sm:px-0">
-      <div className={`overflow-hidden rounded-2xl ${cardShell}`}>
-        <div className="flex flex-wrap items-stretch border-b border-white/[0.12] bg-black/20">
-          <div className="flex min-w-0 flex-wrap" role="tablist" aria-label="Release Teams sections">
-            {panelTabBtn("current", listTab === "current", "Current", () => setListTab("current"))}
-            {panelTabBtn("past", listTab === "past", "Past", () => setListTab("past"))}
-          </div>
-        </div>
+    <div className={PANEL_TABS_BLEED} aria-label="Release Teams">
+      <PanelTabList ariaLabel="Release Teams sections">
+        {panelTabButton("current", listTab === "current", "Current", () => setListTab("current"))}
+        {panelTabButton("past", listTab === "past", "Past", () => setListTab("past"))}
+      </PanelTabList>
 
-        <div className="p-4 sm:p-5" role="tabpanel">
+      <div className={PANEL_TABS_CONTENT_PAD} role="tabpanel">
           {error ? (
             <p
               className="mb-3 rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100"
@@ -1085,9 +1129,9 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
           ) : null}
 
           {loading && sessions.length === 0 ? (
-            <p className="text-[0.9rem] text-[#f4f0fa]/65">Loading…</p>
+            <p className={`text-[0.9rem] ${textMuted}`}>Loading…</p>
           ) : sessions.length === 0 ? (
-            <p className="text-[0.9rem] text-[#f4f0fa]/60">
+            <p className={`text-[0.9rem] ${textMuted}`}>
               {listTab === "current" ? "No current release team sessions." : "No past sessions."}
               {isAdmin && listTab === "current" ? (
                 <>
@@ -1106,7 +1150,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                   className={`${innerShell} p-4 text-left transition hover:border-purple-300/40 hover:bg-black/35`}
                 >
                   <p className="m-0 text-[1.05rem] font-semibold text-white">{s.title}</p>
-                  <p className="mt-1 text-[0.85rem] text-[#f4f0fa]/65">
+                  <p className={`mt-1 text-[0.85rem] ${textMuted}`}>
                     {cardFormatName(s.format)}
                     {s.set_name ? ` · ${s.set_name}` : ""}
                   </p>
@@ -1134,7 +1178,6 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
               ))}
             </div>
           )}
-        </div>
       </div>
     </div>
   );
