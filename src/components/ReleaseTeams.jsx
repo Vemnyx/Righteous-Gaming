@@ -185,6 +185,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
   const [noteEditorKey, setNoteEditorKey] = useState(0);
   const [noteInitialHtml, setNoteInitialHtml] = useState("<p></p>");
   const [noteSubmitting, setNoteSubmitting] = useState(false);
+  const [noteDeleting, setNoteDeleting] = useState(false);
   const [noteSaveMode, setNoteSaveMode] = useState(/** @type {"draft" | "publish" | null} */ (null));
   const [noteError, setNoteError] = useState(/** @type {string | null} */ (null));
   const noteEditorRef = useRef(
@@ -529,7 +530,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
   };
 
   const closeNoteEditor = () => {
-    if (noteSubmitting) return;
+    if (noteSubmitting || noteDeleting) return;
     setNoteEditing(false);
     setNoteError(null);
     setNoteSaveMode(null);
@@ -585,6 +586,35 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
     } finally {
       setNoteSubmitting(false);
       setNoteSaveMode(null);
+    }
+  };
+
+  /** @param {number} noteId */
+  const deleteNote = async (noteId) => {
+    if (!user || !canMutateTeam || noteId <= 0) return;
+    if (!window.confirm("Delete this note? This cannot be undone.")) return;
+    setNoteDeleting(true);
+    setNoteError(null);
+    setHeroDataError(null);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch(`/api/release-teams/notes/${noteId}`, {
+        method: "DELETE",
+        headers,
+      });
+      if (!res.ok && res.status !== 204) {
+        throw new Error(parseApiError(await res.text()));
+      }
+      setMyNote(null);
+      setNoteEditing(false);
+      setExpandedNoteId(null);
+      setHeroReload((n) => n + 1);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to delete note";
+      if (noteEditing) setNoteError(msg);
+      else setHeroDataError(msg);
+    } finally {
+      setNoteDeleting(false);
     }
   };
 
@@ -815,10 +845,20 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
+                {myNote?.id ? (
+                  <button
+                    type="button"
+                    className={`${btnBase} border-red-400/40 bg-red-950/35 text-red-100 hover:bg-red-900/45`}
+                    disabled={noteSubmitting || noteDeleting}
+                    onClick={() => void deleteNote(myNote.id)}
+                  >
+                    {noteDeleting ? "Deleting…" : "Delete"}
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className={`${btnBase} ${btnGhost}`}
-                  disabled={noteSubmitting}
+                  disabled={noteSubmitting || noteDeleting}
                   onClick={closeNoteEditor}
                 >
                   Cancel
@@ -826,7 +866,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                 <button
                   type="button"
                   className={`${btnBase} ${btnGhost}`}
-                  disabled={noteSubmitting}
+                  disabled={noteSubmitting || noteDeleting}
                   onClick={() => void saveNote(false)}
                 >
                   {noteSaveMode === "draft" ? "Saving…" : "Save draft"}
@@ -834,7 +874,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                 <button
                   type="button"
                   className={`${btnBase} ${btnTheme}`}
-                  disabled={noteSubmitting}
+                  disabled={noteSubmitting || noteDeleting}
                   onClick={() => void saveNote(true)}
                 >
                   {noteSaveMode === "publish" ? "Publishing…" : "Publish"}
@@ -1102,13 +1142,25 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                       <div
                         className={`${innerShell} flex min-h-[9rem] flex-col items-center justify-center gap-2 px-5 py-8`}
                       >
-                        <button
-                          type="button"
-                          className={`${btnAction} ${btnTheme}`}
-                          onClick={openNoteEditor}
-                        >
-                          {hasUnpublishedDraft ? "Continue draft" : "Add Notes"}
-                        </button>
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            className={`${btnAction} ${btnTheme}`}
+                            onClick={openNoteEditor}
+                          >
+                            {hasUnpublishedDraft ? "Continue draft" : "Add Notes"}
+                          </button>
+                          {hasUnpublishedDraft && myNote?.id ? (
+                            <button
+                              type="button"
+                              className={`${btnBase} border-red-400/40 bg-red-950/35 text-red-100 hover:bg-red-900/45`}
+                              disabled={noteDeleting}
+                              onClick={() => void deleteNote(myNote.id)}
+                            >
+                              {noteDeleting ? "Deleting…" : "Delete draft"}
+                            </button>
+                          ) : null}
+                        </div>
                         {hasUnpublishedDraft ? (
                           <p className={`m-0 text-[0.85rem] ${textFaint}`}>
                             Draft saved — publish when you’re ready for the team to see it.
@@ -1127,26 +1179,40 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                         <li key={row.id}>
                           <div className={`${innerShell} overflow-hidden`}>
                             {!expanded ? (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (canEditMine) openNoteEditor();
-                                  else setExpandedNoteId(row.id);
-                                }}
-                                className="flex w-full flex-col gap-1 px-5 py-4 text-left hover:bg-white/[0.03]"
-                              >
-                                <p className="m-0 font-semibold text-white">
-                                  {personLabel(row)}
-                                  {canEditMine ? (
-                                    <span className={`ml-2 text-[0.8rem] font-medium ${textFaint}`}>
-                                      · Click to edit
-                                    </span>
-                                  ) : null}
-                                </p>
-                                <div className="max-h-[3.2rem] overflow-hidden text-[0.9rem] text-[#f4f0fa] [&_img]:hidden">
-                                  <RichTextHtml html={row.body} />
-                                </div>
-                              </button>
+                              <div className="flex flex-col">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (canEditMine) openNoteEditor();
+                                    else setExpandedNoteId(row.id);
+                                  }}
+                                  className="flex w-full flex-col gap-1 px-5 py-4 text-left hover:bg-white/[0.03]"
+                                >
+                                  <p className="m-0 font-semibold text-white">
+                                    {personLabel(row)}
+                                    {canEditMine ? (
+                                      <span className={`ml-2 text-[0.8rem] font-medium ${textFaint}`}>
+                                        · Click to edit
+                                      </span>
+                                    ) : null}
+                                  </p>
+                                  <div className="max-h-[3.2rem] overflow-hidden text-[0.9rem] text-[#f4f0fa] [&_img]:hidden">
+                                    <RichTextHtml html={row.body} />
+                                  </div>
+                                </button>
+                                {canEditMine ? (
+                                  <div className="flex justify-end px-5 pb-3">
+                                    <button
+                                      type="button"
+                                      className={`${btnBase} border-red-400/40 bg-red-950/35 text-red-100 hover:bg-red-900/45`}
+                                      disabled={noteDeleting}
+                                      onClick={() => void deleteNote(row.id)}
+                                    >
+                                      {noteDeleting ? "Deleting…" : "Delete"}
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </div>
                             ) : (
                               <div className="px-5 py-4">
                                 <button

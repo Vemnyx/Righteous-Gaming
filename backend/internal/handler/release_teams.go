@@ -881,6 +881,36 @@ func (h *releaseTeamsHTTP) updateNote(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"note": releaseTeamMyNoteJSON(note)})
 }
 
+// DELETE /api/release-teams/notes/{noteId}
+func (h *releaseTeamsHTTP) deleteNote(w http.ResponseWriter, r *http.Request) {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireReleaseTeamsAccess(w, u) {
+		return
+	}
+	noteID, err := strconv.Atoi(r.PathValue("noteId"))
+	if err != nil || noteID <= 0 {
+		writeMessageError(w, http.StatusBadRequest, "invalid note id")
+		return
+	}
+	existing, err := h.app.Repo.GetReleaseTeamNoteByID(r.Context(), noteID)
+	if err != nil {
+		h.writeRepoErr(w, err, "get release team note")
+		return
+	}
+	if existing.UserID != u.ID && !h.isAdmin(u) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	if err := h.app.Repo.DeleteReleaseTeamNoteByID(r.Context(), noteID); err != nil {
+		h.writeRepoErr(w, err, "delete release team note")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // GET decks / POST link / GET recordings / POST link / POST create recording
 func (h *releaseTeamsHTTP) listDecks(w http.ResponseWriter, r *http.Request) {
 	u, ok := h.sessionUser(w, r)

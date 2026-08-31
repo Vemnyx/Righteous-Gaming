@@ -144,6 +144,7 @@ func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient 
 	mux.HandleFunc("GET /api/release-teams/sessions/{id}/heroes/{heroId}/notes", rth.listNotes)
 	mux.HandleFunc("POST /api/release-teams/sessions/{id}/heroes/{heroId}/notes", rth.upsertNote)
 	mux.HandleFunc("PATCH /api/release-teams/notes/{noteId}", rth.updateNote)
+	mux.HandleFunc("DELETE /api/release-teams/notes/{noteId}", rth.deleteNote)
 	mux.HandleFunc("GET /api/release-teams/sessions/{id}/heroes/{heroId}/decks", rth.listDecks)
 	mux.HandleFunc("POST /api/release-teams/sessions/{id}/heroes/{heroId}/decks", rth.linkDeck)
 	mux.HandleFunc("GET /api/release-teams/sessions/{id}/heroes/{heroId}/recordings", rth.listRecordings)

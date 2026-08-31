@@ -677,6 +677,29 @@ WHERE id = $1`, noteID, body)
 	return r.getReleaseTeamNoteByID(ctx, noteID)
 }
 
+// DeleteReleaseTeamNoteByID permanently removes a note (owner/admin checked in handler).
+// Only allowed while the parent session is current (open).
+func (r *Repository) DeleteReleaseTeamNoteByID(ctx context.Context, noteID int) error {
+	if r.pool == nil {
+		return fmt.Errorf("repository: pool is closed")
+	}
+	note, err := r.getReleaseTeamNoteByID(ctx, noteID)
+	if err != nil {
+		return err
+	}
+	if _, err := r.requireCurrentSession(ctx, note.SessionID); err != nil {
+		return err
+	}
+	tag, err := r.pool.Exec(ctx, `DELETE FROM release_team_notes WHERE id = $1`, noteID)
+	if err != nil {
+		return fmt.Errorf("repository: delete release team note: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrReleaseTeamNoteNotFound
+	}
+	return nil
+}
+
 func (r *Repository) getReleaseTeamNoteByID(ctx context.Context, noteID int) (*ReleaseTeamNote, error) {
 	const q = `
 SELECT n.id, n.session_id, n.hero_id, n.user_id, n.body, n.draft_body, n.published_at,
