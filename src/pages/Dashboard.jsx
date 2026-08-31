@@ -26,11 +26,12 @@ import { HeroesAdmin } from "../components/HeroesAdmin";
 import { CardsAdmin } from "../components/CardsAdmin";
 import { PlayTesting } from "../components/PlayTesting";
 import { Meetings } from "../components/Meetings";
+import { ReleaseTeams } from "../components/ReleaseTeams";
 import { UserAccountMenu } from "../components/UserAccountMenu";
 import { UserSettings } from "../components/UserSettings";
 import { UserProfile } from "../components/UserProfile";
 import { sessionProfileDisplayName } from "../auth/sessionProfile";
-import { canAccessCardRaterResource, canAccessData, canAccessMeetings, canAccessPlayTesting, isAdminRole } from "../constants/roles";
+import { canAccessCardRaterResource, canAccessData, canAccessMeetings, canAccessPlayTesting, canAccessReleaseTeams, isAdminRole } from "../constants/roles";
 
 /** Persisted before opening Create User so Back restores the dashboard URL (e.g. `/admin/users`). */
 const SESSION_CREATE_USER_RETURN_KEY = "rg-dashboard-return-url";
@@ -76,6 +77,7 @@ const TEAM_SUB_LINKS = [
   { segment: "snapshot", label: "Snapshot", path: "/team" },
   { segment: "card-rater", label: "Card Rater", path: "/team/card-rater" },
   { segment: "play-testing", label: "Play Testing", path: "/team/play-testing" },
+  { segment: "release-teams", label: "Release Teams", path: "/team/release-teams" },
   { segment: "meetings", label: "Meetings", path: "/team/meetings" },
 ];
 
@@ -150,11 +152,22 @@ function buildDashboardPathname(
       teamChild === "card-rater" ||
       teamChild === "card-rater-play" ||
       teamChild === "play-testing" ||
+      teamChild === "release-teams" ||
       teamChild === "meetings"
         ? teamChild
         : DEFAULT_TEAM_SEGMENT;
     if (seg === "snapshot") return "/team";
     if (seg === "card-rater-play") return "/team/card-rater/play";
+    if (seg === "release-teams") {
+      const rawId = resourcesCardRaterId != null ? String(resourcesCardRaterId).trim() : "";
+      if (rawId !== "") {
+        const rid = parseInt(rawId, 10);
+        if (Number.isFinite(rid) && rid > 0 && String(rid) === rawId) {
+          return `/team/release-teams/${rid}`;
+        }
+      }
+      return "/team/release-teams";
+    }
     if (seg === "card-rater") {
       const rawId = resourcesCardRaterId != null ? String(resourcesCardRaterId).trim() : "";
       if (rawId !== "") {
@@ -823,6 +836,34 @@ function parseDashboardPathname(pathname) {
         adminAnnouncementForm: null,
       };
     }
+    if (b === "release-teams") {
+      if (c === undefined && rest.length === 0) {
+        return {
+          kind: "ok",
+          tabId: TEAM_TAB_ID,
+          resourcesChild: null,
+          teamChild: "release-teams",
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
+          adminChild: null,
+          adminAnnouncementForm: null,
+        };
+      }
+      const sid = parseInt(String(c), 10);
+      if (Number.isFinite(sid) && sid > 0 && String(sid) === String(c) && rest.length === 0) {
+        return {
+          kind: "ok",
+          tabId: TEAM_TAB_ID,
+          resourcesChild: null,
+          teamChild: "release-teams",
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: String(sid),
+          adminChild: null,
+          adminAnnouncementForm: null,
+        };
+      }
+      return { kind: "invalid" };
+    }
     if (b === "meetings") {
       if (c !== undefined || rest.length > 0) return { kind: "invalid" };
       return {
@@ -1364,6 +1405,7 @@ export default function Dashboard({ onNavigate }) {
   const canUseDataTab = canAccessData(sessionProfile?.role);
   const canUsePlayTesting = canAccessPlayTesting(sessionProfile?.role, sessionProfile);
   const canUseMeetings = canAccessMeetings(sessionProfile?.role);
+  const canUseReleaseTeams = canAccessReleaseTeams(sessionProfile?.role);
 
   useEffect(() => {
     try {
@@ -1403,9 +1445,10 @@ export default function Dashboard({ onNavigate }) {
       if (l.segment === "card-rater" && !canUseCardRaterResource) return false;
       if (l.segment === "play-testing" && !canUsePlayTesting) return false;
       if (l.segment === "meetings" && !canUseMeetings) return false;
+      if (l.segment === "release-teams" && !canUseReleaseTeams) return false;
       return true;
     });
-  }, [canUseCardRaterResource, canUsePlayTesting, canUseMeetings]);
+  }, [canUseCardRaterResource, canUsePlayTesting, canUseMeetings, canUseReleaseTeams]);
 
   const resourcesTabLabel = useMemo(() => {
     if (activeTab !== RESOURCES_TAB_ID) {
@@ -2107,6 +2150,72 @@ export default function Dashboard({ onNavigate }) {
     );
   }, [teamChild, canUseMeetings]);
 
+  useEffect(() => {
+    if (teamChild !== "release-teams") return;
+    if (canUseReleaseTeams) return;
+    setTeamChild(DEFAULT_TEAM_SEGMENT);
+    setResourcesCardRaterId(null);
+    replaceDashboardUrl(
+      TEAM_TAB_ID,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      DEFAULT_TEAM_SEGMENT,
+    );
+  }, [teamChild, canUseReleaseTeams]);
+
+  const openReleaseTeamSession = useCallback((id) => {
+    const sid = String(id);
+    if (!/^\d+$/.test(sid)) return;
+    setTeamChild("release-teams");
+    setResourcesCardRaterId(sid);
+    pushDashboardUrl(
+      TEAM_TAB_ID,
+      null,
+      null,
+      sid,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "release-teams",
+    );
+  }, []);
+
+  const closeReleaseTeamSession = useCallback(() => {
+    setResourcesCardRaterId(null);
+    replaceDashboardUrl(
+      TEAM_TAB_ID,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "release-teams",
+    );
+  }, []);
+
   return (
     <div className={isLight ? shellLight : shellDark}>
       <Tabs.Root
@@ -2688,6 +2797,23 @@ export default function Dashboard({ onNavigate }) {
                     aria-label="Meetings"
                   >
                     <p className="text-[0.9rem] text-[#f4f0fa]/65">Meetings are not available for Guest accounts.</p>
+                  </div>
+                )
+              ) : teamChild === "release-teams" ? (
+                canUseReleaseTeams ? (
+                  <ReleaseTeams
+                    isLight={isLight}
+                    active={activeTab === TEAM_TAB_ID && teamChild === "release-teams"}
+                    sessionId={resourcesCardRaterId}
+                    onOpenSession={openReleaseTeamSession}
+                    onCloseSession={closeReleaseTeamSession}
+                  />
+                ) : (
+                  <div
+                    className="flex min-h-[min(40vh,18rem)] flex-1 flex-col items-center justify-center px-4 text-center"
+                    aria-label="Release Teams"
+                  >
+                    <p className="text-[0.9rem] text-[#f4f0fa]/65">Release Teams are not available for Guest accounts.</p>
                   </div>
                 )
               ) : showCardRaterBlocked ? (

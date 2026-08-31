@@ -61,6 +61,11 @@ func (r Role) CanAccessMeetings() bool {
 	}
 }
 
+// CanAccessReleaseTeams reports whether the role may use Release Teams.
+func (r Role) CanAccessReleaseTeams() bool {
+	return r.CanAccessMeetings()
+}
+
 // CountsForTeamSnapshot reports whether the user should appear in event team views.
 func (r Role) CountsForTeamSnapshot() bool {
 	switch r {

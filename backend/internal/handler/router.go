@@ -127,5 +127,27 @@ func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient 
 	mux.HandleFunc("PATCH /api/meetings/{id}/video", mh.attachMeetingVideo)
 	mux.HandleFunc("POST /api/meetings/{id}/video", mh.attachMeetingVideo)
 
+	rth := &releaseTeamsHTTP{app: application, svc: userSvc}
+	mux.HandleFunc("GET /api/release-teams/meta", rth.getMeta)
+	mux.HandleFunc("GET /api/release-teams/eligible-users", rth.listEligibleUsers)
+	mux.HandleFunc("GET /api/release-teams/sessions", rth.listSessions)
+	mux.HandleFunc("POST /api/release-teams/sessions", rth.createSession)
+	mux.HandleFunc("GET /api/release-teams/sessions/{id}", rth.getSession)
+	mux.HandleFunc("POST /api/release-teams/sessions/{id}/close", rth.closeSession)
+	mux.HandleFunc("GET /api/release-teams/sessions/{id}/heroes/{heroId}/members", rth.listMembers)
+	mux.HandleFunc("POST /api/release-teams/sessions/{id}/heroes/{heroId}/join", rth.joinTeam)
+	mux.HandleFunc("POST /api/release-teams/sessions/{id}/heroes/{heroId}/leave", rth.leaveTeam)
+	mux.HandleFunc("POST /api/release-teams/sessions/{id}/heroes/{heroId}/members", rth.adminAddMember)
+	mux.HandleFunc("DELETE /api/release-teams/sessions/{id}/heroes/{heroId}/members/{userId}", rth.adminRemoveMember)
+	mux.HandleFunc("POST /api/release-teams/sessions/{id}/heroes/{heroId}/captain", rth.setCaptain)
+	mux.HandleFunc("GET /api/release-teams/sessions/{id}/heroes/{heroId}/notes", rth.listNotes)
+	mux.HandleFunc("POST /api/release-teams/sessions/{id}/heroes/{heroId}/notes", rth.upsertNote)
+	mux.HandleFunc("PATCH /api/release-teams/notes/{noteId}", rth.updateNote)
+	mux.HandleFunc("GET /api/release-teams/sessions/{id}/heroes/{heroId}/decks", rth.listDecks)
+	mux.HandleFunc("POST /api/release-teams/sessions/{id}/heroes/{heroId}/decks", rth.linkDeck)
+	mux.HandleFunc("GET /api/release-teams/sessions/{id}/heroes/{heroId}/recordings", rth.listRecordings)
+	mux.HandleFunc("POST /api/release-teams/sessions/{id}/heroes/{heroId}/recordings", rth.linkRecording)
+	mux.HandleFunc("POST /api/release-teams/sessions/{id}/heroes/{heroId}/recordings/create", rth.createRecording)
+
 	return mux
 }

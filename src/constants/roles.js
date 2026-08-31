@@ -67,6 +67,12 @@ export function canAccessMeetings(role) {
   return n === ROLE_ADMIN || n === ROLE_MEMBER || n === ROLE_PLAY_TESTER;
 }
 
+/** Release Teams resource: same audience as Meetings. */
+/** @param {number | null | undefined} role */
+export function canAccessReleaseTeams(role) {
+  return canAccessMeetings(role);
+}
+
 /** @param {number | null | undefined} role */
 export function roleLabel(role) {
   if (Number(role) === ROLE_ADMIN) return "Admin";
