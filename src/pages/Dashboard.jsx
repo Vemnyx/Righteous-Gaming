@@ -33,6 +33,9 @@ import { canAccessCardRaterResource, canAccessData, canAccessMeetings, canAccess
 /** Persisted before opening Create User so Back restores the dashboard URL (e.g. `/admin/users`). */
 const SESSION_CREATE_USER_RETURN_KEY = "rg-dashboard-return-url";
 
+/** Persisted admin vs member dashboard shell (`"1"` / `"0"`). */
+const ADMIN_MODE_STORAGE_KEY = "rg-admin-mode";
+
 const RESOURCES_TAB_ID = "resources";
 const DATA_TAB_ID = "data";
 const ADMIN_TAB_ID = "admin";
@@ -49,6 +52,9 @@ const DEFAULT_ADMIN_SEGMENT = "users";
 /** Default Resources sub-path when opening the Resources tab from the UI (not from the address bar). */
 const DEFAULT_RESOURCES_SEGMENT = "cards";
 
+/** Default Team sub-path when opening the Team tab from the UI (not from the address bar). */
+const DEFAULT_TEAM_SEGMENT = "snapshot";
+
 const FALLBACK_TAB_ID = "announcements";
 
 /** Admin announcements sub-route: list (`null`), create (`'new'`), or edit numeric id */
@@ -61,9 +67,14 @@ const RESOURCE_SUB_LINKS = [
   { segment: "decks", label: "Decks", path: "/resources/decks" },
   { segment: "recordings", label: "Recordings", path: "/resources/recordings" },
   { segment: "events", label: "Events", path: "/resources/events" },
-  { segment: "card-rater", label: "Card Rater", path: "/resources/card-rater" },
-  { segment: "play-testing", label: "Play Testing", path: "/resources/play-testing" },
-  { segment: "meetings", label: "Meetings", path: "/resources/meetings" },
+];
+
+/** @type {ResourceSubLink[]} */
+const TEAM_SUB_LINKS = [
+  { segment: "snapshot", label: "Snapshot", path: "/team" },
+  { segment: "card-rater", label: "Card Rater", path: "/team/card-rater" },
+  { segment: "play-testing", label: "Play Testing", path: "/team/play-testing" },
+  { segment: "meetings", label: "Meetings", path: "/team/meetings" },
 ];
 
 /** @type {ResourceSubLink[]} */
@@ -81,11 +92,14 @@ const ADMIN_SUB_LINKS = [
   { segment: "events", label: "Events", path: "/admin/events" },
 ];
 
+/** Admin-only tab list when `adminMode` is on (not part of ALL_TABS). */
+const ADMIN_ONLY_TABS = [{ id: ADMIN_TAB_ID, label: "Admin", requiresAdmin: true }];
+
 /**
  * @param {string} tabId
  * @param {string | null} resourcesChild — segment after `/resources/`, e.g. `cards`
  * @param {string | null} [resourcesCardIdentifier] — Fab `card_identifier` for `/resources/cards/:id`
- * @param {string | null} [resourcesCardRaterId] — numeric id for `/resources/card-rater/:id` analytics
+ * @param {string | null} [resourcesCardRaterId] — numeric id for `/team/card-rater/:id` analytics
  * @param {string | null} [adminChild] — segment after `/admin/`, e.g. `users`
  * @param {AnnouncementAdminForm} [announcementForm] — announcements list vs `/new` vs `/:id/edit`
  * @param {string | null} [dataChild] — segment after `/data/`, e.g. `card-ratings`
@@ -94,7 +108,8 @@ const ADMIN_SUB_LINKS = [
  * @param {string | null} [resourcesRecordingId] — numeric id for `/resources/recordings/:id`
  * @param {string | null} [resourcesEventId] — numeric id for `/resources/events/:id`
  * @param {string | null} [dataCardRaterCompareBaselineId] — baseline session for `/data/card-ratings/:id/compare/:baselineId`
- * @param {string | null} [resourcesCardRaterCompareBaselineId] — baseline session for `/resources/card-rater/:id/compare/:baselineId`
+ * @param {string | null} [resourcesCardRaterCompareBaselineId] — baseline session for `/team/card-rater/:id/compare/:baselineId`
+ * @param {string | null} [teamChild] — segment under `/team/` (`snapshot` → `/team`)
  */
 function buildDashboardPathname(
   tabId,
@@ -110,10 +125,43 @@ function buildDashboardPathname(
   dataCardRaterCompareBaselineId = null,
   resourcesCardRaterCompareBaselineId = null,
   resourcesEventId = null,
+  teamChild = null,
 ) {
   if (tabId === SETTINGS_TAB_ID) return "/settings";
   if (tabId === PROFILE_TAB_ID) return "/profile";
-  if (tabId === TEAM_TAB_ID) return "/team";
+  if (tabId === TEAM_TAB_ID) {
+    const seg =
+      teamChild === "snapshot" ||
+      teamChild === "card-rater" ||
+      teamChild === "card-rater-play" ||
+      teamChild === "play-testing" ||
+      teamChild === "meetings"
+        ? teamChild
+        : DEFAULT_TEAM_SEGMENT;
+    if (seg === "snapshot") return "/team";
+    if (seg === "card-rater-play") return "/team/card-rater/play";
+    if (seg === "card-rater") {
+      const rawId = resourcesCardRaterId != null ? String(resourcesCardRaterId).trim() : "";
+      if (rawId !== "") {
+        const rid = parseInt(rawId, 10);
+        if (Number.isFinite(rid) && rid > 0 && String(rid) === rawId) {
+          const rawBaseline =
+            resourcesCardRaterCompareBaselineId != null
+              ? String(resourcesCardRaterCompareBaselineId).trim()
+              : "";
+          if (rawBaseline !== "") {
+            const bid = parseInt(rawBaseline, 10);
+            if (Number.isFinite(bid) && bid > 0 && String(bid) === rawBaseline) {
+              return `/team/card-rater/${rid}/compare/${bid}`;
+            }
+          }
+          return `/team/card-rater/${rid}`;
+        }
+      }
+      return "/team/card-rater";
+    }
+    return `/team/${seg}`;
+  }
   if (tabId === DATA_TAB_ID) {
     const seg =
       dataChild === "card-ratings" || dataChild === "runaways-drafts"
@@ -164,11 +212,7 @@ function buildDashboardPathname(
       resourcesChild === "cards" ||
       resourcesChild === "decks" ||
       resourcesChild === "recordings" ||
-      resourcesChild === "events" ||
-      resourcesChild === "card-rater" ||
-      resourcesChild === "card-rater-play" ||
-      resourcesChild === "play-testing" ||
-      resourcesChild === "meetings"
+      resourcesChild === "events"
         ? resourcesChild
         : DEFAULT_RESOURCES_SEGMENT;
     if (
@@ -177,29 +221,6 @@ function buildDashboardPathname(
       String(resourcesCardIdentifier).trim() !== ""
     ) {
       return `/resources/cards/${encodeURIComponent(String(resourcesCardIdentifier).trim())}`;
-    }
-    if (seg === "card-rater-play") {
-      return "/resources/card-rater/play";
-    }
-    if (seg === "card-rater") {
-      const rawId = resourcesCardRaterId != null ? String(resourcesCardRaterId).trim() : "";
-      if (rawId !== "") {
-        const rid = parseInt(rawId, 10);
-        if (Number.isFinite(rid) && rid > 0 && String(rid) === rawId) {
-          const rawBaseline =
-            resourcesCardRaterCompareBaselineId != null
-              ? String(resourcesCardRaterCompareBaselineId).trim()
-              : "";
-          if (rawBaseline !== "") {
-            const bid = parseInt(rawBaseline, 10);
-            if (Number.isFinite(bid) && bid > 0 && String(bid) === rawBaseline) {
-              return `/resources/card-rater/${rid}/compare/${bid}`;
-            }
-          }
-          return `/resources/card-rater/${rid}`;
-        }
-      }
-      return "/resources/card-rater";
     }
     if (seg === "decks") {
       const rawId = resourcesDeckId != null ? String(resourcesDeckId).trim() : "";
@@ -250,6 +271,7 @@ function replaceDashboardUrl(
   dataCardRaterCompareBaselineId = null,
   resourcesCardRaterCompareBaselineId = null,
   resourcesEventId = null,
+  teamChild = null,
 ) {
   try {
     const u = new URL(window.location.href);
@@ -267,6 +289,7 @@ function replaceDashboardUrl(
       dataCardRaterCompareBaselineId,
       resourcesCardRaterCompareBaselineId,
       resourcesEventId,
+      teamChild,
     );
     u.search = "";
     const next = `${u.pathname}${u.search}${u.hash}`;
@@ -291,6 +314,7 @@ function pushDashboardUrl(
   dataCardRaterCompareBaselineId = null,
   resourcesCardRaterCompareBaselineId = null,
   resourcesEventId = null,
+  teamChild = null,
 ) {
   try {
     const u = new URL(window.location.href);
@@ -308,6 +332,7 @@ function pushDashboardUrl(
       dataCardRaterCompareBaselineId,
       resourcesCardRaterCompareBaselineId,
       resourcesEventId,
+      teamChild,
     );
     u.search = "";
     const next = `${u.pathname}${u.search}${u.hash}`;
@@ -353,12 +378,14 @@ function parseDashboardPathname(pathname) {
       };
     }
     if (b === "card-rater" || b === "card-ranker") {
+      /** Legacy `/resources/card-rater...` → Team tab. */
       if (c === undefined && rest.length > 0) return { kind: "invalid" };
       if (c === undefined) {
         return {
           kind: "ok",
-          tabId: RESOURCES_TAB_ID,
-          resourcesChild: "card-rater",
+          tabId: TEAM_TAB_ID,
+          resourcesChild: null,
+          teamChild: "card-rater",
           resourcesCardIdentifier: null,
           resourcesCardRaterId: null,
           adminChild: null,
@@ -368,8 +395,9 @@ function parseDashboardPathname(pathname) {
       if (c === "play") {
         return {
           kind: "ok",
-          tabId: RESOURCES_TAB_ID,
-          resourcesChild: "card-rater-play",
+          tabId: TEAM_TAB_ID,
+          resourcesChild: null,
+          teamChild: "card-rater-play",
           resourcesCardIdentifier: null,
           resourcesCardRaterId: null,
           adminChild: null,
@@ -383,8 +411,9 @@ function parseDashboardPathname(pathname) {
           if (Number.isFinite(bid) && bid > 0 && String(bid) === String(rest[1])) {
             return {
               kind: "ok",
-              tabId: RESOURCES_TAB_ID,
-              resourcesChild: "card-rater",
+              tabId: TEAM_TAB_ID,
+              resourcesChild: null,
+              teamChild: "card-rater",
               resourcesCardIdentifier: null,
               resourcesCardRaterId: String(rid),
               resourcesCardRaterCompareBaselineId: String(bid),
@@ -397,8 +426,9 @@ function parseDashboardPathname(pathname) {
         if (rest.length > 0) return { kind: "invalid" };
         return {
           kind: "ok",
-          tabId: RESOURCES_TAB_ID,
-          resourcesChild: "card-rater",
+          tabId: TEAM_TAB_ID,
+          resourcesChild: null,
+          teamChild: "card-rater",
           resourcesCardIdentifier: null,
           resourcesCardRaterId: String(rid),
           adminChild: null,
@@ -504,11 +534,13 @@ function parseDashboardPathname(pathname) {
       return { kind: "invalid" };
     }
     if (b === "play-testing") {
+      /** Legacy `/resources/play-testing` → Team tab. */
       if (c !== undefined || rest.length > 0) return { kind: "invalid" };
       return {
         kind: "ok",
-        tabId: RESOURCES_TAB_ID,
-        resourcesChild: "play-testing",
+        tabId: TEAM_TAB_ID,
+        resourcesChild: null,
+        teamChild: "play-testing",
         resourcesCardIdentifier: null,
         resourcesCardRaterId: null,
         adminChild: null,
@@ -516,11 +548,13 @@ function parseDashboardPathname(pathname) {
       };
     }
     if (b === "meetings") {
+      /** Legacy `/resources/meetings` → Team tab. */
       if (c !== undefined || rest.length > 0) return { kind: "invalid" };
       return {
         kind: "ok",
-        tabId: RESOURCES_TAB_ID,
-        resourcesChild: "meetings",
+        tabId: TEAM_TAB_ID,
+        resourcesChild: null,
+        teamChild: "meetings",
         resourcesCardIdentifier: null,
         resourcesCardRaterId: null,
         adminChild: null,
@@ -663,16 +697,105 @@ function parseDashboardPathname(pathname) {
     };
   }
 
-  if (a === "team" && b === undefined && c === undefined && rest.length === 0) {
-    return {
-      kind: "ok",
-      tabId: TEAM_TAB_ID,
-      resourcesChild: null,
-      resourcesCardIdentifier: null,
-      resourcesCardRaterId: null,
-      adminChild: null,
-      adminAnnouncementForm: null,
-    };
+  if (a === "team") {
+    if (b === undefined && c === undefined && rest.length === 0) {
+      return {
+        kind: "ok",
+        tabId: TEAM_TAB_ID,
+        resourcesChild: null,
+        teamChild: "snapshot",
+        resourcesCardIdentifier: null,
+        resourcesCardRaterId: null,
+        adminChild: null,
+        adminAnnouncementForm: null,
+      };
+    }
+    if (b === "card-rater" || b === "card-ranker") {
+      if (c === undefined && rest.length > 0) return { kind: "invalid" };
+      if (c === undefined) {
+        return {
+          kind: "ok",
+          tabId: TEAM_TAB_ID,
+          resourcesChild: null,
+          teamChild: "card-rater",
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
+          adminChild: null,
+          adminAnnouncementForm: null,
+        };
+      }
+      if (c === "play") {
+        return {
+          kind: "ok",
+          tabId: TEAM_TAB_ID,
+          resourcesChild: null,
+          teamChild: "card-rater-play",
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
+          adminChild: null,
+          adminAnnouncementForm: null,
+        };
+      }
+      const rid = parseInt(String(c), 10);
+      if (Number.isFinite(rid) && rid > 0 && String(rid) === String(c)) {
+        if (rest[0] === "compare" && rest.length === 2) {
+          const bid = parseInt(String(rest[1]), 10);
+          if (Number.isFinite(bid) && bid > 0 && String(bid) === String(rest[1])) {
+            return {
+              kind: "ok",
+              tabId: TEAM_TAB_ID,
+              resourcesChild: null,
+              teamChild: "card-rater",
+              resourcesCardIdentifier: null,
+              resourcesCardRaterId: String(rid),
+              resourcesCardRaterCompareBaselineId: String(bid),
+              adminChild: null,
+              adminAnnouncementForm: null,
+            };
+          }
+          return { kind: "invalid" };
+        }
+        if (rest.length > 0) return { kind: "invalid" };
+        return {
+          kind: "ok",
+          tabId: TEAM_TAB_ID,
+          resourcesChild: null,
+          teamChild: "card-rater",
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: String(rid),
+          adminChild: null,
+          adminAnnouncementForm: null,
+        };
+      }
+      return { kind: "invalid" };
+    }
+    if (b === "play-testing") {
+      if (c !== undefined || rest.length > 0) return { kind: "invalid" };
+      return {
+        kind: "ok",
+        tabId: TEAM_TAB_ID,
+        resourcesChild: null,
+        teamChild: "play-testing",
+        resourcesCardIdentifier: null,
+        resourcesCardRaterId: null,
+        adminChild: null,
+        adminAnnouncementForm: null,
+      };
+    }
+    if (b === "meetings") {
+      if (c !== undefined || rest.length > 0) return { kind: "invalid" };
+      return {
+        kind: "ok",
+        tabId: TEAM_TAB_ID,
+        resourcesChild: null,
+        teamChild: "meetings",
+        resourcesCardIdentifier: null,
+        resourcesCardRaterId: null,
+        adminChild: null,
+        adminAnnouncementForm: null,
+      };
+    }
+    return { kind: "invalid" };
   }
 
   /** Legacy dashboard URL before Admin submenu (`/users` → `/admin/users`). */
@@ -807,6 +930,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
     return {
       tabId: FALLBACK_TAB_ID,
       resourcesChild: null,
+      teamChild: null,
       resourcesCardIdentifier: null,
       resourcesCardRaterId: null,
       adminChild: null,
@@ -823,6 +947,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
         return {
           tabId: FALLBACK_TAB_ID,
           resourcesChild: null,
+          teamChild: null,
           resourcesCardIdentifier: null,
           resourcesCardRaterId: null,
           adminChild: null,
@@ -837,6 +962,8 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
           tabId === DATA_TAB_ID
             ? { dataChild: DEFAULT_DATA_SEGMENT, dataCardRaterId: null }
             : { dataChild: null, dataCardRaterId: null };
+        const teamDefaults =
+          tabId === TEAM_TAB_ID ? { teamChild: DEFAULT_TEAM_SEGMENT } : { teamChild: null };
         return {
           tabId,
           resourcesChild: null,
@@ -845,6 +972,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
           adminChild: null,
           adminAnnouncementForm: null,
           ...dataDefaults,
+          ...teamDefaults,
         };
       }
     } catch {
@@ -853,6 +981,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
     return {
       tabId: FALLBACK_TAB_ID,
       resourcesChild: null,
+      teamChild: null,
       resourcesCardIdentifier: null,
       resourcesCardRaterId: null,
       adminChild: null,
@@ -875,6 +1004,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
     return {
       tabId: SETTINGS_TAB_ID,
       resourcesChild: null,
+      teamChild: null,
       resourcesCardIdentifier: null,
       resourcesCardRaterId: null,
       adminChild: null,
@@ -888,6 +1018,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
     return {
       tabId: PROFILE_TAB_ID,
       resourcesChild: null,
+      teamChild: null,
       resourcesCardIdentifier: null,
       resourcesCardRaterId: null,
       adminChild: null,
@@ -898,11 +1029,26 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
   }
 
   if (tabId === TEAM_TAB_ID) {
+    if (!tabsAllowed.some((t) => t.id === TEAM_TAB_ID)) {
+      return {
+        tabId: FALLBACK_TAB_ID,
+        resourcesChild: null,
+        teamChild: null,
+        resourcesCardIdentifier: null,
+        resourcesCardRaterId: null,
+        adminChild: null,
+        adminAnnouncementForm: null,
+        dataChild: null,
+        dataCardRaterId: null,
+      };
+    }
     return {
       tabId: TEAM_TAB_ID,
       resourcesChild: null,
+      teamChild: parsed.teamChild ?? DEFAULT_TEAM_SEGMENT,
       resourcesCardIdentifier: null,
-      resourcesCardRaterId: null,
+      resourcesCardRaterId: parsed.resourcesCardRaterId ?? null,
+      resourcesCardRaterCompareBaselineId: parsed.resourcesCardRaterCompareBaselineId ?? null,
       adminChild: null,
       adminAnnouncementForm: null,
       dataChild: null,
@@ -914,6 +1060,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
     return {
       tabId: FALLBACK_TAB_ID,
       resourcesChild: null,
+      teamChild: null,
       resourcesCardIdentifier: null,
       resourcesCardRaterId: null,
       adminChild: null,
@@ -928,6 +1075,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
   return {
     tabId,
     resourcesChild,
+    teamChild: null,
     resourcesCardIdentifier,
     resourcesCardRaterId,
     resourcesCardRaterCompareBaselineId: parsed.resourcesCardRaterCompareBaselineId ?? null,
@@ -945,13 +1093,14 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
 /**
  * Admin tab requires admin (`role === 0`). Data tab requires data access.
  * Omit role flags for tabs visible to every signed-in user.
+ * Admin is not listed here — it appears only when `adminMode` is on.
  * @typedef {{ id: string, label: string, requiresAdmin?: boolean, requiresDataAccess?: boolean }} DashboardTabSpec
  */
 const ALL_TABS = [
   { id: "announcements", label: "Announcements" },
   { id: "data", label: "Data", requiresDataAccess: true },
   { id: "resources", label: "Resources" },
-  { id: ADMIN_TAB_ID, label: "Admin", requiresAdmin: true },
+  { id: TEAM_TAB_ID, label: "Team" },
 ];
 
 const MD_UP = "(min-width: 768px)";
@@ -1109,11 +1258,13 @@ export default function Dashboard({ onNavigate }) {
   const [activeTab, setActiveTab] = useState(ALL_TABS[0].id);
   /** When `activeTab === resources`, which sub-route is shown (`/resources/...`). */
   const [resourcesChild, setResourcesChild] = useState(/** @type {string | null} */ (null));
+  /** When `activeTab === team`, which sub-route is shown (`/team/...`; `snapshot` → `/team`). */
+  const [teamChild, setTeamChild] = useState(/** @type {string | null} */ (null));
   /** Fab `card_identifier` when URL is `/resources/cards/:identifier`. */
   const [resourcesCardIdentifier, setResourcesCardIdentifier] = useState(
     /** @type {string | null} */ (null),
   );
-  /** Numeric `card_rater.id` when URL is `/resources/card-rater/:id` (analytics). */
+  /** Numeric `card_rater.id` when URL is `/team/card-rater/:id` (analytics). */
   const [resourcesCardRaterId, setResourcesCardRaterId] = useState(/** @type {string | null} */ (null));
   /** Numeric `decks.id` when URL is `/resources/decks/:id`. */
   const [resourcesDeckId, setResourcesDeckId] = useState(/** @type {string | null} */ (null));
@@ -1121,7 +1272,7 @@ export default function Dashboard({ onNavigate }) {
   const [resourcesRecordingId, setResourcesRecordingId] = useState(/** @type {string | null} */ (null));
   /** Numeric `events.id` when URL is `/resources/events/:id`. */
   const [resourcesEventId, setResourcesEventId] = useState(/** @type {string | null} */ (null));
-  /** True while showing CardRanker at `/resources/card-rater` (active session; no id in URL). */
+  /** True while showing CardRanker at `/team/card-rater` (active session; no id in URL). */
   const [cardRaterPlayAtRoot, setCardRaterPlayAtRoot] = useState(false);
   /** When `activeTab === admin`, which sub-route is shown (`/admin/...`). */
   const [adminChild, setAdminChild] = useState(/** @type {string | null} */ (null));
@@ -1137,15 +1288,35 @@ export default function Dashboard({ onNavigate }) {
   const [dataCardRaterCompareBaselineId, setDataCardRaterCompareBaselineId] = useState(
     /** @type {string | null} */ (null),
   );
-  /** Baseline session id when URL is `/resources/card-rater/:id/compare/:baselineId`. */
+  /** Baseline session id when URL is `/team/card-rater/:id/compare/:baselineId`. */
   const [resourcesCardRaterCompareBaselineId, setResourcesCardRaterCompareBaselineId] = useState(
     /** @type {string | null} */ (null),
   );
+  const [adminMode, setAdminMode] = useState(() => {
+    try {
+      const parts = window.location.pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+      const root = parts[0];
+      if (root === "admin" || root === "users") return true;
+      if (
+        root &&
+        root !== "settings" &&
+        root !== "profile" &&
+        root !== "admin"
+      ) {
+        return false;
+      }
+      return localStorage.getItem(ADMIN_MODE_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileResourcesOpen, setMobileResourcesOpen] = useState(false);
+  const [mobileTeamOpen, setMobileTeamOpen] = useState(false);
   const [mobileAdminOpen, setMobileAdminOpen] = useState(false);
   const [mobileDataOpen, setMobileDataOpen] = useState(false);
   const [resourcesHovered, setResourcesHovered] = useState(false);
+  const [teamHovered, setTeamHovered] = useState(false);
   const [adminHovered, setAdminHovered] = useState(false);
   const [dataHovered, setDataHovered] = useState(false);
 
@@ -1155,16 +1326,41 @@ export default function Dashboard({ onNavigate }) {
   const canUsePlayTesting = canAccessPlayTesting(sessionProfile?.role, sessionProfile);
   const canUseMeetings = canAccessMeetings(sessionProfile?.role);
 
-  const tabs = useMemo(() => {
+  useEffect(() => {
+    try {
+      localStorage.setItem(ADMIN_MODE_STORAGE_KEY, adminMode ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [adminMode]);
+
+  /** Member-facing tabs (never includes Admin). */
+  const memberTabs = useMemo(() => {
     return ALL_TABS.filter((t) => {
-      if (t.requiresAdmin && !isAdmin) return false;
       if (t.requiresDataAccess && !canUseDataTab) return false;
       return true;
     });
-  }, [isAdmin, canUseDataTab]);
+  }, [canUseDataTab]);
 
-  const visibleResourceSubLinks = useMemo(() => {
-    return RESOURCE_SUB_LINKS.filter((l) => {
+  /** Tabs shown in the nav rail — Admin-only shell when `adminMode`. */
+  const tabs = useMemo(() => {
+    if (adminMode && isAdmin) return ADMIN_ONLY_TABS;
+    return memberTabs;
+  }, [adminMode, isAdmin, memberTabs]);
+
+  /**
+   * URL resolution allows both member and admin routes for admins so `/admin/*`
+   * can turn admin mode on even when the rail is currently in member mode.
+   */
+  const resolveTabs = useMemo(() => {
+    if (!isAdmin) return memberTabs;
+    return [...memberTabs, ...ADMIN_ONLY_TABS];
+  }, [isAdmin, memberTabs]);
+
+  const visibleResourceSubLinks = useMemo(() => RESOURCE_SUB_LINKS, []);
+
+  const visibleTeamSubLinks = useMemo(() => {
+    return TEAM_SUB_LINKS.filter((l) => {
       if (l.segment === "card-rater" && !canUseCardRaterResource) return false;
       if (l.segment === "play-testing" && !canUsePlayTesting) return false;
       if (l.segment === "meetings" && !canUseMeetings) return false;
@@ -1176,18 +1372,26 @@ export default function Dashboard({ onNavigate }) {
     if (activeTab !== RESOURCES_TAB_ID) {
       return ALL_TABS.find((t) => t.id === RESOURCES_TAB_ID)?.label ?? "Resources";
     }
-    const hit = visibleResourceSubLinks.find(
-      (l) =>
-        l.segment === resourcesChild ||
-        (l.segment === "card-rater" &&
-          (resourcesChild === "card-rater-play" || (resourcesChild === "card-rater" && cardRaterPlayAtRoot))),
-    );
+    const hit = visibleResourceSubLinks.find((l) => l.segment === resourcesChild);
     return hit?.label ?? "Resources";
-  }, [activeTab, resourcesChild, cardRaterPlayAtRoot, visibleResourceSubLinks]);
+  }, [activeTab, resourcesChild, visibleResourceSubLinks]);
+
+  const teamTabLabel = useMemo(() => {
+    if (activeTab !== TEAM_TAB_ID) {
+      return ALL_TABS.find((t) => t.id === TEAM_TAB_ID)?.label ?? "Team";
+    }
+    const hit = visibleTeamSubLinks.find(
+      (l) =>
+        l.segment === teamChild ||
+        (l.segment === "card-rater" &&
+          (teamChild === "card-rater-play" || (teamChild === "card-rater" && cardRaterPlayAtRoot))),
+    );
+    return hit?.label ?? "Team";
+  }, [activeTab, teamChild, cardRaterPlayAtRoot, visibleTeamSubLinks]);
 
   const adminTabLabel = useMemo(() => {
     if (activeTab !== ADMIN_TAB_ID) {
-      return ALL_TABS.find((t) => t.id === ADMIN_TAB_ID)?.label ?? "Admin";
+      return ADMIN_ONLY_TABS[0]?.label ?? "Admin";
     }
     const hit = ADMIN_SUB_LINKS.find((l) => l.segment === adminChild);
     return hit?.label ?? "Admin";
@@ -1201,85 +1405,138 @@ export default function Dashboard({ onNavigate }) {
     return hit?.label ?? "Data";
   }, [activeTab, dataChild]);
 
+  const clearDetailIds = useCallback(() => {
+    setResourcesCardIdentifier(null);
+    setResourcesCardRaterId(null);
+    setResourcesCardRaterCompareBaselineId(null);
+    setResourcesDeckId(null);
+    setResourcesRecordingId(null);
+    setResourcesEventId(null);
+    setCardRaterPlayAtRoot(false);
+    setDataCardRaterId(null);
+    setDataCardRaterCompareBaselineId(null);
+  }, []);
+
   const handleTabNavigate = useCallback((tabId) => {
     setActiveTab(tabId);
     if (tabId === RESOURCES_TAB_ID) {
+      setAdminMode(false);
       setResourcesChild(DEFAULT_RESOURCES_SEGMENT);
-      setResourcesCardIdentifier(null);
-      setResourcesCardRaterId(null);
-      setResourcesDeckId(null);
-      setResourcesRecordingId(null);
-      setCardRaterPlayAtRoot(false);
+      setTeamChild(null);
+      clearDetailIds();
       setAdminChild(null);
       setAdminAnnouncementForm(null);
       setDataChild(null);
-      setDataCardRaterId(null);
       replaceDashboardUrl(RESOURCES_TAB_ID, DEFAULT_RESOURCES_SEGMENT, null, null, null, null);
-    } else if (tabId === ADMIN_TAB_ID) {
-      setAdminChild(DEFAULT_ADMIN_SEGMENT);
+    } else if (tabId === TEAM_TAB_ID) {
+      setAdminMode(false);
+      setTeamChild(DEFAULT_TEAM_SEGMENT);
       setResourcesChild(null);
-      setResourcesCardIdentifier(null);
-      setResourcesCardRaterId(null);
-      setResourcesDeckId(null);
-      setResourcesRecordingId(null);
-      setCardRaterPlayAtRoot(false);
+      clearDetailIds();
+      setAdminChild(null);
       setAdminAnnouncementForm(null);
       setDataChild(null);
-      setDataCardRaterId(null);
+      replaceDashboardUrl(
+        TEAM_TAB_ID,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        DEFAULT_TEAM_SEGMENT,
+      );
+    } else if (tabId === ADMIN_TAB_ID) {
+      setAdminMode(true);
+      setAdminChild(DEFAULT_ADMIN_SEGMENT);
+      setResourcesChild(null);
+      setTeamChild(null);
+      clearDetailIds();
+      setAdminAnnouncementForm(null);
+      setDataChild(null);
       replaceDashboardUrl(ADMIN_TAB_ID, null, null, null, DEFAULT_ADMIN_SEGMENT, null);
     } else if (tabId === DATA_TAB_ID) {
+      setAdminMode(false);
       setDataChild(DEFAULT_DATA_SEGMENT);
-      setDataCardRaterId(null);
       setResourcesChild(null);
-      setResourcesCardIdentifier(null);
-      setResourcesCardRaterId(null);
-      setResourcesDeckId(null);
-      setResourcesRecordingId(null);
-      setCardRaterPlayAtRoot(false);
+      setTeamChild(null);
+      clearDetailIds();
       setAdminChild(null);
       setAdminAnnouncementForm(null);
       replaceDashboardUrl(DATA_TAB_ID, null, null, null, null, null, DEFAULT_DATA_SEGMENT, null);
     } else {
+      if (tabId !== SETTINGS_TAB_ID && tabId !== PROFILE_TAB_ID) setAdminMode(false);
       setResourcesChild(null);
-      setResourcesCardIdentifier(null);
-      setResourcesCardRaterId(null);
-      setResourcesDeckId(null);
-      setResourcesRecordingId(null);
-      setCardRaterPlayAtRoot(false);
+      setTeamChild(null);
+      clearDetailIds();
       setAdminChild(null);
       setAdminAnnouncementForm(null);
       setDataChild(null);
-      setDataCardRaterId(null);
       replaceDashboardUrl(tabId, null, null, null, null, null);
       setMobileResourcesOpen(false);
+      setMobileTeamOpen(false);
       setMobileAdminOpen(false);
       setMobileDataOpen(false);
     }
-  }, []);
+  }, [clearDetailIds]);
 
   const goResourcesSub = useCallback((segment) => {
+    setAdminMode(false);
     setActiveTab(RESOURCES_TAB_ID);
     setResourcesChild(segment);
-    setResourcesCardIdentifier(null);
-    setResourcesCardRaterId(null);
-    setResourcesDeckId(null);
-    setResourcesRecordingId(null);
-    setResourcesEventId(null);
+    setTeamChild(null);
+    clearDetailIds();
+    setAdminChild(null);
+    setAdminAnnouncementForm(null);
+    setDataChild(null);
+    replaceDashboardUrl(RESOURCES_TAB_ID, segment, null, null, null, null);
+  }, [clearDetailIds]);
+
+  const goTeamSub = useCallback((segment) => {
+    setAdminMode(false);
+    setActiveTab(TEAM_TAB_ID);
+    setTeamChild(segment);
+    setResourcesChild(null);
+    clearDetailIds();
     if (segment === "card-rater") setCardRaterPlayAtRoot(false);
     setAdminChild(null);
     setAdminAnnouncementForm(null);
     setDataChild(null);
-    setDataCardRaterId(null);
-    replaceDashboardUrl(RESOURCES_TAB_ID, segment, null, null, null, null);
-  }, []);
+    replaceDashboardUrl(
+      TEAM_TAB_ID,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      segment,
+    );
+  }, [clearDetailIds]);
 
   const goDataSub = useCallback((segment) => {
+    setAdminMode(false);
     setActiveTab(DATA_TAB_ID);
     setDataChild(segment);
     setDataCardRaterId(null);
+    setDataCardRaterCompareBaselineId(null);
     setResourcesChild(null);
+    setTeamChild(null);
     setResourcesCardIdentifier(null);
     setResourcesCardRaterId(null);
+    setResourcesCardRaterCompareBaselineId(null);
     setCardRaterPlayAtRoot(false);
     setAdminChild(null);
     setAdminAnnouncementForm(null);
@@ -1287,17 +1544,46 @@ export default function Dashboard({ onNavigate }) {
   }, []);
 
   const goAdminSub = useCallback((segment) => {
+    setAdminMode(true);
     setActiveTab(ADMIN_TAB_ID);
     setAdminChild(segment);
     setResourcesChild(null);
-    setResourcesCardIdentifier(null);
-    setResourcesCardRaterId(null);
-    setCardRaterPlayAtRoot(false);
+    setTeamChild(null);
+    clearDetailIds();
     setAdminAnnouncementForm(null);
     setDataChild(null);
-    setDataCardRaterId(null);
     replaceDashboardUrl(ADMIN_TAB_ID, null, null, null, segment, null);
-  }, []);
+  }, [clearDetailIds]);
+
+  const toggleAdminMode = useCallback(() => {
+    if (adminMode) {
+      setAdminMode(false);
+      setActiveTab(FALLBACK_TAB_ID);
+      setResourcesChild(null);
+      setTeamChild(null);
+      clearDetailIds();
+      setAdminChild(null);
+      setAdminAnnouncementForm(null);
+      setDataChild(null);
+      replaceDashboardUrl(FALLBACK_TAB_ID, null, null, null, null, null);
+      setMobileNavOpen(false);
+      return;
+    }
+    setAdminMode(true);
+    if (activeTab === ADMIN_TAB_ID && adminChild) {
+      replaceDashboardUrl(ADMIN_TAB_ID, null, null, null, adminChild, adminAnnouncementForm);
+      return;
+    }
+    setActiveTab(ADMIN_TAB_ID);
+    setAdminChild(DEFAULT_ADMIN_SEGMENT);
+    setResourcesChild(null);
+    setTeamChild(null);
+    clearDetailIds();
+    setAdminAnnouncementForm(null);
+    setDataChild(null);
+    replaceDashboardUrl(ADMIN_TAB_ID, null, null, null, DEFAULT_ADMIN_SEGMENT, null);
+    setMobileNavOpen(false);
+  }, [adminMode, activeTab, adminChild, adminAnnouncementForm, clearDetailIds]);
 
   const navigateAdminAnnouncementForm = useCallback(
     (/** @type {AnnouncementAdminForm} */ next, options) => {
@@ -1315,10 +1601,13 @@ export default function Dashboard({ onNavigate }) {
   const openCardDetail = useCallback((identifier) => {
     const id = String(identifier).trim();
     if (!id) return;
+    setAdminMode(false);
     setActiveTab(RESOURCES_TAB_ID);
     setResourcesChild("cards");
+    setTeamChild(null);
     setResourcesCardIdentifier(id);
     setResourcesCardRaterId(null);
+    setResourcesCardRaterCompareBaselineId(null);
     setResourcesDeckId(null);
     setResourcesRecordingId(null);
     setCardRaterPlayAtRoot(false);
@@ -1332,8 +1621,10 @@ export default function Dashboard({ onNavigate }) {
   const openDeckDetail = useCallback((deckId) => {
     const sid = String(deckId).trim();
     if (!/^\d+$/.test(sid)) return;
+    setAdminMode(false);
     setActiveTab(RESOURCES_TAB_ID);
     setResourcesChild("decks");
+    setTeamChild(null);
     setResourcesDeckId(sid);
     setResourcesRecordingId(null);
     setResourcesCardIdentifier(null);
@@ -1355,8 +1646,10 @@ export default function Dashboard({ onNavigate }) {
   const openRecordingDetail = useCallback((recordingId) => {
     const sid = String(recordingId).trim();
     if (!/^\d+$/.test(sid)) return;
+    setAdminMode(false);
     setActiveTab(RESOURCES_TAB_ID);
     setResourcesChild("recordings");
+    setTeamChild(null);
     setResourcesRecordingId(sid);
     setResourcesCardIdentifier(null);
     setResourcesCardRaterId(null);
@@ -1378,8 +1671,10 @@ export default function Dashboard({ onNavigate }) {
   const openEventDetail = useCallback((eventId) => {
     const eid = String(eventId).trim();
     if (!/^\d+$/.test(eid)) return;
+    setAdminMode(false);
     setActiveTab(RESOURCES_TAB_ID);
     setResourcesChild("events");
+    setTeamChild(null);
     setResourcesEventId(eid);
     setResourcesCardIdentifier(null);
     setResourcesCardRaterId(null);
@@ -1411,11 +1706,13 @@ export default function Dashboard({ onNavigate }) {
   const openDataCardRaterAnalytics = useCallback((raterId) => {
     const sid = String(raterId).trim();
     if (!/^\d+$/.test(sid)) return;
+    setAdminMode(false);
     setActiveTab(DATA_TAB_ID);
     setDataChild("card-ratings");
     setDataCardRaterId(sid);
     setDataCardRaterCompareBaselineId(null);
     setResourcesChild(null);
+    setTeamChild(null);
     setResourcesCardIdentifier(null);
     setResourcesCardRaterId(null);
     setResourcesCardRaterCompareBaselineId(null);
@@ -1430,11 +1727,13 @@ export default function Dashboard({ onNavigate }) {
     const sid = String(raterId).trim();
     const bid = String(baselineId).trim();
     if (!/^\d+$/.test(sid) || !/^\d+$/.test(bid)) return;
+    setAdminMode(false);
     setActiveTab(DATA_TAB_ID);
     setDataChild("card-ratings");
     setDataCardRaterId(sid);
     setDataCardRaterCompareBaselineId(bid);
     setResourcesChild(null);
+    setTeamChild(null);
     setResourcesCardIdentifier(null);
     setResourcesCardRaterId(null);
     setResourcesCardRaterCompareBaselineId(null);
@@ -1463,15 +1762,34 @@ export default function Dashboard({ onNavigate }) {
   const openCardRaterAnalytics = useCallback((raterId) => {
     const sid = String(raterId).trim();
     if (!/^\d+$/.test(sid)) return;
+    setAdminMode(false);
     setCardRaterPlayAtRoot(false);
-    setActiveTab(RESOURCES_TAB_ID);
-    setResourcesChild("card-rater");
+    setActiveTab(TEAM_TAB_ID);
+    setTeamChild("card-rater");
+    setResourcesChild(null);
     setResourcesCardIdentifier(null);
     setResourcesCardRaterId(sid);
     setResourcesCardRaterCompareBaselineId(null);
     setAdminChild(null);
     setAdminAnnouncementForm(null);
-    pushDashboardUrl(RESOURCES_TAB_ID, "card-rater", null, sid, null, null);
+    setDataChild(null);
+    setDataCardRaterId(null);
+    pushDashboardUrl(
+      TEAM_TAB_ID,
+      null,
+      null,
+      sid,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "card-rater",
+    );
     setMobileNavOpen(false);
   }, []);
 
@@ -1479,22 +1797,56 @@ export default function Dashboard({ onNavigate }) {
     const sid = String(raterId).trim();
     const bid = String(baselineId).trim();
     if (!/^\d+$/.test(sid) || !/^\d+$/.test(bid)) return;
+    setAdminMode(false);
     setCardRaterPlayAtRoot(false);
-    setActiveTab(RESOURCES_TAB_ID);
-    setResourcesChild("card-rater");
+    setActiveTab(TEAM_TAB_ID);
+    setTeamChild("card-rater");
+    setResourcesChild(null);
     setResourcesCardIdentifier(null);
     setResourcesCardRaterId(sid);
     setResourcesCardRaterCompareBaselineId(bid);
     setAdminChild(null);
     setAdminAnnouncementForm(null);
-    pushDashboardUrl(RESOURCES_TAB_ID, "card-rater", null, sid, null, null, null, null, null, null, null, bid);
+    setDataChild(null);
+    setDataCardRaterId(null);
+    pushDashboardUrl(
+      TEAM_TAB_ID,
+      null,
+      null,
+      sid,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      bid,
+      null,
+      "card-rater",
+    );
     setMobileNavOpen(false);
   }, []);
 
   const closeResourcesCardRaterCompare = useCallback(() => {
     if (resourcesCardRaterId == null) return;
     setResourcesCardRaterCompareBaselineId(null);
-    pushDashboardUrl(RESOURCES_TAB_ID, "card-rater", null, resourcesCardRaterId, null, null);
+    pushDashboardUrl(
+      TEAM_TAB_ID,
+      null,
+      null,
+      resourcesCardRaterId,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "card-rater",
+    );
   }, [resourcesCardRaterId]);
 
   const openCardRaterPlayAtRoot = useCallback(() => {
@@ -1504,6 +1856,7 @@ export default function Dashboard({ onNavigate }) {
   const openSettings = useCallback(() => {
     setActiveTab(SETTINGS_TAB_ID);
     setResourcesChild(null);
+    setTeamChild(null);
     setResourcesCardIdentifier(null);
     setResourcesCardRaterId(null);
     setCardRaterPlayAtRoot(false);
@@ -1518,6 +1871,7 @@ export default function Dashboard({ onNavigate }) {
   const openProfile = useCallback(() => {
     setActiveTab(PROFILE_TAB_ID);
     setResourcesChild(null);
+    setTeamChild(null);
     setResourcesCardIdentifier(null);
     setResourcesCardRaterId(null);
     setResourcesDeckId(null);
@@ -1537,14 +1891,22 @@ export default function Dashboard({ onNavigate }) {
       const resolved = resolveDashboardLocation(
         window.location.pathname,
         window.location.search,
-        tabs,
+        resolveTabs,
       );
       const nextTab = resolved.tabId;
+
+      if (nextTab === ADMIN_TAB_ID && isAdmin) {
+        setAdminMode(true);
+      } else if (nextTab !== SETTINGS_TAB_ID && nextTab !== PROFILE_TAB_ID && nextTab !== ADMIN_TAB_ID) {
+        setAdminMode(false);
+      }
+
       const nextChild = nextTab === RESOURCES_TAB_ID ? resolved.resourcesChild : null;
+      const nextTeamChild = nextTab === TEAM_TAB_ID ? resolved.teamChild : null;
       const nextCardId =
         nextTab === RESOURCES_TAB_ID ? resolved.resourcesCardIdentifier : null;
       const nextRaterId =
-        nextTab === RESOURCES_TAB_ID ? resolved.resourcesCardRaterId : null;
+        nextTab === TEAM_TAB_ID ? resolved.resourcesCardRaterId : null;
       const nextDeckId = nextTab === RESOURCES_TAB_ID ? resolved.resourcesDeckId : null;
       const nextRecordingId = nextTab === RESOURCES_TAB_ID ? resolved.resourcesRecordingId : null;
       const nextEventId = nextTab === RESOURCES_TAB_ID ? resolved.resourcesEventId : null;
@@ -1558,9 +1920,10 @@ export default function Dashboard({ onNavigate }) {
       const nextDataCompareBaselineId =
         nextTab === DATA_TAB_ID ? resolved.dataCardRaterCompareBaselineId : null;
       const nextResourcesCompareBaselineId =
-        nextTab === RESOURCES_TAB_ID ? resolved.resourcesCardRaterCompareBaselineId : null;
+        nextTab === TEAM_TAB_ID ? resolved.resourcesCardRaterCompareBaselineId : null;
       setActiveTab(nextTab);
       setResourcesChild(nextChild);
+      setTeamChild(nextTeamChild);
       setResourcesCardIdentifier(nextCardId);
       setResourcesCardRaterId(nextRaterId);
       setResourcesCardRaterCompareBaselineId(nextResourcesCompareBaselineId);
@@ -1568,8 +1931,8 @@ export default function Dashboard({ onNavigate }) {
       setResourcesRecordingId(nextRecordingId);
       setResourcesEventId(nextEventId);
       const cardRaterAtRoot =
-        nextTab === RESOURCES_TAB_ID &&
-        nextChild === "card-rater" &&
+        nextTab === TEAM_TAB_ID &&
+        nextTeamChild === "card-rater" &&
         (nextRaterId == null || String(nextRaterId).trim() === "");
       if (!cardRaterAtRoot) setCardRaterPlayAtRoot(false);
       setAdminChild(nextAdminChild);
@@ -1581,7 +1944,7 @@ export default function Dashboard({ onNavigate }) {
         nextTab,
         nextTab === RESOURCES_TAB_ID ? nextChild : null,
         nextTab === RESOURCES_TAB_ID ? nextCardId : null,
-        nextTab === RESOURCES_TAB_ID ? nextRaterId : null,
+        nextTab === TEAM_TAB_ID ? nextRaterId : null,
         nextTab === ADMIN_TAB_ID ? nextAdminChild : null,
         nextAnnouncementForm,
         nextTab === DATA_TAB_ID ? nextDataChild : null,
@@ -1589,10 +1952,12 @@ export default function Dashboard({ onNavigate }) {
         nextTab === RESOURCES_TAB_ID ? nextDeckId : null,
         nextTab === RESOURCES_TAB_ID ? nextRecordingId : null,
         nextTab === DATA_TAB_ID ? nextDataCompareBaselineId : null,
-        nextTab === RESOURCES_TAB_ID ? nextResourcesCompareBaselineId : null,
+        nextTab === TEAM_TAB_ID ? nextResourcesCompareBaselineId : null,
         nextTab === RESOURCES_TAB_ID ? nextEventId : null,
+        nextTab === TEAM_TAB_ID ? nextTeamChild : null,
       );
       setMobileResourcesOpen(false);
+      setMobileTeamOpen(false);
       setMobileAdminOpen(false);
       setMobileDataOpen(false);
     }
@@ -1600,7 +1965,7 @@ export default function Dashboard({ onNavigate }) {
     syncFromBrowser();
     window.addEventListener("popstate", syncFromBrowser);
     return () => window.removeEventListener("popstate", syncFromBrowser);
-  }, [tabs]);
+  }, [resolveTabs, isAdmin]);
 
   const [theme, setTheme] = useState(() => {
     try {
@@ -1628,10 +1993,11 @@ export default function Dashboard({ onNavigate }) {
     return () => mq.removeEventListener("change", closeMobileIfDesktop);
   }, []);
 
-  /** Fresh Resources / Admin submenu each time the drawer opens; on sub-routes keep children collapsed. */
+  /** Fresh Resources / Admin / Team submenu each time the drawer opens; on sub-routes keep children collapsed. */
   useEffect(() => {
     if (mobileNavOpen) {
       setMobileResourcesOpen(false);
+      setMobileTeamOpen(false);
       setMobileAdminOpen(false);
       setMobileDataOpen(false);
     }
@@ -1641,26 +2007,56 @@ export default function Dashboard({ onNavigate }) {
 
   const showCardRankerResources =
     canUseCardRaterResource &&
-    (resourcesChild === "card-rater-play" ||
-      (resourcesChild === "card-rater" && cardRaterPlayAtRoot));
+    (teamChild === "card-rater-play" ||
+      (teamChild === "card-rater" && cardRaterPlayAtRoot));
 
   const showCardRaterBlocked =
     !canUseCardRaterResource &&
-    (resourcesChild === "card-rater" || resourcesChild === "card-rater-play");
+    (teamChild === "card-rater" || teamChild === "card-rater-play");
 
   useEffect(() => {
-    if (resourcesChild !== "play-testing") return;
+    if (teamChild !== "play-testing") return;
     if (canUsePlayTesting) return;
-    setResourcesChild(DEFAULT_RESOURCES_SEGMENT);
-    replaceDashboardUrl(RESOURCES_TAB_ID, DEFAULT_RESOURCES_SEGMENT, null, null, null, null);
-  }, [resourcesChild, canUsePlayTesting]);
+    setTeamChild(DEFAULT_TEAM_SEGMENT);
+    replaceDashboardUrl(
+      TEAM_TAB_ID,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      DEFAULT_TEAM_SEGMENT,
+    );
+  }, [teamChild, canUsePlayTesting]);
 
   useEffect(() => {
-    if (resourcesChild !== "meetings") return;
+    if (teamChild !== "meetings") return;
     if (canUseMeetings) return;
-    setResourcesChild(DEFAULT_RESOURCES_SEGMENT);
-    replaceDashboardUrl(RESOURCES_TAB_ID, DEFAULT_RESOURCES_SEGMENT, null, null, null, null);
-  }, [resourcesChild, canUseMeetings]);
+    setTeamChild(DEFAULT_TEAM_SEGMENT);
+    replaceDashboardUrl(
+      TEAM_TAB_ID,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      DEFAULT_TEAM_SEGMENT,
+    );
+  }, [teamChild, canUseMeetings]);
 
   return (
     <div className={isLight ? shellLight : shellDark}>
@@ -1717,31 +2113,38 @@ export default function Dashboard({ onNavigate }) {
                 const subLinks =
                   tab.id === RESOURCES_TAB_ID
                     ? visibleResourceSubLinks
-                    : tab.id === DATA_TAB_ID
-                      ? DATA_SUB_LINKS
-                      : tab.id === ADMIN_TAB_ID
-                        ? ADMIN_SUB_LINKS
-                        : [];
+                    : tab.id === TEAM_TAB_ID
+                      ? visibleTeamSubLinks
+                      : tab.id === DATA_TAB_ID
+                        ? DATA_SUB_LINKS
+                        : tab.id === ADMIN_TAB_ID
+                          ? ADMIN_SUB_LINKS
+                          : [];
                 const showDesktopSubmenu =
                   (tab.id === RESOURCES_TAB_ID && visibleResourceSubLinks.length > 1) ||
+                  (tab.id === TEAM_TAB_ID && visibleTeamSubLinks.length > 1) ||
                   (tab.id === DATA_TAB_ID && DATA_SUB_LINKS.length >= 1) ||
                   (tab.id === ADMIN_TAB_ID && ADMIN_SUB_LINKS.length >= 1);
                 const desktopHovered =
                   tab.id === RESOURCES_TAB_ID
                     ? resourcesHovered
-                    : tab.id === DATA_TAB_ID
-                      ? dataHovered
-                      : tab.id === ADMIN_TAB_ID
-                        ? adminHovered
-                        : false;
+                    : tab.id === TEAM_TAB_ID
+                      ? teamHovered
+                      : tab.id === DATA_TAB_ID
+                        ? dataHovered
+                        : tab.id === ADMIN_TAB_ID
+                          ? adminHovered
+                          : false;
                 const triggerLabel =
                   tab.id === RESOURCES_TAB_ID
                     ? resourcesTabLabel
-                    : tab.id === DATA_TAB_ID
-                      ? dataTabLabel
-                      : tab.id === ADMIN_TAB_ID
-                        ? adminTabLabel
-                        : tab.label;
+                    : tab.id === TEAM_TAB_ID
+                      ? teamTabLabel
+                      : tab.id === DATA_TAB_ID
+                        ? dataTabLabel
+                        : tab.id === ADMIN_TAB_ID
+                          ? adminTabLabel
+                          : tab.label;
 
                 return (
                   <div
@@ -1750,20 +2153,24 @@ export default function Dashboard({ onNavigate }) {
                     onMouseEnter={
                       showDesktopSubmenu && tab.id === RESOURCES_TAB_ID
                         ? () => setResourcesHovered(true)
-                        : showDesktopSubmenu && tab.id === DATA_TAB_ID
-                          ? () => setDataHovered(true)
-                          : showDesktopSubmenu && tab.id === ADMIN_TAB_ID
-                            ? () => setAdminHovered(true)
-                            : undefined
+                        : showDesktopSubmenu && tab.id === TEAM_TAB_ID
+                          ? () => setTeamHovered(true)
+                          : showDesktopSubmenu && tab.id === DATA_TAB_ID
+                            ? () => setDataHovered(true)
+                            : showDesktopSubmenu && tab.id === ADMIN_TAB_ID
+                              ? () => setAdminHovered(true)
+                              : undefined
                     }
                     onMouseLeave={
                       showDesktopSubmenu && tab.id === RESOURCES_TAB_ID
                         ? () => setResourcesHovered(false)
-                        : showDesktopSubmenu && tab.id === DATA_TAB_ID
-                          ? () => setDataHovered(false)
-                          : showDesktopSubmenu && tab.id === ADMIN_TAB_ID
-                            ? () => setAdminHovered(false)
-                            : undefined
+                        : showDesktopSubmenu && tab.id === TEAM_TAB_ID
+                          ? () => setTeamHovered(false)
+                          : showDesktopSubmenu && tab.id === DATA_TAB_ID
+                            ? () => setDataHovered(false)
+                            : showDesktopSubmenu && tab.id === ADMIN_TAB_ID
+                              ? () => setAdminHovered(false)
+                              : undefined
                     }
                   >
                     <Tabs.Trigger
@@ -1783,22 +2190,26 @@ export default function Dashboard({ onNavigate }) {
                         aria-label={
                           tab.id === RESOURCES_TAB_ID
                             ? "Resources pages"
-                            : tab.id === DATA_TAB_ID
-                              ? "Data pages"
-                              : "Admin pages"
+                            : tab.id === TEAM_TAB_ID
+                              ? "Team pages"
+                              : tab.id === DATA_TAB_ID
+                                ? "Data pages"
+                                : "Admin pages"
                         }
                       >
                         {subLinks.map((link) => {
                           const subActive =
                             tab.id === RESOURCES_TAB_ID
-                              ? activeTab === RESOURCES_TAB_ID &&
-                                (resourcesChild === link.segment ||
-                                  (link.segment === "card-rater" &&
-                                    (resourcesChild === "card-rater-play" ||
-                                      (resourcesChild === "card-rater" && cardRaterPlayAtRoot))))
-                              : tab.id === DATA_TAB_ID
-                                ? activeTab === DATA_TAB_ID && dataChild === link.segment
-                                : activeTab === ADMIN_TAB_ID && adminChild === link.segment;
+                              ? activeTab === RESOURCES_TAB_ID && resourcesChild === link.segment
+                              : tab.id === TEAM_TAB_ID
+                                ? activeTab === TEAM_TAB_ID &&
+                                  (teamChild === link.segment ||
+                                    (link.segment === "card-rater" &&
+                                      (teamChild === "card-rater-play" ||
+                                        (teamChild === "card-rater" && cardRaterPlayAtRoot))))
+                                : tab.id === DATA_TAB_ID
+                                  ? activeTab === DATA_TAB_ID && dataChild === link.segment
+                                  : activeTab === ADMIN_TAB_ID && adminChild === link.segment;
                           return (
                             <button
                               key={link.segment}
@@ -1814,6 +2225,7 @@ export default function Dashboard({ onNavigate }) {
                               data-state={subActive ? "active" : "inactive"}
                               onClick={() => {
                                 if (tab.id === RESOURCES_TAB_ID) goResourcesSub(link.segment);
+                                else if (tab.id === TEAM_TAB_ID) goTeamSub(link.segment);
                                 else if (tab.id === DATA_TAB_ID) goDataSub(link.segment);
                                 else goAdminSub(link.segment);
                               }}
@@ -1837,6 +2249,9 @@ export default function Dashboard({ onNavigate }) {
               onProfile={openProfile}
               onSettings={openSettings}
               onSignOut={() => void signOut()}
+              showAdminToggle={isAdmin}
+              adminMode={adminMode && isAdmin}
+              onToggleAdminMode={toggleAdminMode}
             />
           </div>
           </header>
@@ -1863,11 +2278,13 @@ export default function Dashboard({ onNavigate }) {
                 const rowLabel =
                   tab.id === RESOURCES_TAB_ID
                     ? resourcesTabLabel
-                    : tab.id === DATA_TAB_ID
-                      ? dataTabLabel
-                      : tab.id === ADMIN_TAB_ID
-                        ? adminTabLabel
-                        : tab.label;
+                    : tab.id === TEAM_TAB_ID
+                      ? teamTabLabel
+                      : tab.id === DATA_TAB_ID
+                        ? dataTabLabel
+                        : tab.id === ADMIN_TAB_ID
+                          ? adminTabLabel
+                          : tab.label;
                 const rowClass = `${mobileNavRowMin} ${mobileNavItemSurface(selected, isLight)}`;
 
                 let subIdleClass =
@@ -1902,11 +2319,7 @@ export default function Dashboard({ onNavigate }) {
                           aria-label="Resources pages"
                         >
                           {visibleResourceSubLinks.map((link) => {
-                            const subSel =
-                              resourcesChild === link.segment ||
-                              (link.segment === "card-rater" &&
-                                (resourcesChild === "card-rater-play" ||
-                                  (resourcesChild === "card-rater" && cardRaterPlayAtRoot)));
+                            const subSel = resourcesChild === link.segment;
                             return (
                               <button
                                 key={link.segment}
@@ -1919,6 +2332,59 @@ export default function Dashboard({ onNavigate }) {
                                 aria-current={subSel ? "page" : undefined}
                                 onClick={() => {
                                   goResourcesSub(link.segment);
+                                  setMobileNavOpen(false);
+                                }}
+                              >
+                                {link.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                }
+
+                if (tab.id === TEAM_TAB_ID && visibleTeamSubLinks.length > 1) {
+                  return (
+                    <div key={tab.id} className="flex flex-col gap-1">
+                      <button
+                        type="button"
+                        className={rowClass}
+                        aria-current={selected ? "page" : undefined}
+                        aria-expanded={mobileTeamOpen}
+                        onClick={() => {
+                          setMobileTeamOpen((o) => !o);
+                        }}
+                      >
+                        {rowLabel}
+                      </button>
+                      {mobileTeamOpen ? (
+                        <div
+                          className={`flex flex-col gap-1 border-l pl-2 ${
+                            isLight ? "border-[rgba(80,65,110,0.35)]" : "border-white/[0.22]"
+                          }`}
+                          role="group"
+                          aria-label="Team pages"
+                        >
+                          {visibleTeamSubLinks.map((link) => {
+                            const subSel =
+                              teamChild === link.segment ||
+                              (link.segment === "card-rater" &&
+                                (teamChild === "card-rater-play" ||
+                                  (teamChild === "card-rater" && cardRaterPlayAtRoot)));
+                            return (
+                              <button
+                                key={link.segment}
+                                type="button"
+                                className={
+                                  subSel
+                                    ? `ml-3 flex min-h-11 w-full items-center rounded-lg px-[1.125rem] py-3 text-left text-[0.9rem] font-semibold outline-none transition-colors ${subActiveClass}`
+                                    : subIdleClass
+                                }
+                                aria-current={subSel ? "page" : undefined}
+                                onClick={() => {
+                                  goTeamSub(link.segment);
                                   setMobileNavOpen(false);
                                 }}
                               >
@@ -2054,7 +2520,7 @@ export default function Dashboard({ onNavigate }) {
             key={tab.id}
             value={tab.id}
             className={`relative z-0 flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl border outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 ${
-              tab.id === RESOURCES_TAB_ID && showCardRankerResources ? "p-0 sm:p-0" : "p-8 sm:p-10"
+              tab.id === TEAM_TAB_ID && showCardRankerResources ? "p-0 sm:p-0" : "p-8 sm:p-10"
             } ${
               isLight
                 ? "border-white/[0.12] bg-gradient-to-b from-[#434054] via-[#353145] to-[#292433] shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
@@ -2185,11 +2651,25 @@ export default function Dashboard({ onNavigate }) {
                   active={activeTab === RESOURCES_TAB_ID && resourcesChild === "events"}
                   onOpenEvent={openEventDetail}
                 />
-              ) : resourcesChild === "play-testing" ? (
+              ) : (
+                <div
+                  className="flex min-h-[min(40vh,18rem)] flex-1 flex-col items-center justify-center px-4 text-center"
+                  aria-label="Resources"
+                >
+                  <p className="text-[0.9rem] text-[#f4f0fa]/65">Coming soon.</p>
+                </div>
+              )
+            ) : tab.id === TEAM_TAB_ID ? (
+              teamChild === "snapshot" || teamChild == null ? (
+                <LatestTeamSnapshotPage
+                  isLight={isLight}
+                  active={activeTab === TEAM_TAB_ID && (teamChild === "snapshot" || teamChild == null)}
+                />
+              ) : teamChild === "play-testing" ? (
                 canUsePlayTesting ? (
                   <PlayTesting
                     isLight={isLight}
-                    active={activeTab === RESOURCES_TAB_ID && resourcesChild === "play-testing"}
+                    active={activeTab === TEAM_TAB_ID && teamChild === "play-testing"}
                   />
                 ) : (
                   <div
@@ -2199,11 +2679,11 @@ export default function Dashboard({ onNavigate }) {
                     <p className="text-[0.9rem] text-[#f4f0fa]/65">Play Testing is not available for your account yet.</p>
                   </div>
                 )
-              ) : resourcesChild === "meetings" ? (
+              ) : teamChild === "meetings" ? (
                 canUseMeetings ? (
                   <Meetings
                     isLight={isLight}
-                    active={activeTab === RESOURCES_TAB_ID && resourcesChild === "meetings"}
+                    active={activeTab === TEAM_TAB_ID && teamChild === "meetings"}
                   />
                 ) : (
                   <div
@@ -2222,46 +2702,46 @@ export default function Dashboard({ onNavigate }) {
               ) : showCardRankerResources ? (
                 <CardRanker
                   isLight={isLight}
-                  active={activeTab === RESOURCES_TAB_ID && showCardRankerResources}
+                  active={activeTab === TEAM_TAB_ID && showCardRankerResources}
                 />
-              ) : resourcesChild === "card-rater" && resourcesCardRaterId && resourcesCardRaterCompareBaselineId ? (
+              ) : teamChild === "card-rater" && resourcesCardRaterId && resourcesCardRaterCompareBaselineId ? (
                 <CardRaterCompare
                   isLight={isLight}
                   raterId={resourcesCardRaterId}
                   baselineRaterId={resourcesCardRaterCompareBaselineId}
                   active={
-                    activeTab === RESOURCES_TAB_ID &&
-                    resourcesChild === "card-rater" &&
+                    activeTab === TEAM_TAB_ID &&
+                    teamChild === "card-rater" &&
                     Boolean(resourcesCardRaterId) &&
                     Boolean(resourcesCardRaterCompareBaselineId)
                   }
                   onBack={closeResourcesCardRaterCompare}
                 />
-              ) : resourcesChild === "card-rater" && resourcesCardRaterId ? (
+              ) : teamChild === "card-rater" && resourcesCardRaterId ? (
                 <CardRaterAnalytics
                   isLight={isLight}
                   raterId={resourcesCardRaterId}
                   active={
-                    activeTab === RESOURCES_TAB_ID &&
-                    resourcesChild === "card-rater" &&
+                    activeTab === TEAM_TAB_ID &&
+                    teamChild === "card-rater" &&
                     Boolean(resourcesCardRaterId)
                   }
                   onOpenCompare={(baselineId) =>
                     openResourcesCardRaterCompare(resourcesCardRaterId, baselineId)
                   }
                 />
-              ) : resourcesChild === "card-rater" ? (
+              ) : teamChild === "card-rater" ? (
                 <CardRaterRedirect
-                  active={activeTab === RESOURCES_TAB_ID && resourcesChild === "card-rater"}
+                  active={activeTab === TEAM_TAB_ID && teamChild === "card-rater"}
                   onActiveSession={openCardRaterPlayAtRoot}
                   onLatestCompletedSession={openCardRaterAnalytics}
                 />
               ) : (
                 <div
                   className="flex min-h-[min(40vh,18rem)] flex-1 flex-col items-center justify-center px-4 text-center"
-                  aria-label="Resources"
+                  aria-label="Team"
                 >
-                  <p className="text-[0.9rem] text-[#f4f0fa]/65">Coming soon.</p>
+                  <p className="text-[0.9rem] text-[#f4f0fa]/65">Choose a page from the Team menu.</p>
                 </div>
               )
             ) : tab.id === DATA_TAB_ID ? (
@@ -2347,17 +2827,6 @@ export default function Dashboard({ onNavigate }) {
           }`}
         >
           <UserProfile isLight={isLight} active={activeTab === PROFILE_TAB_ID} />
-        </Tabs.Content>
-
-        <Tabs.Content
-          value={TEAM_TAB_ID}
-          className={`relative z-0 flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl border p-8 outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 sm:p-10 ${
-            isLight
-              ? "border-white/[0.12] bg-gradient-to-b from-[#434054] via-[#353145] to-[#292433] shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
-              : "border-white/[0.26] bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.06]"
-          }`}
-        >
-          <LatestTeamSnapshotPage isLight={isLight} active={activeTab === TEAM_TAB_ID} />
         </Tabs.Content>
       </Tabs.Root>
     </div>

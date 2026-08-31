@@ -3,9 +3,27 @@ import { useCallback, useEffect, useRef, useState } from "react";
 const HOVER_CLOSE_DELAY_MS = 220;
 
 /**
- * @param {{ isLight: boolean, label: string, onProfile: () => void, onSettings: () => void, onSignOut: () => void }} props
+ * @param {{
+ *   isLight: boolean,
+ *   label: string,
+ *   onProfile: () => void,
+ *   onSettings: () => void,
+ *   onSignOut: () => void,
+ *   showAdminToggle?: boolean,
+ *   adminMode?: boolean,
+ *   onToggleAdminMode?: () => void,
+ * }} props
  */
-export function UserAccountMenu({ isLight, label, onProfile, onSettings, onSignOut }) {
+export function UserAccountMenu({
+  isLight,
+  label,
+  onProfile,
+  onSettings,
+  onSignOut,
+  showAdminToggle = false,
+  adminMode = false,
+  onToggleAdminMode,
+}) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(/** @type {HTMLDivElement | null} */ (null));
   const closeTimerRef = useRef(/** @type {number | null} */ (null));
@@ -62,6 +80,12 @@ export function UserAccountMenu({ isLight, label, onProfile, onSettings, onSignO
     onSignOut();
   }, [onSignOut, clearCloseTimer]);
 
+  const goToggleAdmin = useCallback(() => {
+    clearCloseTimer();
+    setOpen(false);
+    onToggleAdminMode?.();
+  }, [onToggleAdminMode, clearCloseTimer]);
+
   const handleMouseEnter = useCallback(() => {
     clearCloseTimer();
     setOpen(true);
@@ -106,6 +130,11 @@ export function UserAccountMenu({ isLight, label, onProfile, onSettings, onSignO
           <button type="button" role="menuitem" className={itemCls} onClick={goSettings}>
             Settings
           </button>
+          {showAdminToggle ? (
+            <button type="button" role="menuitem" className={itemCls} onClick={goToggleAdmin}>
+              {adminMode ? "Member dashboard" : "Admin dashboard"}
+            </button>
+          ) : null}
           <button type="button" role="menuitem" className={itemCls} onClick={goSignOut}>
             Sign out
           </button>

@@ -175,18 +175,23 @@ export function buildTeamSnapshot(segmentMatches, teamMembers, currentRound) {
     });
   }
 
-  const chartRounds = [];
+  const dataRounds = [];
   for (let r = 1; r <= roundCap; r += 1) {
-    if (roundHasChartData(segmentMatches, r)) chartRounds.push(r);
+    if (roundHasChartData(segmentMatches, r)) dataRounds.push(r);
   }
-  const latestChartRound = chartRounds.length > 0 ? chartRounds[chartRounds.length - 1] : roundCap;
+  const latestChartRound = dataRounds.length > 0 ? dataRounds[dataRounds.length - 1] : roundCap;
+  /** Include a pre-event baseline so every series starts at 0 wins before round 1. */
+  const chartRounds = dataRounds.length > 0 ? [0, ...dataRounds] : [];
 
   /** @type {{ userId: number, name: string, color: string, points: { round: number, wins: number }[] }[]} */
   const chartSeries = teamMembers.map((member, idx) => {
     const byRound = standingsByUser.get(member.user_id);
     /** @type {{ round: number, wins: number }[]} */
     const points = [];
-    for (const r of chartRounds) {
+    if (chartRounds.length > 0) {
+      points.push({ round: 0, wins: 0 });
+    }
+    for (const r of dataRounds) {
       const wins = winsAtRound(segmentMatches, member.user_id, r, byRound);
       if (wins == null) continue;
       points.push({ round: r, wins });

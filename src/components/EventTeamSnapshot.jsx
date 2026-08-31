@@ -122,7 +122,7 @@ function TeamWinsLineChart({ chartSeries, chartRounds, maxWins, isLight, leaderU
             textAnchor="middle"
             className="fill-[#f4f0fa]/50 text-[10px] font-medium"
           >
-            R{r}
+            {r === 0 ? "0" : `R${r}`}
           </text>
         ))}
         {[0, visibleMaxWins].map((w) => (
