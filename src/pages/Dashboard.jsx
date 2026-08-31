@@ -1994,7 +1994,6 @@ export default function Dashboard({ onNavigate }) {
       );
       setMobileResourcesOpen(false);
       setMobileTeamOpen(false);
-      setMobileAdminOpen(false);
       setMobileDataOpen(false);
     }
 
@@ -2029,12 +2028,11 @@ export default function Dashboard({ onNavigate }) {
     return () => mq.removeEventListener("change", closeMobileIfDesktop);
   }, []);
 
-  /** Fresh Resources / Admin / Team submenu each time the drawer opens; on sub-routes keep children collapsed. */
+  /** Fresh Resources / Team submenu each time the drawer opens; on sub-routes keep children collapsed. */
   useEffect(() => {
     if (mobileNavOpen) {
       setMobileResourcesOpen(false);
       setMobileTeamOpen(false);
-      setMobileAdminOpen(false);
       setMobileDataOpen(false);
     }
   }, [mobileNavOpen]);
