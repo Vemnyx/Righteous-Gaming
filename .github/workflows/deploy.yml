@@ -3,10 +3,15 @@ on:
   push:
     branches: [ main ]
 
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
 env:
   GCE_INSTANCE: instance-20260428-115914
   GCE_ZONE: us-central1-a
   GCP_PROJECT: project-28f6d1d8-e4cd-4908-9d7
+  DEPLOY_BUCKET: righteous-gaming-deploys
 
 jobs:
   deploy:
@@ -71,8 +76,10 @@ jobs:
           cp deploy-staging-server deploy-staging/server
           sed "s/__GCE_USERNAME__/${GCE_USERNAME}/g" deploy/righteous-app.service > deploy-staging/righteous-app.service
           python3 scripts/pack_deploy.py deploy-staging /tmp/deploy.tgz
+          sha256sum /tmp/deploy.tgz | awk '{print $1}' > /tmp/deploy.tgz.sha256
+          echo "deploy bundle sha256=$(cat /tmp/deploy.tgz.sha256)"
 
-      # Requires secrets.GCP_SA_KEY with Compute + IAP tunnel access.
+      # Requires secrets.GCP_SA_KEY with Compute + IAP tunnel + Storage access to DEPLOY_BUCKET.
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
@@ -81,12 +88,13 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      # IAP TCP forwarding uses gcloud's bundled Python for bulk upload; NumPy speeds scp/ssh.
+      # IAP TCP forwarding uses gcloud's bundled Python; NumPy speeds the remaining SSH step.
       # See https://cloud.google.com/iap/docs/using-tcp-forwarding#increasing_the_tcp_upload_bandwidth
       - name: Install NumPy for gcloud IAP tunnel
         run: bash scripts/setup_gcloud_iap_numpy.sh
 
-      # One SCP + one SSH: dist, server binary, and systemd unit in a single tarball.
+      # Upload tarball via GCS (reliable), then a short IAP SSH to pull + restart.
+      # Avoids flaky multi-minute IAP SCP of the full bundle.
       - name: Deploy to VM
         env:
           GCE_USERNAME: ${{ secrets.GCE_USERNAME }}
@@ -94,22 +102,29 @@ jobs:
           set -euo pipefail
           : "${GCE_USERNAME:?Set GCE_USERNAME secret}"
 
+          OBJECT="gs://${DEPLOY_BUCKET}/main/${GITHUB_SHA}.tgz"
+          EXPECTED_SHA="$(cat /tmp/deploy.tgz.sha256)"
+
+          echo "Uploading ${OBJECT}"
+          gcloud storage cp /tmp/deploy.tgz "${OBJECT}" --project="${GCP_PROJECT}"
+
           IAP="--zone=${GCE_ZONE} --project=${GCP_PROJECT} --tunnel-through-iap --quiet"
           SSH_HOST="${GCE_USERNAME}@${GCE_INSTANCE}"
           APP_DIR="/home/${GCE_USERNAME}/app"
 
-          gcloud compute scp /tmp/deploy.tgz "${SSH_HOST}:/tmp/deploy.tgz" ${IAP}
-
           gcloud compute ssh "${SSH_HOST}" ${IAP} \
             --ssh-flag=-oStrictHostKeyChecking=accept-new \
             --command="set -euo pipefail
-              sudo rm -rf ${APP_DIR}
-              sudo mkdir -p ${APP_DIR}
-              sudo chown -R ${GCE_USERNAME}:${GCE_USERNAME} ${APP_DIR}
-              tar xzf /tmp/deploy.tgz -C ${APP_DIR}
+              gcloud storage cp '${OBJECT}' /tmp/deploy.tgz --project='${GCP_PROJECT}'
+              echo '${EXPECTED_SHA}  /tmp/deploy.tgz' | sha256sum -c -
+              sudo rm -rf '${APP_DIR}'
+              sudo mkdir -p '${APP_DIR}'
+              sudo chown -R '${GCE_USERNAME}:${GCE_USERNAME}' '${APP_DIR}'
+              tar xzf /tmp/deploy.tgz -C '${APP_DIR}'
               rm -f /tmp/deploy.tgz
-              chmod +x ${APP_DIR}/server
-              sudo mv ${APP_DIR}/righteous-app.service /etc/systemd/system/righteous-app.service
+              chmod +x '${APP_DIR}/server'
+              sudo mv '${APP_DIR}/righteous-app.service' /etc/systemd/system/righteous-app.service
               sudo systemctl daemon-reload
               sudo systemctl enable righteous-app.service
-              sudo systemctl restart righteous-app.service"
+              sudo systemctl restart righteous-app.service
+              gcloud storage rm '${OBJECT}' --project='${GCP_PROJECT}' || true"
