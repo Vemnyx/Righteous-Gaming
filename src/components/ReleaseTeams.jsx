@@ -607,27 +607,31 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
     }
   };
 
-  const tabBtn = (id, label) => (
+  /**
+   * @param {string} id
+   * @param {boolean} on
+   * @param {string} label
+   * @param {() => void} onClick
+   */
+  const sectionTabBtn = (id, on, label, onClick) => (
     <button
       key={id}
       type="button"
-      onClick={() => setListTab(id)}
-      className={`${btnBase} ${listTab === id ? btnTheme : btnGhost}`}
+      role="tab"
+      aria-selected={on}
+      className={`rounded-xl border px-5 py-3 text-[0.95rem] font-semibold transition sm:px-6 sm:py-3.5 sm:text-[1.05rem] ${
+        on
+          ? "border-white/30 bg-white/[0.12] text-[#f4f0fa] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+          : "border-white/15 bg-black/25 text-[#f4f0fa]/7 hover:border-white/25 hover:bg-black/35 hover:text-[#f4f0fa]"
+      }`}
+      onClick={onClick}
     >
       {label}
     </button>
   );
 
-  const heroTabBtn = (id, label) => (
-    <button
-      key={id}
-      type="button"
-      onClick={() => setHeroTab(id)}
-      className={`${btnBase} ${heroTab === id ? btnTheme : btnGhost}`}
-    >
-      {label}
-    </button>
-  );
+  const sectionTabListCls =
+    "inline-flex flex-wrap gap-2 rounded-2xl border border-white/[0.12] bg-black/20 p-2 sm:gap-2.5 sm:p-2.5";
 
   if (sessionId) {
     return (
@@ -663,7 +667,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
           <p className="text-[0.9rem] text-[#f4f0fa]/65">Loading session…</p>
         ) : session ? (
           <>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
               <label className="flex min-w-[12rem] flex-col gap-1 text-[0.8rem] text-[#f4f0fa]/7">
                 Hero
                 <select
@@ -682,9 +686,14 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                   ))}
                 </select>
               </label>
-              <div className="flex flex-wrap gap-2 self-end">{["team", "decklists", "notes", "recordings"].map((t) =>
-                heroTabBtn(t, t === "decklists" ? "Decklists" : t.charAt(0).toUpperCase() + t.slice(1)),
-              )}</div>
+              <div className={sectionTabListCls} role="tablist" aria-label="Hero sections">
+                {sectionTabBtn("team", heroTab === "team", "Team", () => setHeroTab("team"))}
+                {sectionTabBtn("decklists", heroTab === "decklists", "Decklists", () => setHeroTab("decklists"))}
+                {sectionTabBtn("notes", heroTab === "notes", "Notes", () => setHeroTab("notes"))}
+                {sectionTabBtn("recordings", heroTab === "recordings", "Recordings", () =>
+                  setHeroTab("recordings"),
+                )}
+              </div>
             </div>
 
             {heroDataError ? (
@@ -1138,10 +1147,10 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
 
   return (
     <div className="flex w-full flex-col gap-4 px-1 pb-8 pt-1 sm:px-0">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          {tabBtn("current", "Current")}
-          {tabBtn("past", "Past")}
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+        <div className={sectionTabListCls} role="tablist" aria-label="Release Teams sections">
+          {sectionTabBtn("current", listTab === "current", "Current", () => setListTab("current"))}
+          {sectionTabBtn("past", listTab === "past", "Past", () => setListTab("past"))}
         </div>
         {isAdmin && listTab === "current" ? (
           <button type="button" className={`${btnBase} ${btnTheme}`} onClick={openCreate}>
