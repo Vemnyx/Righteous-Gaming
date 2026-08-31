@@ -166,6 +166,16 @@ function buildDashboardPathname(
       }
       return "/team/release-teams";
     }
+    if (seg === "play-testing") {
+      const rawId = resourcesCardRaterId != null ? String(resourcesCardRaterId).trim() : "";
+      if (rawId !== "") {
+        const rid = parseInt(rawId, 10);
+        if (Number.isFinite(rid) && rid > 0 && String(rid) === rawId) {
+          return `/team/play-testing/${rid}`;
+        }
+      }
+      return "/team/play-testing";
+    }
     if (seg === "card-rater") {
       const rawId = resourcesCardRaterId != null ? String(resourcesCardRaterId).trim() : "";
       if (rawId !== "") {
@@ -828,17 +838,32 @@ function parseDashboardPathname(pathname) {
       return { kind: "invalid" };
     }
     if (b === "play-testing") {
-      if (c !== undefined || rest.length > 0) return { kind: "invalid" };
-      return {
-        kind: "ok",
-        tabId: TEAM_TAB_ID,
-        resourcesChild: null,
-        teamChild: "play-testing",
-        resourcesCardIdentifier: null,
-        resourcesCardRaterId: null,
-        adminChild: null,
-        adminAnnouncementForm: null,
-      };
+      if (c === undefined && rest.length === 0) {
+        return {
+          kind: "ok",
+          tabId: TEAM_TAB_ID,
+          resourcesChild: null,
+          teamChild: "play-testing",
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: null,
+          adminChild: null,
+          adminAnnouncementForm: null,
+        };
+      }
+      const sid = parseInt(String(c), 10);
+      if (Number.isFinite(sid) && sid > 0 && String(sid) === String(c) && rest.length === 0) {
+        return {
+          kind: "ok",
+          tabId: TEAM_TAB_ID,
+          resourcesChild: null,
+          teamChild: "play-testing",
+          resourcesCardIdentifier: null,
+          resourcesCardRaterId: String(sid),
+          adminChild: null,
+          adminAnnouncementForm: null,
+        };
+      }
+      return { kind: "invalid" };
     }
     if (b === "release-teams") {
       if (c === undefined && rest.length === 0) {
@@ -2114,6 +2139,7 @@ export default function Dashboard({ onNavigate }) {
     if (teamChild !== "play-testing") return;
     if (canUsePlayTesting) return;
     setTeamChild(DEFAULT_TEAM_SEGMENT);
+    setResourcesCardRaterId(null);
     replaceDashboardUrl(
       TEAM_TAB_ID,
       null,
@@ -2197,6 +2223,49 @@ export default function Dashboard({ onNavigate }) {
       null,
       null,
       "release-teams",
+    );
+  }, []);
+
+  const openPlayTestingSession = useCallback((id) => {
+    const sid = String(id);
+    if (!/^\d+$/.test(sid)) return;
+    setTeamChild("play-testing");
+    setResourcesCardRaterId(sid);
+    pushDashboardUrl(
+      TEAM_TAB_ID,
+      null,
+      null,
+      sid,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "play-testing",
+    );
+  }, []);
+
+  const closePlayTestingSession = useCallback(() => {
+    setResourcesCardRaterId(null);
+    pushDashboardUrl(
+      TEAM_TAB_ID,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      "play-testing",
     );
   }, []);
 
@@ -2761,6 +2830,9 @@ export default function Dashboard({ onNavigate }) {
                   <PlayTesting
                     isLight={isLight}
                     active={activeTab === TEAM_TAB_ID && teamChild === "play-testing"}
+                    sessionId={resourcesCardRaterId}
+                    onOpenSession={openPlayTestingSession}
+                    onCloseSession={closePlayTestingSession}
                   />
                 ) : (
                   <div

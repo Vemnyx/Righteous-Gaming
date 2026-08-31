@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
 import {
@@ -13,6 +13,10 @@ import {
   PanelTabList,
   panelTabButton,
 } from "./PanelTabs";
+
+const PlayTestingDetailLazy = lazy(() =>
+  import("./PlayTestingDetail").then((m) => ({ default: m.PlayTestingDetail })),
+);
 
 /** @typedef {{ id: number, name: string, young?: boolean, card_image_url?: string | null, art_image_url?: string | null, formats?: number[] }} PlayTestingHero */
 
@@ -30,7 +34,7 @@ import {
  * @param {string | undefined | null} errText
  * @returns {string}
  */
-function parseApiError(errText) {
+export function parseApiError(errText) {
   const raw = (errText ?? "").trim();
   if (raw === "") return "Request failed";
   try {
@@ -57,7 +61,7 @@ function heroPortraitURL(hero) {
  * @param {PlayTestingHero} hero
  * @param {number} formatId
  */
-function heroLegalForFormat(hero, formatId) {
+export function heroLegalForFormat(hero, formatId) {
   if (!isValidCardFormatId(formatId)) return false;
   const formats = Array.isArray(hero.formats) ? hero.formats : [];
   if (!formats.includes(formatId)) return false;
@@ -67,7 +71,7 @@ function heroLegalForFormat(hero, formatId) {
 }
 
 /** @param {string | undefined | null} startsAt @param {string | undefined | null} endsAt */
-function formatTimeframeLabel(startsAt, endsAt) {
+export function formatTimeframeLabel(startsAt, endsAt) {
   const start = startsAt ? new Date(startsAt) : null;
   if (!start || Number.isNaN(start.getTime())) return "—";
   const startLabel = start.toLocaleString(undefined, {
@@ -94,7 +98,7 @@ function formatTimeframeLabel(startsAt, endsAt) {
 /**
  * @param {{ owner_first_name?: string | null, owner_username?: string | null }} session
  */
-function sessionOwnerLabel(session) {
+export function sessionOwnerLabel(session) {
   const first = session.owner_first_name != null ? String(session.owner_first_name).trim() : "";
   const discord = session.owner_username != null ? String(session.owner_username).trim() : "";
   if (first && discord) return `${first} · ${discord}`;
@@ -189,11 +193,32 @@ function normalizePlayTestingSessions(raw) {
  *   btnTheme: string,
  * }} props
  */
-function SessionCard({ session, canClose, whenEmptyLabel, closingId, onClose, btnBase, btnTheme }) {
+export function SessionCard({ session, canClose, whenEmptyLabel, closingId, onClose, onOpen, btnBase, btnTheme }) {
   const ownerLabel = sessionOwnerLabel(session);
   const hasTimeframes = (session.timeframes || []).length > 0;
+  const open = () => {
+    if (typeof onOpen === "function") onOpen(session.id);
+  };
   return (
-    <li className="rounded-xl border border-white/[0.14] bg-black/30 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:p-6">
+    <li className="list-none">
+      <div
+        role={onOpen ? "button" : undefined}
+        tabIndex={onOpen ? 0 : undefined}
+        onClick={onOpen ? open : undefined}
+        onKeyDown={
+          onOpen
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  open();
+                }
+              }
+            : undefined
+        }
+        className={`rounded-xl border border-white/[0.14] bg-black/30 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:p-6 ${
+          onOpen ? "cursor-pointer transition hover:border-white/30 hover:bg-black/40" : ""
+        }`}
+      >
       <div className="mb-5 flex items-start justify-between gap-3">
         <span className="rounded-md border border-white/15 bg-white/[0.06] px-3 py-1.5 text-[1rem] font-semibold tracking-wide text-[#f4f0fa]">
           {cardFormatName(session.format) ?? `Format ${session.format}`}
@@ -223,7 +248,10 @@ function SessionCard({ session, canClose, whenEmptyLabel, closingId, onClose, bt
               type="button"
               className={`${btnBase} ${btnTheme}`}
               disabled={closingId === session.id}
-              onClick={() => onClose(session.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose(session.id);
+              }}
             >
               {closingId === session.id ? "Closing…" : "Close session"}
             </button>
@@ -249,6 +277,7 @@ function SessionCard({ session, canClose, whenEmptyLabel, closingId, onClose, bt
             align="end"
           />
         </div>
+      </div>
       </div>
     </li>
   );
@@ -283,7 +312,7 @@ function newDraftTimeframe(mode = "now_open") {
 /**
  * @param {{ hero: PlayTestingHero | SessionHero, selected?: boolean, onClick?: () => void, size?: "sm" | "md" | "lg" | "xl" }} props
  */
-function HeroAvatar({ hero, selected = false, onClick, size = "md" }) {
+export function HeroAvatar({ hero, selected = false, onClick, size = "md" }) {
   const url = heroPortraitURL(hero);
   const name = (hero.name || "").trim() || "Unknown hero";
   const dim =
@@ -345,7 +374,7 @@ function HeroAvatar({ hero, selected = false, onClick, size = "md" }) {
 /**
  * @param {{ heroes: Array<PlayTestingHero | SessionHero>, emptyLabel: string, size?: "sm" | "md" | "lg" | "xl", align?: "start" | "end" }} props
  */
-function HeroAvatarRow({ heroes, emptyLabel, size = "sm", align = "start" }) {
+export function HeroAvatarRow({ heroes, emptyLabel, size = "sm", align = "start" }) {
   if (!heroes.length) {
     return (
       <p className={`m-0 text-[1rem] text-[#f4f0fa]/55 ${align === "end" ? "text-right" : ""}`}>
@@ -364,9 +393,47 @@ function HeroAvatarRow({ heroes, emptyLabel, size = "sm", align = "start" }) {
 }
 
 /**
- * @param {{ isLight: boolean, active: boolean }} props
+ * @param {{
+ *   isLight: boolean,
+ *   active: boolean,
+ *   sessionId?: string | null,
+ *   onOpenSession?: (id: number) => void,
+ *   onCloseSession?: () => void,
+ * }} props
  */
-export function PlayTesting({ isLight, active }) {
+export function PlayTesting({ isLight, active, sessionId = null, onOpenSession, onCloseSession }) {
+  if (sessionId) {
+    return (
+      <Suspense
+        fallback={
+          <div className={PANEL_TABS_BLEED}>
+            <div className={PANEL_TABS_CONTENT_PAD}>
+              <p className="m-0 text-[0.9rem] text-[#f4f0fa]/65">Loading session…</p>
+            </div>
+          </div>
+        }
+      >
+        <PlayTestingDetailLazy
+          isLight={isLight}
+          active={active}
+          sessionId={sessionId}
+          onBack={onCloseSession}
+        />
+      </Suspense>
+    );
+  }
+
+  return <PlayTestingList isLight={isLight} active={active} onOpenSession={onOpenSession} />;
+}
+
+/**
+ * @param {{
+ *   isLight: boolean,
+ *   active: boolean,
+ *   onOpenSession?: (id: number) => void,
+ * }} props
+ */
+function PlayTestingList({ isLight, active, onOpenSession }) {
   const { user, sessionProfile } = useAuth();
   const myUserId = typeof sessionProfile?.id === "number" ? sessionProfile.id : null;
   const [listTab, setListTab] = useState(/** @type {SessionListTab} */ ("current"));
@@ -836,6 +903,7 @@ export function PlayTesting({ isLight, active }) {
                           whenEmptyLabel={sessionWhenEmptyLabel(session)}
                           closingId={closingId}
                           onClose={(id) => void closeSession(id)}
+                          onOpen={onOpenSession}
                           btnBase={btnBase}
                           btnTheme={btnTheme}
                         />
@@ -859,6 +927,7 @@ export function PlayTesting({ isLight, active }) {
                   whenEmptyLabel={sessionWhenEmptyLabel(session)}
                   closingId={closingId}
                   onClose={(id) => void closeSession(id)}
+                  onOpen={onOpenSession}
                   btnBase={btnBase}
                   btnTheme={btnTheme}
                 />
