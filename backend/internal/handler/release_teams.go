@@ -55,16 +55,19 @@ type releaseTeamMemberJSON struct {
 }
 
 type releaseTeamNoteJSON struct {
-	ID        int       `json:"id"`
-	SessionID int       `json:"session_id"`
-	HeroID    int       `json:"hero_id"`
-	UserID    int       `json:"user_id"`
-	Body      string    `json:"body"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	FirstName *string   `json:"first_name,omitempty"`
-	Username  *string   `json:"username,omitempty"`
-	Email     string    `json:"email"`
+	ID          int        `json:"id"`
+	SessionID   int        `json:"session_id"`
+	HeroID      int        `json:"hero_id"`
+	UserID      int        `json:"user_id"`
+	Body        string     `json:"body"`
+	DraftBody   string     `json:"draft_body,omitempty"`
+	Published   bool       `json:"published"`
+	PublishedAt *time.Time `json:"published_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	FirstName   *string    `json:"first_name,omitempty"`
+	Username    *string    `json:"username,omitempty"`
+	Email       string     `json:"email"`
 }
 
 type releaseTeamDeckJSON struct {
@@ -109,7 +112,8 @@ type memberUserBody struct {
 }
 
 type noteBody struct {
-	Body string `json:"body"`
+	Body    string `json:"body"`
+	Publish bool   `json:"publish"`
 }
 
 type linkDeckBody struct {
@@ -152,10 +156,28 @@ func releaseTeamMemberToJSON(m *repository.ReleaseTeamMember) releaseTeamMemberJ
 
 func releaseTeamNoteToJSON(n *repository.ReleaseTeamNote) releaseTeamNoteJSON {
 	return releaseTeamNoteJSON{
-		ID: n.ID, SessionID: n.SessionID, HeroID: n.HeroID, UserID: n.UserID, Body: n.Body,
-		CreatedAt: n.CreatedAt, UpdatedAt: n.UpdatedAt, FirstName: n.FirstName,
-		Username: n.Username, Email: n.Email,
+		ID: n.ID, SessionID: n.SessionID, HeroID: n.HeroID, UserID: n.UserID,
+		Body: n.Body, DraftBody: n.DraftBody, Published: n.PublishedAt != nil,
+		PublishedAt: n.PublishedAt, CreatedAt: n.CreatedAt, UpdatedAt: n.UpdatedAt,
+		FirstName: n.FirstName, Username: n.Username, Email: n.Email,
 	}
+}
+
+// releaseTeamNoteListItemJSON is the public note card content (published body only).
+func releaseTeamNoteListItemJSON(n *repository.ReleaseTeamNote) releaseTeamNoteJSON {
+	return releaseTeamNoteJSON{
+		ID: n.ID, SessionID: n.SessionID, HeroID: n.HeroID, UserID: n.UserID,
+		Body: n.Body, Published: true, PublishedAt: n.PublishedAt,
+		CreatedAt: n.CreatedAt, UpdatedAt: n.UpdatedAt,
+		FirstName: n.FirstName, Username: n.Username, Email: n.Email,
+	}
+}
+
+// releaseTeamMyNoteJSON exposes draft body for the editor.
+func releaseTeamMyNoteJSON(n *repository.ReleaseTeamNote) releaseTeamNoteJSON {
+	j := releaseTeamNoteToJSON(n)
+	j.Body = n.DraftBody
+	return j
 }
 
 func releaseTeamDeckToJSON(d *repository.ReleaseTeamDeckLink) releaseTeamDeckJSON {
@@ -722,11 +744,23 @@ func (h *releaseTeamsHTTP) listNotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := make([]releaseTeamNoteJSON, 0, len(rows))
+	var myNote *releaseTeamNoteJSON
 	for i := range rows {
-		out = append(out, releaseTeamNoteToJSON(&rows[i]))
+		n := &rows[i]
+		if n.PublishedAt != nil {
+			out = append(out, releaseTeamNoteListItemJSON(n))
+		}
+		if n.UserID == u.ID {
+			j := releaseTeamMyNoteJSON(n)
+			myNote = &j
+		}
+	}
+	payload := map[string]any{"notes": out}
+	if myNote != nil {
+		payload["my_note"] = myNote
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"notes": out})
+	_ = json.NewEncoder(w).Encode(payload)
 }
 
 // POST /api/release-teams/sessions/{id}/heroes/{heroId}/notes
@@ -757,13 +791,13 @@ func (h *releaseTeamsHTTP) upsertNote(w http.ResponseWriter, r *http.Request) {
 		writeFieldError(w, http.StatusBadRequest, "body", "required")
 		return
 	}
-	note, err := h.app.Repo.UpsertReleaseTeamNote(r.Context(), sessionID, heroID, u.ID, body.Body)
+	note, err := h.app.Repo.UpsertReleaseTeamNote(r.Context(), sessionID, heroID, u.ID, body.Body, body.Publish)
 	if err != nil {
 		h.writeRepoErr(w, err, "upsert release team note")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"note": releaseTeamNoteToJSON(note)})
+	_ = json.NewEncoder(w).Encode(map[string]any{"note": releaseTeamMyNoteJSON(note)})
 }
 
 // PATCH /api/release-teams/notes/{noteId}
@@ -797,13 +831,13 @@ func (h *releaseTeamsHTTP) updateNote(w http.ResponseWriter, r *http.Request) {
 		writeFieldError(w, http.StatusBadRequest, "body", "required")
 		return
 	}
-	note, err := h.app.Repo.UpdateReleaseTeamNoteByID(r.Context(), noteID, body.Body)
+	note, err := h.app.Repo.UpdateReleaseTeamNoteByID(r.Context(), noteID, body.Body, body.Publish)
 	if err != nil {
 		h.writeRepoErr(w, err, "update release team note")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"note": releaseTeamNoteToJSON(note)})
+	_ = json.NewEncoder(w).Encode(map[string]any{"note": releaseTeamMyNoteJSON(note)})
 }
 
 // GET decks / POST link / GET recordings / POST link / POST create recording

@@ -13,6 +13,15 @@ import {
   panelTabButton,
 } from "./PanelTabs";
 import { bodyToRichHtml, isEmptyRichHtml } from "../utils/richTextDomPurify";
+import {
+  extFromFilename,
+  MAX_UPLOAD_SIZE_LABEL,
+  uploadPublicAsset,
+  uploadSizeError,
+} from "../utils/uploadPublicAsset";
+
+const REC_MEDIA_UPLOAD = "upload";
+const REC_MEDIA_EMBED = "embed";
 
 /** @typedef {{ id: number, name: string, young?: boolean, card_image_url?: string | null, art_image_url?: string | null, formats?: number[] }} ReleaseHero */
 
@@ -20,7 +29,7 @@ import { bodyToRichHtml, isEmptyRichHtml } from "../utils/richTextDomPurify";
 
 /** @typedef {{ user_id: number, is_captain: boolean, first_name?: string | null, last_name?: string | null, username?: string | null, email: string }} ReleaseMember */
 
-/** @typedef {{ id: number, user_id: number, body: string, updated_at: string, first_name?: string | null, username?: string | null, email: string }} ReleaseNote */
+/** @typedef {{ id: number, user_id: number, body: string, published?: boolean, published_at?: string | null, updated_at: string, first_name?: string | null, username?: string | null, email: string }} ReleaseNote */
 
 /** @typedef {{ id: number, deck_id: number, deck_name: string, user_id: number, fabrary_link?: string | null, first_name?: string | null, username?: string | null, email: string }} ReleaseDeck */
 
@@ -94,6 +103,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
 
   const [members, setMembers] = useState(/** @type {ReleaseMember[]} */ ([]));
   const [notes, setNotes] = useState(/** @type {ReleaseNote[]} */ ([]));
+  const [myNote, setMyNote] = useState(/** @type {ReleaseNote | null} */ (null));
   const [decks, setDecks] = useState(/** @type {ReleaseDeck[]} */ ([]));
   const [recordings, setRecordings] = useState(/** @type {ReleaseRecording[]} */ ([]));
   const [heroDataLoading, setHeroDataLoading] = useState(false);
@@ -109,6 +119,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
   const [noteEditorKey, setNoteEditorKey] = useState(0);
   const [noteInitialHtml, setNoteInitialHtml] = useState("<p></p>");
   const [noteSubmitting, setNoteSubmitting] = useState(false);
+  const [noteSaveMode, setNoteSaveMode] = useState(/** @type {"draft" | "publish" | null} */ (null));
   const [noteError, setNoteError] = useState(/** @type {string | null} */ (null));
   const noteEditorRef = useRef(
     /** @type {{ getHTML: () => string, isEmpty?: () => boolean } | null} */ (null),
@@ -117,16 +128,19 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
 
   const [deckImportOpen, setDeckImportOpen] = useState(false);
   const [importUrl, setImportUrl] = useState("");
-  const [importSourceId, setImportSourceId] = useState("");
-  const [deckSources, setDeckSources] = useState(/** @type {Array<{ id: number, source: string }>} */ ([]));
   const [importSubmitting, setImportSubmitting] = useState(false);
   const [importError, setImportError] = useState(/** @type {string | null} */ (null));
 
   const [recordingModalOpen, setRecordingModalOpen] = useState(false);
+  const [recMediaMode, setRecMediaMode] = useState(
+    /** @type {typeof REC_MEDIA_UPLOAD | typeof REC_MEDIA_EMBED} */ (REC_MEDIA_UPLOAD),
+  );
   const [recUrl, setRecUrl] = useState("");
+  const [recVideoFile, setRecVideoFile] = useState(/** @type {File | null} */ (null));
   const [recLabel, setRecLabel] = useState("");
   const [recSecondHeroId, setRecSecondHeroId] = useState(/** @type {number | ""} */ (""));
   const [recSubmitting, setRecSubmitting] = useState(false);
+  const [recUploading, setRecUploading] = useState(false);
   const [recError, setRecError] = useState(/** @type {string | null} */ (null));
 
   const cardShell = isLight
@@ -158,7 +172,8 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
     [members, myUserId],
   );
   const canMutateTeam = Boolean(isCurrent && (isAdmin || iAmMember));
-  const myNote = useMemo(() => notes.find((n) => n.user_id === myUserId) ?? null, [notes, myUserId]);
+  const myNotePublished = Boolean(myNote?.published);
+  const hasUnpublishedDraft = Boolean(myNote && !myNote.published);
 
   const loadList = useCallback(async () => {
     if (!user) return;
@@ -269,8 +284,13 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
         rRes.json(),
       ]);
       const nextNotes = Array.isArray(nData.notes) ? nData.notes : [];
+      const nextMyNote =
+        nData.my_note && typeof nData.my_note === "object" && typeof nData.my_note.id === "number"
+          ? /** @type {ReleaseNote} */ (nData.my_note)
+          : null;
       setMembers(Array.isArray(mData.members) ? mData.members : []);
       setNotes(nextNotes);
+      setMyNote(nextMyNote);
       setDecks(Array.isArray(dData.decks) ? dData.decks : []);
       setRecordings(Array.isArray(rData.recordings) ? rData.recordings : []);
       setExpandedNoteId(nextNotes[0]?.id ?? null);
@@ -278,6 +298,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
       setHeroDataError(e instanceof Error ? e.message : "Failed to load team data");
       setMembers([]);
       setNotes([]);
+      setMyNote(null);
       setDecks([]);
       setRecordings([]);
     } finally {
@@ -321,22 +342,6 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
     const token = await user.getIdToken();
     return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
   }, [user]);
-
-  const closeSession = async () => {
-    if (!user || !sessionId || !isAdmin) return;
-    if (!window.confirm("Close this session? It will move to Past and become read-only.")) return;
-    try {
-      const headers = await authHeaders();
-      const res = await fetch(`/api/release-teams/sessions/${sessionId}/close`, {
-        method: "POST",
-        headers,
-      });
-      if (!res.ok) throw new Error(parseApiError(await res.text()));
-      await loadSession();
-    } catch (e) {
-      setSessionError(e instanceof Error ? e.message : "Failed to close session");
-    }
-  };
 
   const joinTeam = async () => {
     if (!user || !sessionId || selectedHeroId == null) return;
@@ -413,6 +418,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
     setNoteInitialHtml(bodyToRichHtml(myNote?.body) || "<p></p>");
     setNoteEditorKey((k) => k + 1);
     setNoteError(null);
+    setNoteSaveMode(null);
     setNoteEditing(true);
   };
 
@@ -420,6 +426,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
     if (noteSubmitting) return;
     setNoteEditing(false);
     setNoteError(null);
+    setNoteSaveMode(null);
   };
 
   const noteUploadPath = useCallback(
@@ -437,7 +444,8 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
     return user.getIdToken();
   }, [user]);
 
-  const saveNote = async () => {
+  /** @param {boolean} publish */
+  const saveNote = async (publish) => {
     if (!user || !sessionId || selectedHeroId == null) return;
     const html = noteEditorRef.current?.getHTML() ?? "";
     if (noteEditorRef.current?.isEmpty?.() || isEmptyRichHtml(html)) {
@@ -445,46 +453,59 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
       return;
     }
     setNoteSubmitting(true);
+    setNoteSaveMode(publish ? "publish" : "draft");
     setNoteError(null);
     try {
       const headers = await authHeaders();
       const res = await fetch(
         `/api/release-teams/sessions/${sessionId}/heroes/${selectedHeroId}/notes`,
-        { method: "POST", headers, body: JSON.stringify({ body: html }) },
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ body: html, publish }),
+        },
       );
       if (!res.ok) throw new Error(parseApiError(await res.text()));
-      setNoteEditing(false);
+      const data = await res.json();
+      if (data.note && typeof data.note === "object") {
+        setMyNote(/** @type {ReleaseNote} */ (data.note));
+      }
+      if (publish) {
+        setNoteEditing(false);
+      }
       setHeroReload((n) => n + 1);
     } catch (e) {
-      setNoteError(e instanceof Error ? e.message : "Failed to save note");
+      setNoteError(e instanceof Error ? e.message : publish ? "Failed to publish note" : "Failed to save draft");
     } finally {
       setNoteSubmitting(false);
+      setNoteSaveMode(null);
     }
   };
 
-  const openDeckImport = async () => {
+  const openDeckImport = () => {
     setImportUrl("");
     setImportError(null);
     setImportSubmitting(false);
     setDeckImportOpen(true);
-    try {
-      const token = await user.getIdToken();
-      const res = await fetch("/api/deck-sources", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(parseApiError(await res.text()));
-      const data = await res.json();
-      const list = Array.isArray(data.sources) ? data.sources : [];
-      const mapped = list
-        .filter((s) => s && typeof s.id === "number")
-        .map((s) => ({ id: s.id, source: s.source || `Source ${s.id}` }));
-      setDeckSources(mapped);
-      const member = mapped.find((s) => s.source.toLowerCase() === "member");
-      const pick = member ?? mapped[0];
-      setImportSourceId(pick ? String(pick.id) : "");
-    } catch (e) {
-      setImportError(e instanceof Error ? e.message : "Failed to load deck sources");
-    }
+  };
+
+  /** Resolve the Member deck source (personal submissions) for the current user. */
+  const resolveMemberDeckSourceId = async () => {
+    if (!user) throw new Error("Not signed in");
+    const token = await user.getIdToken();
+    const res = await fetch("/api/deck-sources", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(parseApiError(await res.text()));
+    const data = await res.json();
+    const list = Array.isArray(data.sources) ? data.sources : [];
+    const mapped = list
+      .filter((s) => s && typeof s.id === "number")
+      .map((s) => ({ id: s.id, source: s.source || `Source ${s.id}` }));
+    const member = mapped.find((s) => s.source.toLowerCase() === "member");
+    const pick = member ?? mapped[0];
+    if (!pick) throw new Error("No deck source available.");
+    return pick.id;
   };
 
   const submitDeckImport = async () => {
@@ -493,20 +514,17 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
       setImportError("Enter a Fabrary deck URL.");
       return;
     }
-    if (!importSourceId) {
-      setImportError("Select a deck source.");
-      return;
-    }
     setImportSubmitting(true);
     setImportError(null);
     try {
+      const deckSourceId = await resolveMemberDeckSourceId();
       const headers = await authHeaders();
       const importRes = await fetch("/api/me/decks/import-fabrary", {
         method: "POST",
         headers,
         body: JSON.stringify({
           fabrary_link: importUrl.trim(),
-          deck_source_id: Number(importSourceId),
+          deck_source_id: deckSourceId,
         }),
       });
       if (!importRes.ok) throw new Error(parseApiError(await importRes.text()));
@@ -527,19 +545,70 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
     }
   };
 
+  const resetRecordingModal = () => {
+    setRecMediaMode(REC_MEDIA_UPLOAD);
+    setRecUrl("");
+    setRecVideoFile(null);
+    setRecLabel("");
+    setRecSecondHeroId("");
+    setRecError(null);
+    setRecUploading(false);
+  };
+
+  const openRecordingModal = () => {
+    resetRecordingModal();
+    setRecordingModalOpen(true);
+  };
+
+  const closeRecordingModal = () => {
+    if (recSubmitting) return;
+    setRecordingModalOpen(false);
+    resetRecordingModal();
+  };
+
   const submitRecording = async () => {
     if (!user || !sessionId || selectedHeroId == null) return;
-    if (!recUrl.trim()) {
-      setRecError("Enter a recording URL.");
-      return;
-    }
     if (recSecondHeroId === "") {
       setRecError("Select the opposing hero.");
       return;
     }
+
     setRecSubmitting(true);
     setRecError(null);
     try {
+      let url = "";
+      if (recMediaMode === REC_MEDIA_UPLOAD) {
+        if (!recVideoFile) {
+          setRecError("Choose a video file to upload.");
+          setRecSubmitting(false);
+          return;
+        }
+        const fileSizeErr = uploadSizeError(recVideoFile.size);
+        if (fileSizeErr) {
+          setRecError(fileSizeErr);
+          setRecSubmitting(false);
+          return;
+        }
+        if (!myUserId) throw new Error("Could not resolve your user id.");
+        const ext = extFromFilename(recVideoFile.name);
+        const objectPath = `recordings/${myUserId}/${crypto.randomUUID()}.${ext}`;
+        setRecUploading(true);
+        try {
+          url = await uploadPublicAsset(() => user.getIdToken(), objectPath, recVideoFile, {
+            cacheBust: false,
+          });
+        } finally {
+          setRecUploading(false);
+        }
+      } else {
+        url = recUrl.trim();
+        if (!url) {
+          setRecError("Enter a recording URL.");
+          setRecSubmitting(false);
+          return;
+        }
+      }
+
       const headers = await authHeaders();
       const res = await fetch(
         `/api/release-teams/sessions/${sessionId}/heroes/${selectedHeroId}/recordings/create`,
@@ -547,7 +616,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
           method: "POST",
           headers,
           body: JSON.stringify({
-            url: recUrl.trim(),
+            url,
             label: recLabel.trim() || null,
             second_hero_id: recSecondHeroId,
           }),
@@ -555,84 +624,90 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
       );
       if (!res.ok) throw new Error(parseApiError(await res.text()));
       setRecordingModalOpen(false);
-      setRecUrl("");
-      setRecLabel("");
-      setRecSecondHeroId("");
+      resetRecordingModal();
       setHeroReload((n) => n + 1);
     } catch (e) {
       setRecError(e instanceof Error ? e.message : "Failed to add recording");
     } finally {
       setRecSubmitting(false);
+      setRecUploading(false);
     }
   };
 
   if (sessionId) {
     return (
       <div className={PANEL_TABS_BLEED} aria-label="Release team session">
-        <div className={`${PANEL_TABS_HEADER_PAD} pb-4`}>
-          {sessionLoading && !session ? (
-            <p className={`text-[1rem] ${textMuted}`}>Loading session…</p>
-          ) : null}
+        {!noteEditing ? (
+          <div className={`${PANEL_TABS_HEADER_PAD} pb-4`}>
+            {sessionLoading && !session ? (
+              <p className={`text-[1rem] ${textMuted}`}>Loading session…</p>
+            ) : null}
 
-          {session ? (
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-              <div className="min-w-0 flex-1">
-                <h2 className="m-0 truncate text-[1.55rem] font-semibold leading-tight text-white sm:text-[1.75rem]">
-                  {session.title}
-                </h2>
-                <p className={`mt-1.5 m-0 text-[0.95rem] sm:text-[1.05rem] ${textMuted}`}>
-                  {cardFormatName(session.format)}
-                  {session.set_name ? ` · ${session.set_name}` : ""}
-                  {isPast ? " · Past (read-only)" : ""}
-                </p>
+            {session ? (
+              <div className="flex items-start justify-between gap-x-4 gap-y-3">
+                <div className="min-w-0 flex-1">
+                  <h2 className="m-0 truncate text-[1.55rem] font-semibold leading-tight text-white sm:text-[1.75rem]">
+                    {session.title}
+                  </h2>
+                  <p className={`mt-1.5 m-0 text-[0.95rem] sm:text-[1.05rem] ${textMuted}`}>
+                    {cardFormatName(session.format)}
+                    {session.set_name ? ` · ${session.set_name}` : ""}
+                    {isPast ? " · Past (read-only)" : ""}
+                  </p>
+                </div>
+                <select
+                  aria-label="Hero"
+                  className={`${inputCls} ml-auto w-auto min-w-[12rem] max-w-[min(100%,18rem)] shrink-0 px-4 py-2.5 text-[1.05rem] sm:min-w-[16rem] sm:text-[1.1rem]`}
+                  value={selectedHeroId ?? ""}
+                  onChange={(e) => {
+                    setSelectedHeroId(Number(e.target.value));
+                    setHeroTab("team");
+                    setNoteEditing(false);
+                  }}
+                >
+                  {(session.heroes || []).map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.name}
+                      {h.young ? " (Young)" : ""}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <select
-                aria-label="Hero"
-                className={`${inputCls} w-auto min-w-[14rem] max-w-full px-4 py-2.5 text-[1.05rem] sm:min-w-[16rem] sm:text-[1.1rem]`}
-                value={selectedHeroId ?? ""}
-                onChange={(e) => {
-                  setSelectedHeroId(Number(e.target.value));
-                  setHeroTab("team");
-                  setNoteEditing(false);
-                }}
-              >
-                {(session.heroes || []).map((h) => (
-                  <option key={h.id} value={h.id}>
-                    {h.name}
-                    {h.young ? " (Young)" : ""}
-                  </option>
-                ))}
-              </select>
-              {isAdmin && isCurrent ? (
-                <button type="button" className={`${btnBase} ${btnGhost}`} onClick={() => void closeSession()}>
-                  Close session
-                </button>
-              ) : null}
-            </div>
-          ) : null}
+            ) : null}
 
-          {sessionError ? (
-            <p
-              className="mt-3 rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100"
-              role="alert"
-            >
-              {sessionError}
-            </p>
-          ) : null}
-        </div>
+            {sessionError ? (
+              <p
+                className="mt-3 rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100"
+                role="alert"
+              >
+                {sessionError}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         {session && noteEditing ? (
-          <div className={PANEL_TABS_CONTENT_PAD} aria-label={myNote ? "Edit note" : "Add note"}>
+          <div
+            className={`${PANEL_TABS_HEADER_PAD} flex min-h-0 flex-1 flex-col pb-6 sm:pb-8`}
+            aria-label={myNote ? "Edit note" : "Add note"}
+          >
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h3 className="m-0 text-[1.25rem] font-semibold text-white sm:text-[1.35rem]">
-                {myNote ? "Edit note" : "Add note"}
-                {selectedHero ? (
-                  <span className={`ml-2 text-[0.95rem] font-medium ${textMuted}`}>
-                    · {selectedHero.name}
-                    {selectedHero.young ? " (Young)" : ""}
-                  </span>
-                ) : null}
-              </h3>
+              <div className="min-w-0">
+                <h3 className="m-0 text-[1.25rem] font-semibold text-white sm:text-[1.35rem]">
+                  {myNotePublished ? "Edit note" : myNote ? "Edit draft" : "Add note"}
+                  {selectedHero ? (
+                    <span className={`ml-2 text-[0.95rem] font-medium ${textMuted}`}>
+                      · {selectedHero.name}
+                      {selectedHero.young ? " (Young)" : ""}
+                    </span>
+                  ) : null}
+                </h3>
+                <p className={`mt-1 m-0 text-[0.85rem] ${textFaint}`}>
+                  {myNotePublished
+                    ? "Save draft to keep working privately, or Publish to update the live note."
+                    : "Drafts stay private until you Publish."}
+                </p>
+              </div>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -644,11 +719,19 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                 </button>
                 <button
                   type="button"
+                  className={`${btnBase} ${btnGhost}`}
+                  disabled={noteSubmitting}
+                  onClick={() => void saveNote(false)}
+                >
+                  {noteSaveMode === "draft" ? "Saving…" : "Save draft"}
+                </button>
+                <button
+                  type="button"
                   className={`${btnBase} ${btnTheme}`}
                   disabled={noteSubmitting}
-                  onClick={() => void saveNote()}
+                  onClick={() => void saveNote(true)}
                 >
-                  {noteSubmitting ? "Saving…" : "Save"}
+                  {noteSaveMode === "publish" ? "Publishing…" : "Publish"}
                 </button>
               </div>
             </div>
@@ -659,7 +742,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
               getIdToken={getIdToken}
               isLight={isLight}
               placeholder="Team notes for this hero… Add images via Image, paste, or drag & drop."
-              minHeightClass="min-h-[22rem]"
+              minHeightClass="min-h-[28rem]"
               buildUploadPath={noteUploadPath}
             />
             {noteError ? <p className="mt-3 text-[0.85rem] text-red-200">{noteError}</p> : null}
@@ -795,7 +878,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
               <div className="flex flex-col gap-3">
                 {canMutateTeam && canSubmitContent ? (
                   <div>
-                    <button type="button" className={`${btnAction} ${btnTheme}`} onClick={() => void openDeckImport()}>
+                    <button type="button" className={`${btnAction} ${btnTheme}`} onClick={openDeckImport}>
                       Submit decklist
                     </button>
                     <p className={`mt-1.5 text-[0.8rem] ${textFaint}`}>
@@ -858,22 +941,27 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
             {heroTab === "notes" ? (
               <div className="flex flex-col gap-3">
                 <ul className="m-0 flex list-none flex-col gap-2 p-0">
-                  {canMutateTeam && !myNote ? (
+                  {canMutateTeam && !myNotePublished ? (
                     <li>
                       <div
-                        className={`${innerShell} flex min-h-[9rem] items-center justify-center px-5 py-8`}
+                        className={`${innerShell} flex min-h-[9rem] flex-col items-center justify-center gap-2 px-5 py-8`}
                       >
                         <button
                           type="button"
                           className={`${btnAction} ${btnTheme}`}
                           onClick={openNoteEditor}
                         >
-                          Add Notes
+                          {hasUnpublishedDraft ? "Continue draft" : "Add Notes"}
                         </button>
+                        {hasUnpublishedDraft ? (
+                          <p className={`m-0 text-[0.85rem] ${textFaint}`}>
+                            Draft saved — publish when you’re ready for the team to see it.
+                          </p>
+                        ) : null}
                       </div>
                     </li>
                   ) : null}
-                  {notes.length === 0 && !(canMutateTeam && !myNote) ? (
+                  {notes.length === 0 && !(canMutateTeam && !myNotePublished) ? (
                     <li className={`text-[0.9rem] ${textFaint}`}>No notes yet.</li>
                   ) : (
                     notes.map((row) => {
@@ -932,10 +1020,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                   <button
                     type="button"
                     className={`${btnAction} ${btnTheme}`}
-                    onClick={() => {
-                      setRecError(null);
-                      setRecordingModalOpen(true);
-                    }}
+                    onClick={openRecordingModal}
                   >
                     Add recording
                   </button>
@@ -1003,20 +1088,6 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                       placeholder="https://fabrary.net/decks/…"
                     />
                   </label>
-                  <label className={`mt-3 flex flex-col gap-1 text-[0.85rem] ${textMuted}`}>
-                    Deck source
-                    <select
-                      className={inputCls}
-                      value={importSourceId}
-                      onChange={(e) => setImportSourceId(e.target.value)}
-                    >
-                      {deckSources.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.source}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
                   {importError ? <p className="mt-2 text-[0.85rem] text-red-200">{importError}</p> : null}
                   <div className="mt-4 flex justify-end gap-2">
                     <button
@@ -1048,27 +1119,92 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                 className="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 p-4"
                 role="presentation"
                 onClick={(e) => {
-                  if (e.target === e.currentTarget && !recSubmitting) setRecordingModalOpen(false);
+                  if (e.target === e.currentTarget && !recSubmitting) closeRecordingModal();
                 }}
               >
-                <div role="dialog" aria-modal="true" className={`w-full max-w-md rounded-2xl p-5 ${cardShell}`}>
+                <div role="dialog" aria-modal="true" className={`w-full max-w-lg rounded-2xl p-5 ${cardShell}`}>
                   <h3 className="m-0 text-[1.05rem] font-semibold text-white">Add recording</h3>
                   <p className={`mt-1 text-[0.85rem] ${textMuted}`}>
                     Format and first hero are set to {cardFormatName(session?.format)} / {selectedHero?.name}.
                   </p>
-                  <label className={`mt-3 flex flex-col gap-1 text-[0.85rem] ${textMuted}`}>
-                    URL
-                    <input className={inputCls} value={recUrl} onChange={(e) => setRecUrl(e.target.value)} />
-                  </label>
+
+                  <fieldset className="mt-4 border-0 p-0">
+                    <legend className={`text-[0.85rem] font-medium ${textMuted}`}>Video source</legend>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className={`${btnBase} ${recMediaMode === REC_MEDIA_UPLOAD ? btnTheme : btnGhost}`}
+                        disabled={recSubmitting}
+                        onClick={() => {
+                          setRecMediaMode(REC_MEDIA_UPLOAD);
+                          setRecError(null);
+                        }}
+                      >
+                        Upload file
+                      </button>
+                      <button
+                        type="button"
+                        className={`${btnBase} ${recMediaMode === REC_MEDIA_EMBED ? btnTheme : btnGhost}`}
+                        disabled={recSubmitting}
+                        onClick={() => {
+                          setRecMediaMode(REC_MEDIA_EMBED);
+                          setRecError(null);
+                        }}
+                      >
+                        Embed link
+                      </button>
+                    </div>
+                  </fieldset>
+
+                  {recMediaMode === REC_MEDIA_EMBED ? (
+                    <label className={`mt-3 flex flex-col gap-1 text-[0.85rem] ${textMuted}`}>
+                      URL
+                      <input
+                        type="url"
+                        className={inputCls}
+                        value={recUrl}
+                        onChange={(e) => setRecUrl(e.target.value)}
+                        placeholder="YouTube or embed URL"
+                        disabled={recSubmitting}
+                        autoComplete="off"
+                      />
+                    </label>
+                  ) : (
+                    <label className={`mt-3 flex flex-col gap-1 text-[0.85rem] ${textMuted}`}>
+                      Video file
+                      <input
+                        type="file"
+                        accept="video/*"
+                        className={`${inputCls} file:mr-3 file:rounded-md file:border-0 file:bg-purple-700/80 file:px-3 file:py-1.5 file:text-[0.78rem] file:font-semibold file:text-white`}
+                        disabled={recSubmitting}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] ?? null;
+                          setRecVideoFile(file);
+                          setRecError(file ? uploadSizeError(file.size) : null);
+                        }}
+                      />
+                      <span className={`text-[0.75rem] ${textFaint}`}>
+                        Max upload size is {MAX_UPLOAD_SIZE_LABEL}.
+                        {recVideoFile ? ` Selected: ${recVideoFile.name}` : ""}
+                      </span>
+                    </label>
+                  )}
+
                   <label className={`mt-3 flex flex-col gap-1 text-[0.85rem] ${textMuted}`}>
                     Label (optional)
-                    <input className={inputCls} value={recLabel} onChange={(e) => setRecLabel(e.target.value)} />
+                    <input
+                      className={inputCls}
+                      value={recLabel}
+                      onChange={(e) => setRecLabel(e.target.value)}
+                      disabled={recSubmitting}
+                    />
                   </label>
                   <label className={`mt-3 flex flex-col gap-1 text-[0.85rem] ${textMuted}`}>
                     Opposing hero
                     <select
                       className={inputCls}
                       value={recSecondHeroId}
+                      disabled={recSubmitting}
                       onChange={(e) => setRecSecondHeroId(e.target.value === "" ? "" : Number(e.target.value))}
                     >
                       <option value="">Select…</option>
@@ -1088,7 +1224,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                       type="button"
                       className={`${btnBase} ${btnGhost}`}
                       disabled={recSubmitting}
-                      onClick={() => setRecordingModalOpen(false)}
+                      onClick={closeRecordingModal}
                     >
                       Cancel
                     </button>
@@ -1098,7 +1234,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                       disabled={recSubmitting}
                       onClick={() => void submitRecording()}
                     >
-                      {recSubmitting ? "Saving…" : "Save"}
+                      {recUploading ? "Uploading…" : recSubmitting ? "Saving…" : "Save"}
                     </button>
                   </div>
                 </div>

@@ -15,6 +15,8 @@ import Placeholder from "@tiptap/extension-placeholder";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
 import { uploadPublicAsset, extFromFilename, uploadSizeError } from "../utils/uploadPublicAsset";
+import { docxFileToRichHtml } from "../utils/docxToRichHtml";
+import { isEmptyRichHtml } from "../utils/richTextDomPurify";
 import { TextInputModal } from "./TextInputModal";
 
 /** @param {string} v */
@@ -156,6 +158,7 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
   ref,
 ) {
   const fileInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+  const docxInputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
   const editorInstanceRef = useRef(/** @type {import("@tiptap/react").Editor | null} */ (null));
   const insertImagesRef = useRef(/** @type {(files: File[]) => Promise<void>} */ (async () => {}));
   const uploadingLockRef = useRef(false);
@@ -166,6 +169,7 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
   }));
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [importingDocx, setImportingDocx] = useState(false);
   const [uploadStatus, setUploadStatus] = useState(/** @type {string | null} */ (null));
   const [uploadError, setUploadError] = useState(/** @type {string | null} */ (null));
 
@@ -283,18 +287,67 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
     [insertImageFiles],
   );
 
+  const importDocxFile = useCallback(
+    async (/** @type {File | null | undefined} */ file) => {
+      if (!file) return;
+      const ed = editorInstanceRef.current;
+      if (!ed) return;
+      if (uploadingLockRef.current || importingDocx) return;
+
+      const currentHtml = ed.getHTML() ?? "";
+      if (!isEmptyRichHtml(currentHtml)) {
+        const ok = window.confirm(
+          "Replace the current editor content with this Word document? Unsaved changes in the editor will be lost.",
+        );
+        if (!ok) return;
+      }
+
+      uploadingLockRef.current = true;
+      setImportingDocx(true);
+      setUploadError(null);
+      setUploadStatus("Converting Word document…");
+      try {
+        const { html, warnings } = await docxFileToRichHtml(file, {
+          uploadImage: async (imgFile) => {
+            const sizeErr = uploadSizeError(imgFile.size);
+            if (sizeErr) throw new Error(sizeErr);
+            const ext = extFromFilename(imgFile.name);
+            const path = buildUploadPath(imgFile, ext);
+            setUploadStatus("Uploading images from document…");
+            return uploadPublicAsset(getIdToken, path, imgFile);
+          },
+        });
+        ed.chain().focus().setContent(html).run();
+        if (warnings.length) {
+          setUploadStatus(`Imported with ${warnings.length} conversion warning(s). Review formatting.`);
+        } else {
+          setUploadStatus("Document imported into the editor.");
+        }
+        window.setTimeout(() => setUploadStatus(null), 2800);
+      } catch (err) {
+        setUploadStatus(null);
+        setUploadError(err instanceof Error ? err.message : "Failed to import Word document");
+      } finally {
+        uploadingLockRef.current = false;
+        setImportingDocx(false);
+      }
+    },
+    [buildUploadPath, getIdToken, importingDocx],
+  );
+
   useImperativeHandle(
     ref,
     () => ({
       getHTML: () => editor?.getHTML() ?? "",
       insertImageFile,
+      importDocxFile,
       isEmpty: () => {
         const html = editor?.getHTML() ?? "";
         if (/<img\b/i.test(html)) return false;
         return (editor?.getText() ?? "").trim() === "";
       },
     }),
-    [editor, insertImageFile],
+    [editor, insertImageFile, importDocxFile],
   );
 
   const openLinkModal = useCallback(() => {
@@ -321,6 +374,15 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
       void insertImageFiles(list);
     },
     [insertImageFiles],
+  );
+
+  const onDocxInputChange = useCallback(
+    (e) => {
+      const file = e.target.files?.[0] ?? null;
+      e.target.value = "";
+      void importDocxFile(file);
+    },
+    [importDocxFile],
   );
 
   const ts = toolbarSurface(isLight);
@@ -417,10 +479,22 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
                 setUploadError(null);
                 fileInputRef.current?.click();
               }}
-              disabled={uploading}
+              disabled={uploading || importingDocx}
               title="Insert image"
             >
               Image
+            </button>
+            <button
+              type="button"
+              className={toolbarBtnClass(false, isLight, ts)}
+              onClick={() => {
+                setUploadError(null);
+                docxInputRef.current?.click();
+              }}
+              disabled={uploading || importingDocx}
+              title="Import Word (.docx) into the editor"
+            >
+              {importingDocx ? "Importing…" : "Import Word"}
             </button>
             <input
               ref={fileInputRef}
@@ -429,6 +503,13 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
               multiple
               className="sr-only"
               onChange={onFileInputChange}
+            />
+            <input
+              ref={docxInputRef}
+              type="file"
+              accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              className="sr-only"
+              onChange={onDocxInputChange}
             />
           </div>
           <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1" role="group" aria-label="Text alignment">
@@ -513,7 +594,8 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
           </p>
         ) : !uploadStatus ? (
           <p className="m-0 text-[0.75rem] text-[#f4f0fa]/75">
-            Tip: Image button, paste a screenshot, or drag files here. Select an image to resize.
+            Tip: Image button, paste a screenshot, or drag images here. Import Word (.docx) to load a draft. Select an
+            image to resize.
           </p>
         ) : null}
       </div>

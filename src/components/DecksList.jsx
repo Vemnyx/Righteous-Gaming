@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
+import { sessionProfileDisplayName } from "../auth/sessionProfile";
 import { canWriteContent, canWriteDecksAndRecordings } from "../constants/roles";
 import { deckHeroLabel } from "../utils/deckHeroLabel";
 import { deckDisplayName } from "../utils/deckDisplayName";
@@ -757,7 +758,9 @@ export function DecksList({ isLight, active, onOpenDeck }) {
                       ) : null}
                       {deckSources.map((s) => (
                         <option key={s.id} value={String(s.id)}>
-                          {s.source}
+                          {s.source.toLowerCase() === "member"
+                            ? sessionProfileDisplayName(sessionProfile)
+                            : s.source}
                         </option>
                       ))}
                     </select>

@@ -63,16 +63,18 @@ type ReleaseTeamMember struct {
 
 // ReleaseTeamNote is a team note for a session hero.
 type ReleaseTeamNote struct {
-	ID        int
-	SessionID int
-	HeroID    int
-	UserID    int
-	Body      string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-	FirstName *string
-	Username  *string
-	Email     string
+	ID          int
+	SessionID   int
+	HeroID      int
+	UserID      int
+	Body        string // published content shown to the team (empty until first publish)
+	DraftBody   string // author's working copy
+	PublishedAt *time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	FirstName   *string
+	Username    *string
+	Email       string
 }
 
 // ReleaseTeamDeckLink joins a deck to a release-team hero slot.
@@ -520,8 +522,8 @@ func (r *Repository) ListReleaseTeamNotes(ctx context.Context, sessionID, heroID
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-SELECT n.id, n.session_id, n.hero_id, n.user_id, n.body, n.created_at, n.updated_at,
-       u.first_name, u.username, u.email
+SELECT n.id, n.session_id, n.hero_id, n.user_id, n.body, n.draft_body, n.published_at,
+       n.created_at, n.updated_at, u.first_name, u.username, u.email
 FROM release_team_notes n
 INNER JOIN users u ON u.id = n.user_id
 WHERE n.session_id = $1 AND n.hero_id = $2
@@ -536,8 +538,8 @@ ORDER BY n.updated_at DESC, n.id DESC`
 	for rows.Next() {
 		var n ReleaseTeamNote
 		if err := rows.Scan(
-			&n.ID, &n.SessionID, &n.HeroID, &n.UserID, &n.Body, &n.CreatedAt, &n.UpdatedAt,
-			&n.FirstName, &n.Username, &n.Email,
+			&n.ID, &n.SessionID, &n.HeroID, &n.UserID, &n.Body, &n.DraftBody, &n.PublishedAt,
+			&n.CreatedAt, &n.UpdatedAt, &n.FirstName, &n.Username, &n.Email,
 		); err != nil {
 			return nil, fmt.Errorf("repository: scan release team note: %w", err)
 		}
@@ -547,7 +549,9 @@ ORDER BY n.updated_at DESC, n.id DESC`
 }
 
 // UpsertReleaseTeamNote creates or updates the caller's note for a session hero.
-func (r *Repository) UpsertReleaseTeamNote(ctx context.Context, sessionID, heroID, userID int, body string) (*ReleaseTeamNote, error) {
+// When publish is false, only draft_body is updated. When publish is true, body and
+// published_at are set from the provided content as well.
+func (r *Repository) UpsertReleaseTeamNote(ctx context.Context, sessionID, heroID, userID int, body string, publish bool) (*ReleaseTeamNote, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
@@ -579,16 +583,32 @@ LIMIT 1`, sessionID, heroID, userID).Scan(&existingID)
 	var id int
 	if err == nil {
 		id = existingID
-		_, err = r.pool.Exec(ctx, `
-UPDATE release_team_notes SET body = $2, updated_at = now() WHERE id = $1`, id, body)
+		if publish {
+			_, err = r.pool.Exec(ctx, `
+UPDATE release_team_notes
+SET draft_body = $2, body = $2, published_at = now(), updated_at = now()
+WHERE id = $1`, id, body)
+		} else {
+			_, err = r.pool.Exec(ctx, `
+UPDATE release_team_notes
+SET draft_body = $2, updated_at = now()
+WHERE id = $1`, id, body)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("repository: update release team note: %w", err)
 		}
 	} else {
-		err = r.pool.QueryRow(ctx, `
-INSERT INTO release_team_notes (session_id, hero_id, user_id, body)
-VALUES ($1, $2, $3, $4)
+		if publish {
+			err = r.pool.QueryRow(ctx, `
+INSERT INTO release_team_notes (session_id, hero_id, user_id, body, draft_body, published_at)
+VALUES ($1, $2, $3, $4, $4, now())
 RETURNING id`, sessionID, heroID, userID, body).Scan(&id)
+		} else {
+			err = r.pool.QueryRow(ctx, `
+INSERT INTO release_team_notes (session_id, hero_id, user_id, body, draft_body, published_at)
+VALUES ($1, $2, $3, '', $4, NULL)
+RETURNING id`, sessionID, heroID, userID, body).Scan(&id)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("repository: insert release team note: %w", err)
 		}
@@ -601,8 +621,9 @@ func (r *Repository) GetReleaseTeamNoteByID(ctx context.Context, noteID int) (*R
 	return r.getReleaseTeamNoteByID(ctx, noteID)
 }
 
-// UpdateReleaseTeamNoteByID updates a note by id (owner or admin checked in handler).
-func (r *Repository) UpdateReleaseTeamNoteByID(ctx context.Context, noteID int, body string) (*ReleaseTeamNote, error) {
+// UpdateReleaseTeamNoteByID updates a note's draft by id (owner or admin checked in handler).
+// When publish is true, the draft is also published as the live body.
+func (r *Repository) UpdateReleaseTeamNoteByID(ctx context.Context, noteID int, body string, publish bool) (*ReleaseTeamNote, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
@@ -617,8 +638,17 @@ func (r *Repository) UpdateReleaseTeamNoteByID(ctx context.Context, noteID int, 
 	if _, err := r.requireCurrentSession(ctx, note.SessionID); err != nil {
 		return nil, err
 	}
-	_, err = r.pool.Exec(ctx, `
-UPDATE release_team_notes SET body = $2, updated_at = now() WHERE id = $1`, noteID, body)
+	if publish {
+		_, err = r.pool.Exec(ctx, `
+UPDATE release_team_notes
+SET draft_body = $2, body = $2, published_at = now(), updated_at = now()
+WHERE id = $1`, noteID, body)
+	} else {
+		_, err = r.pool.Exec(ctx, `
+UPDATE release_team_notes
+SET draft_body = $2, updated_at = now()
+WHERE id = $1`, noteID, body)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("repository: update release team note by id: %w", err)
 	}
@@ -627,15 +657,15 @@ UPDATE release_team_notes SET body = $2, updated_at = now() WHERE id = $1`, note
 
 func (r *Repository) getReleaseTeamNoteByID(ctx context.Context, noteID int) (*ReleaseTeamNote, error) {
 	const q = `
-SELECT n.id, n.session_id, n.hero_id, n.user_id, n.body, n.created_at, n.updated_at,
-       u.first_name, u.username, u.email
+SELECT n.id, n.session_id, n.hero_id, n.user_id, n.body, n.draft_body, n.published_at,
+       n.created_at, n.updated_at, u.first_name, u.username, u.email
 FROM release_team_notes n
 INNER JOIN users u ON u.id = n.user_id
 WHERE n.id = $1`
 	var n ReleaseTeamNote
 	err := r.pool.QueryRow(ctx, q, noteID).Scan(
-		&n.ID, &n.SessionID, &n.HeroID, &n.UserID, &n.Body, &n.CreatedAt, &n.UpdatedAt,
-		&n.FirstName, &n.Username, &n.Email,
+		&n.ID, &n.SessionID, &n.HeroID, &n.UserID, &n.Body, &n.DraftBody, &n.PublishedAt,
+		&n.CreatedAt, &n.UpdatedAt, &n.FirstName, &n.Username, &n.Email,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

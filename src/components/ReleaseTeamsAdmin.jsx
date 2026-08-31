@@ -55,7 +55,7 @@ function heroLegalForFormat(hero, formatId) {
 }
 
 /**
- * Admin panel: create and delete release team sessions.
+ * Admin panel: create, close, and delete release team sessions.
  * @param {{ isLight: boolean, active: boolean }} props
  */
 export function ReleaseTeamsAdmin({ isLight, active }) {
@@ -65,6 +65,7 @@ export function ReleaseTeamsAdmin({ isLight, active }) {
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [reloadSeq, setReloadSeq] = useState(0);
   const [deletingId, setDeletingId] = useState(/** @type {number | null} */ (null));
+  const [closingId, setClosingId] = useState(/** @type {number | null} */ (null));
 
   const [heroesMeta, setHeroesMeta] = useState(/** @type {ReleaseHero[]} */ ([]));
   const [sets, setSets] = useState(/** @type {Array<{ id: number, name: string }>} */ ([]));
@@ -221,8 +222,36 @@ export function ReleaseTeamsAdmin({ isLight, active }) {
     }
   };
 
+  const onClose = async (row) => {
+    if (!user || closingId != null || deletingId != null) return;
+    if (row.status !== 0) return;
+    const label = row.title?.trim() || `Session #${row.id}`;
+    if (
+      !window.confirm(
+        `Close “${label}”? It will move to Past and become read-only for team members.`,
+      )
+    ) {
+      return;
+    }
+    setClosingId(row.id);
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/release-teams/sessions/${row.id}/close`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(parseApiError(await res.text()));
+      setReloadSeq((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to close session");
+    } finally {
+      setClosingId(null);
+    }
+  };
+
   const onDelete = async (row) => {
-    if (!user || deletingId != null) return;
+    if (!user || deletingId != null || closingId != null) return;
     const label = row.title?.trim() || `Session #${row.id}`;
     if (
       !window.confirm(
@@ -254,7 +283,8 @@ export function ReleaseTeamsAdmin({ isLight, active }) {
         <div>
           <h2 className="m-0 text-left text-lg font-semibold tracking-tight text-[#f4f0fa]">Release Teams</h2>
           <p className="m-0 mt-1 text-[0.85rem] text-[#f4f0fa]/6">
-            Create sessions for set releases, or permanently delete ones that are no longer needed.
+            Create sessions for set releases, close current ones when done, or permanently delete ones that are no
+            longer needed.
           </p>
         </div>
         <button type="button" className={`shrink-0 self-start sm:self-auto ${btnPrimary}`} onClick={openCreate}>
@@ -282,7 +312,7 @@ export function ReleaseTeamsAdmin({ isLight, active }) {
               <th className="px-3 py-2.5 font-semibold sm:px-4">Status</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Heroes</th>
               <th className="px-3 py-2.5 font-semibold sm:px-4">Created</th>
-              <th className="px-3 py-2.5 font-semibold sm:px-4">Delete</th>
+              <th className="px-3 py-2.5 font-semibold sm:px-4">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -345,14 +375,26 @@ export function ReleaseTeamsAdmin({ isLight, active }) {
                   </td>
                   <td className="px-3 py-2.5 sm:px-4">{formatDateTime(row.created_at)}</td>
                   <td className="px-3 py-2.5 sm:px-4">
-                    <button
-                      type="button"
-                      className="text-red-300/90 underline hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-45"
-                      disabled={deletingId != null}
-                      onClick={() => void onDelete(row)}
-                    >
-                      {deletingId === row.id ? "Deleting…" : "Delete"}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {row.status === 0 ? (
+                        <button
+                          type="button"
+                          className="text-[#f4f0fa]/85 underline hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+                          disabled={closingId != null || deletingId != null}
+                          onClick={() => void onClose(row)}
+                        >
+                          {closingId === row.id ? "Closing…" : "Close"}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="text-red-300/90 underline hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-45"
+                        disabled={deletingId != null || closingId != null}
+                        onClick={() => void onDelete(row)}
+                      >
+                        {deletingId === row.id ? "Deleting…" : "Delete"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
