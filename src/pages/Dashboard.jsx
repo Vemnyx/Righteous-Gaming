@@ -23,6 +23,7 @@ import { RecordingsList } from "../components/RecordingsList";
 import { RecordingDetailPage } from "../components/RecordingDetailPage";
 import { SetsAdmin } from "../components/SetsAdmin";
 import { HeroesAdmin } from "../components/HeroesAdmin";
+import { CardsAdmin } from "../components/CardsAdmin";
 import { PlayTesting } from "../components/PlayTesting";
 import { Meetings } from "../components/Meetings";
 import { UserAccountMenu } from "../components/UserAccountMenu";
@@ -88,6 +89,7 @@ const DATA_SUB_LINKS = [
 const ADMIN_SUB_LINKS = [
   { segment: "users", label: "Users", path: "/admin/users" },
   { segment: "sets", label: "Sets", path: "/admin/sets" },
+  { segment: "cards", label: "Cards", path: "/admin/cards" },
   { segment: "heroes", label: "Heroes", path: "/admin/heroes" },
   { segment: "announcements", label: "Announcements", path: "/admin/announcements" },
   { segment: "card-rater", label: "Card Rater", path: "/admin/card-rater" },
@@ -207,6 +209,7 @@ function buildDashboardPathname(
     const seg =
       adminChild === "users" ||
       adminChild === "sets" ||
+      adminChild === "cards" ||
       adminChild === "heroes" ||
       adminChild === "announcements" ||
       adminChild === "card-rater" ||
@@ -611,6 +614,18 @@ function parseDashboardPathname(pathname) {
         resourcesCardIdentifier: null,
         resourcesCardRaterId: null,
         adminChild: "sets",
+        adminAnnouncementForm: null,
+      };
+    }
+    if (b === "cards") {
+      if (c !== undefined || rest.length > 0) return { kind: "invalid" };
+      return {
+        kind: "ok",
+        tabId: ADMIN_TAB_ID,
+        resourcesChild: null,
+        resourcesCardIdentifier: null,
+        resourcesCardRaterId: null,
+        adminChild: "cards",
         adminAnnouncementForm: null,
       };
     }
@@ -2543,6 +2558,8 @@ export default function Dashboard({ onNavigate }) {
               />
             ) : tab.segment === "sets" ? (
               <SetsAdmin isLight={isLight} active={activeTab === ADMIN_TAB_ID && adminChild === "sets"} />
+            ) : tab.segment === "cards" ? (
+              <CardsAdmin isLight={isLight} active={activeTab === ADMIN_TAB_ID && adminChild === "cards"} />
             ) : tab.segment === "heroes" ? (
               <HeroesAdmin isLight={isLight} active={activeTab === ADMIN_TAB_ID && adminChild === "heroes"} />
             ) : tab.segment === "card-rater" ? (

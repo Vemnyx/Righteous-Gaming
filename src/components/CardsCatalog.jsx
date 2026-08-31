@@ -204,9 +204,15 @@ function clampPreviewPosition(pos) {
 }
 
 /**
- * @param {{ isLight: boolean, active: boolean, onOpenCardDetail?: (identifier: string) => void }} props
+ * @param {{
+ *   isLight: boolean,
+ *   active: boolean,
+ *   onOpenCardDetail?: (identifier: string) => void,
+ *   onAdminEditCard?: (card: CatalogCard) => void,
+ * }} props
  */
-export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
+export function CardsCatalog({ isLight, active, onOpenCardDetail, onAdminEditCard }) {
+  const adminEdit = typeof onAdminEditCard === "function";
   const { user } = useAuth();
   const narrow = useMediaNarrow();
   /** @type {['table' | 'grid-sm' | 'grid-md' | 'grid-lg', (v: 'table' | 'grid-sm' | 'grid-md' | 'grid-lg') => void]} */
@@ -607,19 +613,30 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                   return (
                   <tr
                     key={c.id}
-                    className={`cursor-default border-b transition-colors hover:bg-white/[0.04] ${tableRowBorder}`}
+                    className={`border-b transition-colors hover:bg-white/[0.04] ${tableRowBorder} ${
+                      adminEdit ? "cursor-pointer" : "cursor-default"
+                    }`}
+                    title={adminEdit ? "Edit card" : undefined}
+                    onClick={
+                      adminEdit
+                        ? () => {
+                            setImagePreview(null);
+                            onAdminEditCard(c);
+                          }
+                        : undefined
+                    }
                   >
                     <td
                       className="relative max-w-[min(28rem,50vw)] px-4 py-2.5 font-medium"
                       onMouseEnter={(e) => {
-                        if (!imgUrl) return;
+                        if (!imgUrl || adminEdit) return;
                         setImagePreview({
                           url: imgUrl,
                           ...clampPreviewPosition(e),
                         });
                       }}
                       onMouseMove={(e) => {
-                        if (!imgUrl) return;
+                        if (!imgUrl || adminEdit) return;
                         setImagePreview({
                           url: imgUrl,
                           ...clampPreviewPosition(e),
@@ -629,7 +646,7 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                     >
                       <div className="flex max-w-full items-center justify-start gap-1.5">
                         <span className="min-w-0 max-w-[calc(100%-1.75rem)] break-words line-clamp-2">
-                          {c.card_identifier && onOpenCardDetail ? (
+                          {!adminEdit && c.card_identifier && onOpenCardDetail ? (
                             <a
                               href={`/resources/cards/${encodeURIComponent(c.card_identifier)}`}
                               className="font-medium text-[#c4a9ef] underline-offset-2 hover:underline focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55"
@@ -706,14 +723,18 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                   <CardGridLift
                     isLight={isLight}
                     className="cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55"
-                    aria-label={`Open full image: ${c.name}`}
-                    onClick={() =>
+                    aria-label={adminEdit ? `Edit card: ${c.name}` : `Open full image: ${c.name}`}
+                    onClick={() => {
+                      if (adminEdit) {
+                        onAdminEditCard(c);
+                        return;
+                      }
                       setGridImageModal({
                         url: imgUrl,
                         name: c.name ?? "",
                         card_identifier: c.card_identifier ?? null,
-                      })
-                    }
+                      });
+                    }}
                   >
                     <span className="flex aspect-[63/88] w-full items-center justify-center overflow-hidden rounded-lg bg-black/30">
                       <img
@@ -726,7 +747,29 @@ export function CardsCatalog({ isLight, active, onOpenCardDetail }) {
                   </CardGridLift>
                 ) : (
                   <div
-                    className="flex aspect-[63/88] items-center justify-center overflow-hidden rounded-lg bg-black/30"
+                    className={`flex aspect-[63/88] items-center justify-center overflow-hidden rounded-lg bg-black/30 ${
+                      adminEdit ? "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55" : ""
+                    }`}
+                    role={adminEdit ? "button" : undefined}
+                    tabIndex={adminEdit ? 0 : undefined}
+                    aria-label={adminEdit ? `Edit card: ${c.name}` : undefined}
+                    onClick={
+                      adminEdit
+                        ? () => {
+                            onAdminEditCard(c);
+                          }
+                        : undefined
+                    }
+                    onKeyDown={
+                      adminEdit
+                        ? (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              onAdminEditCard(c);
+                            }
+                          }
+                        : undefined
+                    }
                   >
                     <span className="px-1 text-center text-[0.65rem] leading-tight text-[#f4f0fa]/45">
                       {c.name}

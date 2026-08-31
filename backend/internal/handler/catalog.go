@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"righteous-gaming/backend/internal/app"
+	"righteous-gaming/backend/internal/domain"
 	"righteous-gaming/backend/internal/repository"
 	"righteous-gaming/backend/internal/service"
 	"righteous-gaming/backend/log"
@@ -525,4 +526,76 @@ func (h *catalogHTTP) createCardsBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeCatalogJSON(w, http.StatusCreated, out)
+}
+
+func optionalTrimmedString(p *string) *string {
+	if p == nil {
+		return nil
+	}
+	s := strings.TrimSpace(*p)
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func (h *catalogHTTP) adminUpdateCard(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPatch && r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+
+	cardID, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil || cardID <= 0 {
+		http.Error(w, "invalid card id", http.StatusBadRequest)
+		return
+	}
+
+	var body createCardJSON
+	if err := decodeCatalogJSON(w, r, &body); err != nil {
+		return
+	}
+	body.Name = strings.TrimSpace(body.Name)
+	body.SetCode = strings.TrimSpace(body.SetCode)
+	body.CardIdentifier = optionalTrimmedString(body.CardIdentifier)
+	body.FunctionalText = optionalTrimmedString(body.FunctionalText)
+	body.ImageURL = optionalTrimmedString(body.ImageURL)
+	if field, msg, ok := validateCreateCardBody(body); !ok {
+		writeFieldError(w, http.StatusBadRequest, field, msg)
+		return
+	}
+	if !domain.CardType(body.Type).Valid() {
+		writeFieldError(w, http.StatusBadRequest, "type", "invalid")
+		return
+	}
+	if body.Rarity != nil && !domain.CardRarity(*body.Rarity).Valid() {
+		writeFieldError(w, http.StatusBadRequest, "rarity", "invalid")
+		return
+	}
+
+	updated, err := h.app.Repo.UpdateCardAdmin(r.Context(), cardID, body.toRepoInput())
+	if err != nil {
+		if errors.Is(err, repository.ErrCardNotFound) {
+			http.Error(w, "card not found", http.StatusNotFound)
+			return
+		}
+		if violatesForeignKey(err) {
+			writeFieldError(w, http.StatusBadRequest, "set_id", "must reference an existing set")
+			return
+		}
+		log.Error("admin update card", "card_id", cardID, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	out, err := cardWithPrintingsJSON(r.Context(), h.app.Repo, updated)
+	if err != nil {
+		log.Error("admin update card attach printings", "card_id", cardID, "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeCatalogJSON(w, http.StatusOK, out)
 }

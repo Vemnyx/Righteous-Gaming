@@ -340,6 +340,128 @@ func (r *Repository) CreateCard(ctx context.Context, in CreateCardInput) (*Card,
 	return c, nil
 }
 
+// UpdateCardAdmin updates a card row and its primary printing (lowest card_printings.id).
+func (r *Repository) UpdateCardAdmin(ctx context.Context, cardID int, in CreateCardInput) (*Card, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	if cardID <= 0 {
+		return nil, fmt.Errorf("repository: invalid card id")
+	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, fmt.Errorf("repository: empty card name")
+	}
+	setCode := strings.TrimSpace(in.SetCode)
+	if setCode == "" {
+		return nil, fmt.Errorf("repository: empty set code")
+	}
+	subtypes := in.Subtypes
+	if subtypes == nil {
+		subtypes = []int16{}
+	}
+	classes := in.Classes
+	if classes == nil {
+		classes = []int16{}
+	}
+	talents := in.Talents
+	if talents == nil {
+		talents = []int16{}
+	}
+	heroes := in.Heroes
+	if heroes == nil {
+		heroes = []int16{}
+	}
+	keywords := in.Keywords
+	if keywords == nil {
+		keywords = []int16{}
+	}
+	formats := in.Formats
+	if formats == nil {
+		formats = []int16{}
+	}
+	specializations := in.Specializations
+	if specializations == nil {
+		specializations = []int16{}
+	}
+	fusions := in.Fusions
+	if fusions == nil {
+		fusions = []int16{}
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("repository: update card begin: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	const q = `
+UPDATE cards
+SET set_id = $2,
+    name = $3,
+    card_identifier = $4,
+    functional_text = $5,
+    type = $6,
+    subtypes = $7,
+    classes = $8,
+    hybrid = $9,
+    talents = $10,
+    pitch = $11,
+    cost = $12,
+    power = $13,
+    block = $14,
+    heroes = $15,
+    life = $16,
+    intellect = $17,
+    keywords = $18,
+    formats = $19,
+    specializations = $20,
+    fusions = $21
+WHERE id = $1`
+	tag, err := tx.Exec(ctx, q,
+		cardID, in.SetID, name, in.CardIdentifier, in.FunctionalText, in.Type,
+		subtypes, classes, in.Hybrid, talents, in.Pitch, in.Cost, in.Power, in.Block,
+		heroes, in.Life, in.Intellect, keywords, formats, specializations, fusions,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("repository: update card: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, ErrCardNotFound
+	}
+
+	var printingID int
+	err = tx.QueryRow(ctx, `
+SELECT id FROM card_printings
+WHERE card_id = $1
+ORDER BY id ASC
+LIMIT 1`, cardID).Scan(&printingID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			if err := tx.QueryRow(ctx, insertCardPrintingQuery,
+				cardID, setCode, in.SetNum, in.Rarity, in.ImageURL,
+			).Scan(&printingID); err != nil {
+				return nil, fmt.Errorf("repository: update card insert printing: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("repository: update card find printing: %w", err)
+		}
+	} else {
+		const pq = `
+UPDATE card_printings
+SET set_code = $2, set_num = $3, rarity = $4, image_url = $5
+WHERE id = $1`
+		if _, err := tx.Exec(ctx, pq, printingID, setCode, in.SetNum, in.Rarity, in.ImageURL); err != nil {
+			return nil, fmt.Errorf("repository: update card printing: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("repository: update card commit: %w", err)
+	}
+	return r.CardByID(ctx, cardID)
+}
+
 // CreateCardsBatch inserts cards in one transaction (all-or-nothing).
 func (r *Repository) CreateCardsBatch(ctx context.Context, inputs []CreateCardInput) ([]Card, error) {
 	if len(inputs) == 0 {

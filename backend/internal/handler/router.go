@@ -81,6 +81,8 @@ func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient 
 	mux.HandleFunc("GET /api/cards/{id}", ch.getCard)
 	mux.HandleFunc("POST /api/cards", ch.createCard)
 	mux.HandleFunc("POST /api/cards/batch", ch.createCardsBatch)
+	mux.HandleFunc("PATCH /api/admin/cards/{id}", ch.adminUpdateCard)
+	mux.HandleFunc("POST /api/admin/cards/{id}", ch.adminUpdateCard)
 	mux.HandleFunc("POST /api/admin/catalog/sync-fabrary-latest-set", ch.postAdminSyncFabraryLatestSet)
 	mux.HandleFunc("POST /api/upload", upload.uploadAsset)
 
