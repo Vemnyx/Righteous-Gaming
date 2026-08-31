@@ -22,6 +22,7 @@ import { DeckDetailPage } from "../components/DeckDetailPage";
 import { RecordingsList } from "../components/RecordingsList";
 import { RecordingDetailPage } from "../components/RecordingDetailPage";
 import { SetsAdmin } from "../components/SetsAdmin";
+import { HeroesAdmin } from "../components/HeroesAdmin";
 import { PlayTesting } from "../components/PlayTesting";
 import { Meetings } from "../components/Meetings";
 import { UserAccountMenu } from "../components/UserAccountMenu";
@@ -87,6 +88,7 @@ const DATA_SUB_LINKS = [
 const ADMIN_SUB_LINKS = [
   { segment: "users", label: "Users", path: "/admin/users" },
   { segment: "sets", label: "Sets", path: "/admin/sets" },
+  { segment: "heroes", label: "Heroes", path: "/admin/heroes" },
   { segment: "announcements", label: "Announcements", path: "/admin/announcements" },
   { segment: "card-rater", label: "Card Rater", path: "/admin/card-rater" },
   { segment: "events", label: "Events", path: "/admin/events" },
@@ -194,6 +196,7 @@ function buildDashboardPathname(
     const seg =
       adminChild === "users" ||
       adminChild === "sets" ||
+      adminChild === "heroes" ||
       adminChild === "announcements" ||
       adminChild === "card-rater" ||
       adminChild === "events"
@@ -597,6 +600,18 @@ function parseDashboardPathname(pathname) {
         resourcesCardIdentifier: null,
         resourcesCardRaterId: null,
         adminChild: "sets",
+        adminAnnouncementForm: null,
+      };
+    }
+    if (b === "heroes") {
+      if (c !== undefined || rest.length > 0) return { kind: "invalid" };
+      return {
+        kind: "ok",
+        tabId: ADMIN_TAB_ID,
+        resourcesChild: null,
+        resourcesCardIdentifier: null,
+        resourcesCardRaterId: null,
+        adminChild: "heroes",
         adminAnnouncementForm: null,
       };
     }
@@ -2557,6 +2572,8 @@ export default function Dashboard({ onNavigate }) {
                 />
               ) : adminChild === "sets" ? (
                 <SetsAdmin isLight={isLight} active={activeTab === ADMIN_TAB_ID && adminChild === "sets"} />
+              ) : adminChild === "heroes" ? (
+                <HeroesAdmin isLight={isLight} active={activeTab === ADMIN_TAB_ID && adminChild === "heroes"} />
               ) : adminChild === "card-rater" ? (
                 <CardRaterAdmin
                   isLight={isLight}

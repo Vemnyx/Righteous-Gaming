@@ -263,3 +263,100 @@ func (r *Repository) UpdateHeroArtImageURL(ctx context.Context, heroID int, artU
 	}
 	return nil
 }
+
+// HeroAdminRow is a hero row for the admin art crop tool.
+type HeroAdminRow struct {
+	ID             int
+	Name           string
+	CardIdentifier *string
+	CardImageURL   *string
+	ArtImageURL    *string
+	CropCenterX    *float64
+	CropCenterY    *float64
+}
+
+// ListHeroesAdmin returns all heroes for the admin art UI.
+func (r *Repository) ListHeroesAdmin(ctx context.Context) ([]HeroAdminRow, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	const q = `
+SELECT h.id, h.name, c.card_identifier, h.card_image_url, h.art_image_url, h.crop_center_x, h.crop_center_y
+FROM heroes h
+LEFT JOIN cards c ON c.id = h.card_id
+ORDER BY h.name ASC, h.id ASC`
+	rows, err := r.pool.Query(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list heroes admin: %w", err)
+	}
+	defer rows.Close()
+
+	var out []HeroAdminRow
+	for rows.Next() {
+		var row HeroAdminRow
+		if err := rows.Scan(
+			&row.ID, &row.Name, &row.CardIdentifier, &row.CardImageURL, &row.ArtImageURL,
+			&row.CropCenterX, &row.CropCenterY,
+		); err != nil {
+			return nil, fmt.Errorf("repository: list heroes admin scan: %w", err)
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: list heroes admin rows: %w", err)
+	}
+	return out, nil
+}
+
+// GetHeroAdminByID loads one hero for the admin art crop tool.
+func (r *Repository) GetHeroAdminByID(ctx context.Context, heroID int) (*HeroAdminRow, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	if heroID <= 0 {
+		return nil, fmt.Errorf("repository: invalid hero id")
+	}
+	const q = `
+SELECT h.id, h.name, c.card_identifier, h.card_image_url, h.art_image_url, h.crop_center_x, h.crop_center_y
+FROM heroes h
+LEFT JOIN cards c ON c.id = h.card_id
+WHERE h.id = $1`
+	var row HeroAdminRow
+	err := r.pool.QueryRow(ctx, q, heroID).Scan(
+		&row.ID, &row.Name, &row.CardIdentifier, &row.CardImageURL, &row.ArtImageURL,
+		&row.CropCenterX, &row.CropCenterY,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrHeroNotFound
+		}
+		return nil, fmt.Errorf("repository: get hero admin: %w", err)
+	}
+	return &row, nil
+}
+
+// UpdateHeroArtCrop updates art URL and normalized crop center.
+func (r *Repository) UpdateHeroArtCrop(ctx context.Context, heroID int, artURL string, centerX, centerY float64) error {
+	if r.pool == nil {
+		return fmt.Errorf("repository: pool is closed")
+	}
+	if heroID <= 0 {
+		return fmt.Errorf("repository: invalid hero id")
+	}
+	artURL = strings.TrimSpace(artURL)
+	if artURL == "" {
+		return fmt.Errorf("repository: empty art url")
+	}
+	const q = `
+UPDATE heroes
+SET art_image_url = $2, crop_center_x = $3, crop_center_y = $4
+WHERE id = $1`
+	tag, err := r.pool.Exec(ctx, q, heroID, artURL, centerX, centerY)
+	if err != nil {
+		return fmt.Errorf("repository: update hero art crop: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrHeroNotFound
+	}
+	return nil
+}

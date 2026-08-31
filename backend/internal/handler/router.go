@@ -21,6 +21,7 @@ func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient 
 	rec := &recordingsHTTP{app: application, svc: userSvc}
 	eh := &eventsHTTP{app: application, svc: userSvc, scrape: scrapeClient}
 	pth := &playTestingHTTP{app: application, svc: userSvc}
+	hh := &heroesHTTP{app: application, svc: userSvc}
 
 	mux.HandleFunc("POST /api/users", uh.createUser)
 	mux.HandleFunc("GET /api/session/me", uh.sessionMe)
@@ -65,6 +66,8 @@ func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient 
 	mux.HandleFunc("GET /api/admin/users", uh.adminListUsers)
 	mux.HandleFunc("PATCH /api/admin/users/{id}", uh.adminUpdateUserProfile)
 	mux.HandleFunc("POST /api/admin/users/{id}", uh.adminUpdateUserProfile)
+	mux.HandleFunc("GET /api/admin/heroes", hh.adminListHeroes)
+	mux.HandleFunc("POST /api/admin/heroes/{id}/recrop-art", hh.adminRecropHeroArt)
 
 	mux.HandleFunc("GET /api/sets", ch.listSets)
 	mux.HandleFunc("GET /api/sets/{id}", ch.getSet)
