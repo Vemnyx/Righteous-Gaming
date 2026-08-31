@@ -48,12 +48,19 @@ type ReleaseTeamSession struct {
 	Heroes          []ReleaseTeamHeroMeta
 }
 
+// Release team member slot: Primary or Secondary on a hero team.
+const (
+	ReleaseTeamSlotPrimary   int16 = 0
+	ReleaseTeamSlotSecondary int16 = 1
+)
+
 // ReleaseTeamMember is a user on a hero team within a session.
 type ReleaseTeamMember struct {
 	SessionID     int
 	HeroID        int
 	UserID        int
 	IsCaptain     bool
+	Slot          int16 // 0=primary, 1=secondary
 	JoinedAt      time.Time
 	FirstName     *string
 	LastName      *string
@@ -357,18 +364,18 @@ func (r *Repository) requireCurrentSession(ctx context.Context, sessionID int) (
 	return s, nil
 }
 
-// ListReleaseTeamMembers returns members for a session hero, captains first.
+// ListReleaseTeamMembers returns members for a session hero, captains first then primary.
 func (r *Repository) ListReleaseTeamMembers(ctx context.Context, sessionID, heroID int) ([]ReleaseTeamMember, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-SELECT m.session_id, m.hero_id, m.user_id, m.is_captain, m.joined_at,
+SELECT m.session_id, m.hero_id, m.user_id, m.is_captain, m.slot, m.joined_at,
        u.first_name, u.last_name, u.username, u.email
 FROM release_team_members m
 INNER JOIN users u ON u.id = m.user_id
 WHERE m.session_id = $1 AND m.hero_id = $2
-ORDER BY m.is_captain DESC, m.joined_at ASC, m.user_id ASC`
+ORDER BY m.is_captain DESC, m.slot ASC, m.joined_at ASC, m.user_id ASC`
 	rows, err := r.pool.Query(ctx, q, sessionID, heroID)
 	if err != nil {
 		return nil, fmt.Errorf("repository: list release team members: %w", err)
@@ -379,7 +386,7 @@ ORDER BY m.is_captain DESC, m.joined_at ASC, m.user_id ASC`
 	for rows.Next() {
 		var m ReleaseTeamMember
 		if err := rows.Scan(
-			&m.SessionID, &m.HeroID, &m.UserID, &m.IsCaptain, &m.JoinedAt,
+			&m.SessionID, &m.HeroID, &m.UserID, &m.IsCaptain, &m.Slot, &m.JoinedAt,
 			&m.FirstName, &m.LastName, &m.Username, &m.Email,
 		); err != nil {
 			return nil, fmt.Errorf("repository: scan release team member: %w", err)
@@ -407,9 +414,13 @@ SELECT EXISTS(
 }
 
 // AddReleaseTeamMember adds a user to a hero team (current sessions only).
-func (r *Repository) AddReleaseTeamMember(ctx context.Context, sessionID, heroID, userID int, asCaptain bool) error {
+// slot is ReleaseTeamSlotPrimary (0) or ReleaseTeamSlotSecondary (1).
+func (r *Repository) AddReleaseTeamMember(ctx context.Context, sessionID, heroID, userID int, asCaptain bool, slot int16) error {
 	if r.pool == nil {
 		return fmt.Errorf("repository: pool is closed")
+	}
+	if slot != ReleaseTeamSlotPrimary && slot != ReleaseTeamSlotSecondary {
+		return fmt.Errorf("repository: invalid release team slot")
 	}
 	if _, err := r.requireCurrentSession(ctx, sessionID); err != nil {
 		return err
@@ -438,11 +449,12 @@ WHERE session_id = $1 AND hero_id = $2 AND is_captain = true`, sessionID, heroID
 	}
 
 	_, err = tx.Exec(ctx, `
-INSERT INTO release_team_members (session_id, hero_id, user_id, is_captain)
-VALUES ($1, $2, $3, $4)
+INSERT INTO release_team_members (session_id, hero_id, user_id, is_captain, slot)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (session_id, hero_id, user_id) DO UPDATE
-SET is_captain = EXCLUDED.is_captain`,
-		sessionID, heroID, userID, asCaptain,
+SET is_captain = EXCLUDED.is_captain,
+    slot = EXCLUDED.slot`,
+		sessionID, heroID, userID, asCaptain, slot,
 	)
 	if err != nil {
 		return fmt.Errorf("repository: upsert release team member: %w", err)

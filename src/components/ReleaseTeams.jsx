@@ -27,7 +27,10 @@ const REC_MEDIA_EMBED = "embed";
 
 /** @typedef {{ id: number, title: string, format: number, set_id?: number | null, set_name?: string | null, status: number, created_at: string, closed_at?: string | null, heroes: ReleaseHero[] }} ReleaseSession */
 
-/** @typedef {{ user_id: number, is_captain: boolean, first_name?: string | null, last_name?: string | null, username?: string | null, email: string }} ReleaseMember */
+/** @typedef {{ user_id: number, is_captain: boolean, slot?: number, first_name?: string | null, last_name?: string | null, username?: string | null, email: string }} ReleaseMember */
+
+const MEMBER_SLOT_PRIMARY = 0;
+const MEMBER_SLOT_SECONDARY = 1;
 
 /** @typedef {{ id: number, user_id: number, body: string, published?: boolean, published_at?: string | null, updated_at: string, first_name?: string | null, username?: string | null, email: string }} ReleaseNote */
 
@@ -114,6 +117,8 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
     /** @type {Array<{ id: number, first_name?: string | null, last_name?: string | null, username?: string | null, email: string }>} */ ([]),
   );
   const [addUserId, setAddUserId] = useState(/** @type {number | ""} */ (""));
+  const [addSlot, setAddSlot] = useState(MEMBER_SLOT_PRIMARY);
+  const [joinSlot, setJoinSlot] = useState(MEMBER_SLOT_PRIMARY);
 
   const [noteEditing, setNoteEditing] = useState(false);
   const [noteEditorKey, setNoteEditorKey] = useState(0);
@@ -348,12 +353,17 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
     const headers = await authHeaders();
     const res = await fetch(
       `/api/release-teams/sessions/${sessionId}/heroes/${selectedHeroId}/join`,
-      { method: "POST", headers },
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ slot: joinSlot }),
+      },
     );
     if (!res.ok) {
       setHeroDataError(parseApiError(await res.text()));
       return;
     }
+    setJoinSlot(MEMBER_SLOT_PRIMARY);
     setHeroReload((n) => n + 1);
   };
 
@@ -376,13 +386,18 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
     const headers = await authHeaders();
     const res = await fetch(
       `/api/release-teams/sessions/${sessionId}/heroes/${selectedHeroId}/members`,
-      { method: "POST", headers, body: JSON.stringify({ user_id: addUserId }) },
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ user_id: addUserId, slot: addSlot }),
+      },
     );
     if (!res.ok) {
       setHeroDataError(parseApiError(await res.text()));
       return;
     }
     setAddUserId("");
+    setAddSlot(MEMBER_SLOT_PRIMARY);
     setHeroReload((n) => n + 1);
   };
 
@@ -657,7 +672,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                 </div>
                 <select
                   aria-label="Hero"
-                  className={`${inputCls} ml-auto w-auto min-w-[12rem] max-w-[min(100%,18rem)] shrink-0 px-4 py-2.5 text-[1.05rem] sm:min-w-[16rem] sm:text-[1.1rem]`}
+                  className="ml-auto w-auto min-w-[14rem] max-w-[min(100%,22rem)] shrink-0 cursor-pointer appearance-auto rounded-2xl border-2 border-white/30 bg-black/45 px-5 py-3.5 text-[1.15rem] font-semibold text-white shadow-[0_6px_20px_rgb(0_0_0/0.28)] outline-none transition hover:border-purple-300/55 hover:bg-black/55 focus:border-purple-300/70 sm:min-w-[18rem] sm:px-6 sm:py-4 sm:text-[1.25rem]"
                   value={selectedHeroId ?? ""}
                   onChange={(e) => {
                     setSelectedHeroId(Number(e.target.value));
@@ -784,9 +799,20 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                           Leave team
                         </button>
                       ) : (
-                        <button type="button" className={`${btnBase} ${btnTheme}`} onClick={() => void joinTeam()}>
-                          Join team
-                        </button>
+                        <>
+                          <select
+                            aria-label="Join as"
+                            className={`${inputCls} w-auto min-w-[9rem] px-3 py-2 text-[0.9rem]`}
+                            value={joinSlot}
+                            onChange={(e) => setJoinSlot(Number(e.target.value))}
+                          >
+                            <option value={MEMBER_SLOT_PRIMARY}>Primary</option>
+                            <option value={MEMBER_SLOT_SECONDARY}>Secondary</option>
+                          </select>
+                          <button type="button" className={`${btnBase} ${btnTheme}`} onClick={() => void joinTeam()}>
+                            Join team
+                          </button>
+                        </>
                       )}
                     </div>
                   ) : null}
@@ -807,6 +833,15 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                             </option>
                           ))}
                       </select>
+                      <select
+                        aria-label="Member role"
+                        className={`${inputCls} w-auto min-w-[9rem] px-3 py-2.5 text-[1.05rem] sm:text-[1.1rem]`}
+                        value={addSlot}
+                        onChange={(e) => setAddSlot(Number(e.target.value))}
+                      >
+                        <option value={MEMBER_SLOT_PRIMARY}>Primary</option>
+                        <option value={MEMBER_SLOT_SECONDARY}>Secondary</option>
+                      </select>
                       <button
                         type="button"
                         className={`${btnTheme} inline-flex items-center justify-center rounded-lg border px-5 py-2.5 text-[1.05rem] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 sm:text-[1.1rem]`}
@@ -821,18 +856,29 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                     {members.length === 0 ? (
                       <li className={`text-[0.9rem] ${textFaint}`}>No members yet.</li>
                     ) : (
-                      members.map((m) => (
+                      members.map((m) => {
+                        const slotLabel = Number(m.slot) === MEMBER_SLOT_SECONDARY ? "Secondary" : "Primary";
+                        return (
                         <li
                           key={m.user_id}
                           className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/25 px-3 py-2"
                         >
                           <div>
                             <p className="m-0 text-[0.95rem] font-medium text-white">{personLabel(m)}</p>
-                            {m.is_captain ? (
-                              <p className="m-0 text-[0.75rem] font-semibold uppercase tracking-wide text-emerald-300/90">
-                                Team Captain
-                              </p>
-                            ) : null}
+                            <p className="m-0 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.75rem] font-semibold uppercase tracking-wide">
+                              <span
+                                className={
+                                  Number(m.slot) === MEMBER_SLOT_SECONDARY
+                                    ? "text-sky-200/90"
+                                    : "text-violet-200/95"
+                                }
+                              >
+                                {slotLabel}
+                              </span>
+                              {m.is_captain ? (
+                                <span className="text-emerald-300/90">· Team Captain</span>
+                              ) : null}
+                            </p>
                           </div>
                           {isAdmin && isCurrent ? (
                             <div className="flex flex-wrap gap-1.5">
@@ -855,7 +901,8 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                             </div>
                           ) : null}
                         </li>
-                      ))
+                        );
+                      })
                     )}
                   </ul>
                 </div>

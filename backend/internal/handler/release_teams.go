@@ -47,6 +47,7 @@ type releaseTeamMemberJSON struct {
 	HeroID    int       `json:"hero_id"`
 	UserID    int       `json:"user_id"`
 	IsCaptain bool      `json:"is_captain"`
+	Slot      int16     `json:"slot"` // 0=primary, 1=secondary
 	JoinedAt  time.Time `json:"joined_at"`
 	FirstName *string   `json:"first_name,omitempty"`
 	LastName  *string   `json:"last_name,omitempty"`
@@ -108,7 +109,12 @@ type createReleaseTeamSessionBody struct {
 }
 
 type memberUserBody struct {
-	UserID int `json:"user_id"`
+	UserID int   `json:"user_id"`
+	Slot   int16 `json:"slot"` // 0=primary, 1=secondary
+}
+
+type joinTeamBody struct {
+	Slot int16 `json:"slot"` // 0=primary, 1=secondary
 }
 
 type noteBody struct {
@@ -149,7 +155,7 @@ func releaseTeamSessionToJSON(s *repository.ReleaseTeamSession) releaseTeamSessi
 func releaseTeamMemberToJSON(m *repository.ReleaseTeamMember) releaseTeamMemberJSON {
 	return releaseTeamMemberJSON{
 		SessionID: m.SessionID, HeroID: m.HeroID, UserID: m.UserID, IsCaptain: m.IsCaptain,
-		JoinedAt: m.JoinedAt, FirstName: m.FirstName, LastName: m.LastName,
+		Slot: m.Slot, JoinedAt: m.JoinedAt, FirstName: m.FirstName, LastName: m.LastName,
 		Username: m.Username, Email: m.Email,
 	}
 }
@@ -558,7 +564,15 @@ func (h *releaseTeamsHTTP) joinTeam(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.app.Repo.AddReleaseTeamMember(r.Context(), sessionID, heroID, u.ID, false); err != nil {
+	var body joinTeamBody
+	if err := decodeCatalogJSON(w, r, &body); err != nil {
+		return
+	}
+	if body.Slot != repository.ReleaseTeamSlotPrimary && body.Slot != repository.ReleaseTeamSlotSecondary {
+		writeFieldError(w, http.StatusBadRequest, "slot", "must be 0 (primary) or 1 (secondary)")
+		return
+	}
+	if err := h.app.Repo.AddReleaseTeamMember(r.Context(), sessionID, heroID, u.ID, false, body.Slot); err != nil {
 		h.writeRepoErr(w, err, "join release team")
 		return
 	}
@@ -615,7 +629,12 @@ func (h *releaseTeamsHTTP) adminAddMember(w http.ResponseWriter, r *http.Request
 		writeFieldError(w, http.StatusBadRequest, "user_id", "required")
 		return
 	}
-	if err := h.app.Repo.AddReleaseTeamMember(r.Context(), sessionID, heroID, body.UserID, false); err != nil {
+	slot := body.Slot
+	if slot != repository.ReleaseTeamSlotPrimary && slot != repository.ReleaseTeamSlotSecondary {
+		writeFieldError(w, http.StatusBadRequest, "slot", "must be 0 (primary) or 1 (secondary)")
+		return
+	}
+	if err := h.app.Repo.AddReleaseTeamMember(r.Context(), sessionID, heroID, body.UserID, false, slot); err != nil {
 		h.writeRepoErr(w, err, "admin add release team member")
 		return
 	}
