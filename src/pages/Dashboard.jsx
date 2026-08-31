@@ -94,8 +94,19 @@ const ADMIN_SUB_LINKS = [
   { segment: "events", label: "Events", path: "/admin/events" },
 ];
 
-/** Admin-only tab list when `adminMode` is on (not part of ALL_TABS). */
-const ADMIN_ONLY_TABS = [{ id: ADMIN_TAB_ID, label: "Admin", requiresAdmin: true }];
+/** Prefix so admin section tab ids never collide with member tabs (e.g. announcements). */
+const ADMIN_SECTION_TAB_PREFIX = "admin-";
+
+/** Flat admin-section tabs shown in the rail when admin mode is on. */
+const ADMIN_SECTION_TABS = ADMIN_SUB_LINKS.map((l) => ({
+  id: `${ADMIN_SECTION_TAB_PREFIX}${l.segment}`,
+  label: l.label,
+  requiresAdmin: true,
+  segment: l.segment,
+}));
+
+/** Kept for URL resolution (`/admin/*` → tabId admin) even though the rail no longer shows a single Admin tab. */
+const ADMIN_ROUTE_TAB = { id: ADMIN_TAB_ID, label: "Admin", requiresAdmin: true };
 
 /**
  * @param {string} tabId
@@ -1108,7 +1119,7 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
 /**
  * Admin tab requires admin (`role === 0`). Data tab requires data access.
  * Omit role flags for tabs visible to every signed-in user.
- * Admin is not listed here — it appears only when `adminMode` is on.
+ * Admin sections are not listed here — they replace the rail when `adminMode` is on.
  * @typedef {{ id: string, label: string, requiresAdmin?: boolean, requiresDataAccess?: boolean }} DashboardTabSpec
  */
 const ALL_TABS = [
@@ -1328,11 +1339,9 @@ export default function Dashboard({ onNavigate }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileResourcesOpen, setMobileResourcesOpen] = useState(false);
   const [mobileTeamOpen, setMobileTeamOpen] = useState(false);
-  const [mobileAdminOpen, setMobileAdminOpen] = useState(false);
   const [mobileDataOpen, setMobileDataOpen] = useState(false);
   const [resourcesHovered, setResourcesHovered] = useState(false);
   const [teamHovered, setTeamHovered] = useState(false);
-  const [adminHovered, setAdminHovered] = useState(false);
   const [dataHovered, setDataHovered] = useState(false);
 
   const isAdmin = isAdminRole(sessionProfile?.role);
@@ -1357,9 +1366,9 @@ export default function Dashboard({ onNavigate }) {
     });
   }, [canUseDataTab]);
 
-  /** Tabs shown in the nav rail — Admin-only shell when `adminMode`. */
+  /** Tabs shown in the nav rail — flat admin sections when `adminMode`. */
   const tabs = useMemo(() => {
-    if (adminMode && isAdmin) return ADMIN_ONLY_TABS;
+    if (adminMode && isAdmin) return ADMIN_SECTION_TABS;
     return memberTabs;
   }, [adminMode, isAdmin, memberTabs]);
 
@@ -1369,7 +1378,7 @@ export default function Dashboard({ onNavigate }) {
    */
   const resolveTabs = useMemo(() => {
     if (!isAdmin) return memberTabs;
-    return [...memberTabs, ...ADMIN_ONLY_TABS];
+    return [...memberTabs, ADMIN_ROUTE_TAB];
   }, [isAdmin, memberTabs]);
 
   const visibleResourceSubLinks = useMemo(() => RESOURCE_SUB_LINKS, []);
@@ -1404,14 +1413,6 @@ export default function Dashboard({ onNavigate }) {
     return hit?.label ?? "Team";
   }, [activeTab, teamChild, cardRaterPlayAtRoot, visibleTeamSubLinks]);
 
-  const adminTabLabel = useMemo(() => {
-    if (activeTab !== ADMIN_TAB_ID) {
-      return ADMIN_ONLY_TABS[0]?.label ?? "Admin";
-    }
-    const hit = ADMIN_SUB_LINKS.find((l) => l.segment === adminChild);
-    return hit?.label ?? "Admin";
-  }, [activeTab, adminChild]);
-
   const dataTabLabel = useMemo(() => {
     if (activeTab !== DATA_TAB_ID) {
       return ALL_TABS.find((t) => t.id === DATA_TAB_ID)?.label ?? "Data";
@@ -1419,6 +1420,16 @@ export default function Dashboard({ onNavigate }) {
     const hit = DATA_SUB_LINKS.find((l) => l.segment === dataChild);
     return hit?.label ?? "Data";
   }, [activeTab, dataChild]);
+
+  const adminShellActive =
+    adminMode &&
+    isAdmin &&
+    activeTab !== SETTINGS_TAB_ID &&
+    activeTab !== PROFILE_TAB_ID;
+
+  const tabsRootValue = adminShellActive
+    ? `${ADMIN_SECTION_TAB_PREFIX}${adminChild || DEFAULT_ADMIN_SEGMENT}`
+    : activeTab;
 
   const clearDetailIds = useCallback(() => {
     setResourcesCardIdentifier(null);
@@ -1496,7 +1507,6 @@ export default function Dashboard({ onNavigate }) {
       replaceDashboardUrl(tabId, null, null, null, null, null);
       setMobileResourcesOpen(false);
       setMobileTeamOpen(false);
-      setMobileAdminOpen(false);
       setMobileDataOpen(false);
     }
   }, [clearDetailIds]);
@@ -1569,6 +1579,17 @@ export default function Dashboard({ onNavigate }) {
     setDataChild(null);
     replaceDashboardUrl(ADMIN_TAB_ID, null, null, null, segment, null);
   }, [clearDetailIds]);
+
+  const onTabsValueChange = useCallback(
+    (tabId) => {
+      if (tabId.startsWith(ADMIN_SECTION_TAB_PREFIX)) {
+        goAdminSub(tabId.slice(ADMIN_SECTION_TAB_PREFIX.length));
+        return;
+      }
+      handleTabNavigate(tabId);
+    },
+    [goAdminSub, handleTabNavigate],
+  );
 
   const toggleAdminMode = useCallback(() => {
     if (adminMode) {
@@ -2076,8 +2097,8 @@ export default function Dashboard({ onNavigate }) {
   return (
     <div className={isLight ? shellLight : shellDark}>
       <Tabs.Root
-        value={activeTab}
-        onValueChange={handleTabNavigate}
+        value={tabsRootValue}
+        onValueChange={onTabsValueChange}
         className={isLight ? tabsRootLight : tabsRootDark}
       >
         {/* Below header chrome; keeps mobile drawer above main panels */}
@@ -2132,14 +2153,11 @@ export default function Dashboard({ onNavigate }) {
                       ? visibleTeamSubLinks
                       : tab.id === DATA_TAB_ID
                         ? DATA_SUB_LINKS
-                        : tab.id === ADMIN_TAB_ID
-                          ? ADMIN_SUB_LINKS
-                          : [];
+                        : [];
                 const showDesktopSubmenu =
                   (tab.id === RESOURCES_TAB_ID && visibleResourceSubLinks.length > 1) ||
                   (tab.id === TEAM_TAB_ID && visibleTeamSubLinks.length > 1) ||
-                  (tab.id === DATA_TAB_ID && DATA_SUB_LINKS.length >= 1) ||
-                  (tab.id === ADMIN_TAB_ID && ADMIN_SUB_LINKS.length >= 1);
+                  (tab.id === DATA_TAB_ID && DATA_SUB_LINKS.length >= 1);
                 const desktopHovered =
                   tab.id === RESOURCES_TAB_ID
                     ? resourcesHovered
@@ -2147,9 +2165,7 @@ export default function Dashboard({ onNavigate }) {
                       ? teamHovered
                       : tab.id === DATA_TAB_ID
                         ? dataHovered
-                        : tab.id === ADMIN_TAB_ID
-                          ? adminHovered
-                          : false;
+                        : false;
                 const triggerLabel =
                   tab.id === RESOURCES_TAB_ID
                     ? resourcesTabLabel
@@ -2157,9 +2173,7 @@ export default function Dashboard({ onNavigate }) {
                       ? teamTabLabel
                       : tab.id === DATA_TAB_ID
                         ? dataTabLabel
-                        : tab.id === ADMIN_TAB_ID
-                          ? adminTabLabel
-                          : tab.label;
+                        : tab.label;
 
                 return (
                   <div
@@ -2172,9 +2186,7 @@ export default function Dashboard({ onNavigate }) {
                           ? () => setTeamHovered(true)
                           : showDesktopSubmenu && tab.id === DATA_TAB_ID
                             ? () => setDataHovered(true)
-                            : showDesktopSubmenu && tab.id === ADMIN_TAB_ID
-                              ? () => setAdminHovered(true)
-                              : undefined
+                            : undefined
                     }
                     onMouseLeave={
                       showDesktopSubmenu && tab.id === RESOURCES_TAB_ID
@@ -2183,9 +2195,7 @@ export default function Dashboard({ onNavigate }) {
                           ? () => setTeamHovered(false)
                           : showDesktopSubmenu && tab.id === DATA_TAB_ID
                             ? () => setDataHovered(false)
-                            : showDesktopSubmenu && tab.id === ADMIN_TAB_ID
-                              ? () => setAdminHovered(false)
-                              : undefined
+                            : undefined
                     }
                   >
                     <Tabs.Trigger
@@ -2207,9 +2217,7 @@ export default function Dashboard({ onNavigate }) {
                             ? "Resources pages"
                             : tab.id === TEAM_TAB_ID
                               ? "Team pages"
-                              : tab.id === DATA_TAB_ID
-                                ? "Data pages"
-                                : "Admin pages"
+                              : "Data pages"
                         }
                       >
                         {subLinks.map((link) => {
@@ -2222,9 +2230,7 @@ export default function Dashboard({ onNavigate }) {
                                     (link.segment === "card-rater" &&
                                       (teamChild === "card-rater-play" ||
                                         (teamChild === "card-rater" && cardRaterPlayAtRoot))))
-                                : tab.id === DATA_TAB_ID
-                                  ? activeTab === DATA_TAB_ID && dataChild === link.segment
-                                  : activeTab === ADMIN_TAB_ID && adminChild === link.segment;
+                                : activeTab === DATA_TAB_ID && dataChild === link.segment;
                           return (
                             <button
                               key={link.segment}
@@ -2241,8 +2247,7 @@ export default function Dashboard({ onNavigate }) {
                               onClick={() => {
                                 if (tab.id === RESOURCES_TAB_ID) goResourcesSub(link.segment);
                                 else if (tab.id === TEAM_TAB_ID) goTeamSub(link.segment);
-                                else if (tab.id === DATA_TAB_ID) goDataSub(link.segment);
-                                else goAdminSub(link.segment);
+                                else goDataSub(link.segment);
                               }}
                             >
                               {link.label}
@@ -2289,7 +2294,10 @@ export default function Dashboard({ onNavigate }) {
               aria-labelledby="dashboard-menu-button"
             >
               {tabs.map((tab) => {
-                const selected = activeTab === tab.id;
+                const isAdminSection = Boolean(tab.segment);
+                const selected = isAdminSection
+                  ? activeTab === ADMIN_TAB_ID && adminChild === tab.segment
+                  : activeTab === tab.id;
                 const rowLabel =
                   tab.id === RESOURCES_TAB_ID
                     ? resourcesTabLabel
@@ -2297,9 +2305,7 @@ export default function Dashboard({ onNavigate }) {
                       ? teamTabLabel
                       : tab.id === DATA_TAB_ID
                         ? dataTabLabel
-                        : tab.id === ADMIN_TAB_ID
-                          ? adminTabLabel
-                          : tab.label;
+                        : tab.label;
                 const rowClass = `${mobileNavRowMin} ${mobileNavItemSurface(selected, isLight)}`;
 
                 let subIdleClass =
@@ -2310,6 +2316,23 @@ export default function Dashboard({ onNavigate }) {
                 const subActiveClass = isLight
                   ? "border border-[rgba(152,117,207,0.75)] bg-gradient-to-b from-[#7b4cb8]/90 to-[#5a2f8f]/90 text-white shadow-[0_2px_12px_rgb(103_61_154/0.35)] focus-visible:ring-2 focus-visible:ring-[#c4a9ef]/70"
                   : "border border-[rgba(142,90,200,0.55)] bg-gradient-to-br from-[rgba(80,40,120,0.45)] to-[rgba(40,20,70,0.55)] text-white focus-visible:ring-2 focus-visible:ring-purple-500/65";
+
+                if (isAdminSection) {
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      className={rowClass}
+                      aria-current={selected ? "page" : undefined}
+                      onClick={() => {
+                        goAdminSub(tab.segment);
+                        setMobileNavOpen(false);
+                      }}
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                }
 
                 if (tab.id === RESOURCES_TAB_ID && visibleResourceSubLinks.length > 1) {
                   return (
@@ -2462,55 +2485,6 @@ export default function Dashboard({ onNavigate }) {
                   );
                 }
 
-                if (tab.id === ADMIN_TAB_ID && ADMIN_SUB_LINKS.length >= 1) {
-                  return (
-                    <div key={tab.id} className="flex flex-col gap-1">
-                      <button
-                        type="button"
-                        className={rowClass}
-                        aria-current={selected ? "page" : undefined}
-                        aria-expanded={mobileAdminOpen}
-                        onClick={() => {
-                          setMobileAdminOpen((o) => !o);
-                        }}
-                      >
-                        {rowLabel}
-                      </button>
-                      {mobileAdminOpen ? (
-                        <div
-                          className={`flex flex-col gap-1 border-l pl-2 ${
-                            isLight ? "border-[rgba(80,65,110,0.35)]" : "border-white/[0.22]"
-                          }`}
-                          role="group"
-                          aria-label="Admin pages"
-                        >
-                          {ADMIN_SUB_LINKS.map((link) => {
-                            const subSel = adminChild === link.segment;
-                            return (
-                              <button
-                                key={link.segment}
-                                type="button"
-                                className={
-                                  subSel
-                                    ? `ml-3 flex min-h-11 w-full items-center rounded-lg px-[1.125rem] py-3 text-left text-[0.9rem] font-semibold outline-none transition-colors ${subActiveClass}`
-                                    : subIdleClass
-                                }
-                                aria-current={subSel ? "page" : undefined}
-                                onClick={() => {
-                                  goAdminSub(link.segment);
-                                  setMobileNavOpen(false);
-                                }}
-                              >
-                                {link.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                }
-
                 return (
                   <button
                     key={tab.id}
@@ -2542,59 +2516,50 @@ export default function Dashboard({ onNavigate }) {
                 : "border-white/[0.26] bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.06]"
             }`}
           >
-            {tab.id === ADMIN_TAB_ID ? (
-              adminChild === "users" ? (
-                <UsersAdminTable
-                  isLight={isLight}
-                  active={activeTab === ADMIN_TAB_ID && adminChild === "users"}
-                  onCreateUser={
-                    onNavigate
-                      ? () => {
-                          try {
-                            sessionStorage.setItem(
-                              SESSION_CREATE_USER_RETURN_KEY,
-                              window.location.pathname + window.location.search + window.location.hash,
-                            );
-                          } catch {
-                            /* ignore */
-                          }
-                          onNavigate("/admin/create-user");
+            {tab.segment === "users" ? (
+              <UsersAdminTable
+                isLight={isLight}
+                active={activeTab === ADMIN_TAB_ID && adminChild === "users"}
+                onCreateUser={
+                  onNavigate
+                    ? () => {
+                        try {
+                          sessionStorage.setItem(
+                            SESSION_CREATE_USER_RETURN_KEY,
+                            window.location.pathname + window.location.search + window.location.hash,
+                          );
+                        } catch {
+                          /* ignore */
                         }
-                      : undefined
-                  }
-                />
-              ) : adminChild === "announcements" ? (
-                <AnnouncementsAdmin
-                  isLight={isLight}
-                  active={activeTab === ADMIN_TAB_ID && adminChild === "announcements"}
-                  announcementForm={adminAnnouncementForm}
-                  navigateAnnouncementForm={navigateAdminAnnouncementForm}
-                />
-              ) : adminChild === "sets" ? (
-                <SetsAdmin isLight={isLight} active={activeTab === ADMIN_TAB_ID && adminChild === "sets"} />
-              ) : adminChild === "heroes" ? (
-                <HeroesAdmin isLight={isLight} active={activeTab === ADMIN_TAB_ID && adminChild === "heroes"} />
-              ) : adminChild === "card-rater" ? (
-                <CardRaterAdmin
-                  isLight={isLight}
-                  active={activeTab === ADMIN_TAB_ID && adminChild === "card-rater"}
-                  onOpenCardRaterAnalytics={openCardRaterAnalytics}
-                />
-              ) : adminChild === "events" ? (
-                <EventsAdmin
-                  isLight={isLight}
-                  active={activeTab === ADMIN_TAB_ID && adminChild === "events"}
-                  onOpenEvent={openEventDetail}
-                  onEventDeleted={onAdminEventDeleted}
-                />
-              ) : (
-                <div
-                  className="flex min-h-[min(40vh,18rem)] flex-1 flex-col items-center justify-center px-4 text-center"
-                  aria-label="Admin"
-                >
-                  <p className="text-[0.9rem] text-[#f4f0fa]/65">Choose a page from the Admin menu.</p>
-                </div>
-              )
+                        onNavigate("/admin/create-user");
+                      }
+                    : undefined
+                }
+              />
+            ) : tab.segment === "announcements" ? (
+              <AnnouncementsAdmin
+                isLight={isLight}
+                active={activeTab === ADMIN_TAB_ID && adminChild === "announcements"}
+                announcementForm={adminAnnouncementForm}
+                navigateAnnouncementForm={navigateAdminAnnouncementForm}
+              />
+            ) : tab.segment === "sets" ? (
+              <SetsAdmin isLight={isLight} active={activeTab === ADMIN_TAB_ID && adminChild === "sets"} />
+            ) : tab.segment === "heroes" ? (
+              <HeroesAdmin isLight={isLight} active={activeTab === ADMIN_TAB_ID && adminChild === "heroes"} />
+            ) : tab.segment === "card-rater" ? (
+              <CardRaterAdmin
+                isLight={isLight}
+                active={activeTab === ADMIN_TAB_ID && adminChild === "card-rater"}
+                onOpenCardRaterAnalytics={openCardRaterAnalytics}
+              />
+            ) : tab.segment === "events" ? (
+              <EventsAdmin
+                isLight={isLight}
+                active={activeTab === ADMIN_TAB_ID && adminChild === "events"}
+                onOpenEvent={openEventDetail}
+                onEventDeleted={onAdminEventDeleted}
+              />
             ) : tab.id === RESOURCES_TAB_ID ? (
               resourcesChild === "cards" && resourcesCardIdentifier ? (
                 <CardDetailPage

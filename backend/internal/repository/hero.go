@@ -264,10 +264,15 @@ func (r *Repository) UpdateHeroArtImageURL(ctx context.Context, heroID int, artU
 	return nil
 }
 
-// HeroAdminRow is a hero row for the admin art crop tool.
+// HeroAdminRow is a hero row for the admin heroes UI.
 type HeroAdminRow struct {
 	ID             int
 	Name           string
+	Type           int16
+	Young          bool
+	Classes        []int16
+	Talents        []int16
+	CardID         *int
 	CardIdentifier *string
 	CardImageURL   *string
 	ArtImageURL    *string
@@ -275,15 +280,28 @@ type HeroAdminRow struct {
 	CropCenterY    *float64
 }
 
-// ListHeroesAdmin returns all heroes for the admin art UI.
+const heroAdminSelect = `
+SELECT h.id, h.name, h.type, h.young, h.classes, h.talents, h.card_id,
+       c.card_identifier, h.card_image_url, h.art_image_url, h.crop_center_x, h.crop_center_y
+FROM heroes h
+LEFT JOIN cards c ON c.id = h.card_id`
+
+func scanHeroAdminRow(scan func(dest ...any) error) (HeroAdminRow, error) {
+	var row HeroAdminRow
+	err := scan(
+		&row.ID, &row.Name, &row.Type, &row.Young, &row.Classes, &row.Talents, &row.CardID,
+		&row.CardIdentifier, &row.CardImageURL, &row.ArtImageURL,
+		&row.CropCenterX, &row.CropCenterY,
+	)
+	return row, err
+}
+
+// ListHeroesAdmin returns all heroes for the admin UI.
 func (r *Repository) ListHeroesAdmin(ctx context.Context) ([]HeroAdminRow, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
-	const q = `
-SELECT h.id, h.name, c.card_identifier, h.card_image_url, h.art_image_url, h.crop_center_x, h.crop_center_y
-FROM heroes h
-LEFT JOIN cards c ON c.id = h.card_id
+	q := heroAdminSelect + `
 ORDER BY h.name ASC, h.id ASC`
 	rows, err := r.pool.Query(ctx, q)
 	if err != nil {
@@ -293,11 +311,8 @@ ORDER BY h.name ASC, h.id ASC`
 
 	var out []HeroAdminRow
 	for rows.Next() {
-		var row HeroAdminRow
-		if err := rows.Scan(
-			&row.ID, &row.Name, &row.CardIdentifier, &row.CardImageURL, &row.ArtImageURL,
-			&row.CropCenterX, &row.CropCenterY,
-		); err != nil {
+		row, err := scanHeroAdminRow(rows.Scan)
+		if err != nil {
 			return nil, fmt.Errorf("repository: list heroes admin scan: %w", err)
 		}
 		out = append(out, row)
@@ -308,7 +323,7 @@ ORDER BY h.name ASC, h.id ASC`
 	return out, nil
 }
 
-// GetHeroAdminByID loads one hero for the admin art crop tool.
+// GetHeroAdminByID loads one hero for the admin UI.
 func (r *Repository) GetHeroAdminByID(ctx context.Context, heroID int) (*HeroAdminRow, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
@@ -316,16 +331,11 @@ func (r *Repository) GetHeroAdminByID(ctx context.Context, heroID int) (*HeroAdm
 	if heroID <= 0 {
 		return nil, fmt.Errorf("repository: invalid hero id")
 	}
-	const q = `
-SELECT h.id, h.name, c.card_identifier, h.card_image_url, h.art_image_url, h.crop_center_x, h.crop_center_y
-FROM heroes h
-LEFT JOIN cards c ON c.id = h.card_id
+	q := heroAdminSelect + `
 WHERE h.id = $1`
-	var row HeroAdminRow
-	err := r.pool.QueryRow(ctx, q, heroID).Scan(
-		&row.ID, &row.Name, &row.CardIdentifier, &row.CardImageURL, &row.ArtImageURL,
-		&row.CropCenterX, &row.CropCenterY,
-	)
+	row, err := scanHeroAdminRow(func(dest ...any) error {
+		return r.pool.QueryRow(ctx, q, heroID).Scan(dest...)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrHeroNotFound
@@ -333,6 +343,63 @@ WHERE h.id = $1`
 		return nil, fmt.Errorf("repository: get hero admin: %w", err)
 	}
 	return &row, nil
+}
+
+// HeroAdminUpdate is the editable fields for an admin hero PATCH.
+type HeroAdminUpdate struct {
+	Name         string
+	Type         int16
+	Young        bool
+	Classes      []int16
+	Talents      []int16
+	CardID       *int
+	CardImageURL *string
+	ArtImageURL  *string
+}
+
+// UpdateHeroAdmin updates hero metadata for the admin UI.
+func (r *Repository) UpdateHeroAdmin(ctx context.Context, heroID int, in HeroAdminUpdate) (*HeroAdminRow, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	if heroID <= 0 {
+		return nil, fmt.Errorf("repository: invalid hero id")
+	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		return nil, fmt.Errorf("repository: empty hero name")
+	}
+	classes := in.Classes
+	if classes == nil {
+		classes = []int16{}
+	}
+	talents := in.Talents
+	if talents == nil {
+		talents = []int16{}
+	}
+
+	const q = `
+UPDATE heroes
+SET name = $2,
+    type = $3,
+    young = $4,
+    classes = $5,
+    talents = $6,
+    card_id = $7,
+    card_image_url = $8,
+    art_image_url = $9
+WHERE id = $1`
+	tag, err := r.pool.Exec(ctx, q,
+		heroID, name, in.Type, in.Young, classes, talents,
+		in.CardID, in.CardImageURL, in.ArtImageURL,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("repository: update hero admin: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, ErrHeroNotFound
+	}
+	return r.GetHeroAdminByID(ctx, heroID)
 }
 
 // UpdateHeroArtCrop updates art URL and normalized crop center.
