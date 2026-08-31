@@ -64,32 +64,35 @@ function imageFilesFromDataTransfer(dt) {
   return out;
 }
 
+/** @param {string | null | undefined} ta */
+function normalizeImageAlign(ta) {
+  return ta === "center" || ta === "right" ? ta : "left";
+}
+
 const RichTextImage = BaseImage.extend({
   name: "image",
-  parseHTML() {
-    return [
-      {
-        tag: this.options.allowBase64 ? "img[src]" : 'img[src]:not([src^="data:"])',
-        getAttrs: (element) => {
-          const src = element.getAttribute("src");
-          if (!src) return false;
-          const out = {
-            src,
-            alt: element.getAttribute("alt") ?? "",
-            title: element.getAttribute("title"),
-            width: element.getAttribute("width"),
-            height: element.getAttribute("height"),
-          };
+  // Override TextAlign's style-based attr so images persist via data-text-align.
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      textAlign: {
+        default: null,
+        parseHTML: (element) => {
           const dataTa = element.getAttribute("data-text-align");
+          if (["left", "center", "right"].includes(dataTa)) return dataTa;
           const styleTa = element.style?.textAlign;
-          if (["left", "center", "right"].includes(dataTa)) out.textAlign = dataTa;
-          else if (["left", "center", "right"].includes(styleTa)) out.textAlign = styleTa;
-          return out;
+          if (["left", "center", "right"].includes(styleTa)) return styleTa;
+          return null;
+        },
+        renderHTML: (attributes) => {
+          const ta = normalizeImageAlign(attributes.textAlign);
+          if (ta === "left") return {};
+          return { "data-text-align": ta };
         },
       },
-    ];
+    };
   },
-  renderHTML({ node, HTMLAttributes }) {
+  renderHTML({ HTMLAttributes }) {
     const merged = mergeAttributes(this.options.HTMLAttributes, HTMLAttributes);
     if (merged.style && typeof merged.style === "string") {
       const cleaned = merged.style
@@ -100,9 +103,6 @@ const RichTextImage = BaseImage.extend({
       if (cleaned) merged.style = cleaned;
       else delete merged.style;
     }
-    const ta = node.attrs.textAlign;
-    if (ta === "center" || ta === "right") merged["data-text-align"] = ta;
-    else delete merged["data-text-align"];
     return ["img", merged];
   },
   addNodeView() {
@@ -112,12 +112,23 @@ const RichTextImage = BaseImage.extend({
       const nodeView = parentFactory(props);
       const sync = (node) => {
         const root = nodeView.dom;
-        const img = root?.tagName === "IMG" ? root : root?.querySelector?.("img");
-        if (!img || !(img instanceof HTMLImageElement)) return;
-        if (img.style.textAlign) img.style.textAlign = "";
-        const ta = node.attrs.textAlign;
-        if (ta === "center" || ta === "right") img.setAttribute("data-text-align", ta);
-        else img.removeAttribute("data-text-align");
+        if (!(root instanceof HTMLElement)) return;
+        const img = root.tagName === "IMG" ? root : root.querySelector?.("img");
+        const align = normalizeImageAlign(node.attrs.textAlign);
+
+        // Resizable images live in a flex container; justify-content moves the block.
+        if (root !== img) {
+          root.style.justifyContent =
+            align === "center" ? "center" : align === "right" ? "flex-end" : "flex-start";
+          if (align === "center" || align === "right") root.setAttribute("data-text-align", align);
+          else root.removeAttribute("data-text-align");
+        }
+
+        if (img instanceof HTMLImageElement) {
+          if (img.style.textAlign) img.style.textAlign = "";
+          if (align === "center" || align === "right") img.setAttribute("data-text-align", align);
+          else img.removeAttribute("data-text-align");
+        }
       };
       sync(props.node);
       const origUpdate = nodeView.update.bind(nodeView);
@@ -172,6 +183,7 @@ function ToolbarIconButton({ active, isLight, idleTone, title, onClick, disabled
     <button
       type="button"
       className={toolbarBtnClass(active, isLight, idleTone)}
+      onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       disabled={disabled}
       aria-pressed={active}
@@ -442,15 +454,28 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
   /** @param {import("@tiptap/react").Editor} ed */
   const currentTextAlign = (ed) => {
     if (ed.isActive("image")) {
-      const ta = ed.getAttributes("image").textAlign;
-      if (ta && ["left", "center", "right"].includes(ta)) return ta;
-      return "left";
+      return normalizeImageAlign(ed.getAttributes("image").textAlign);
     }
     const fromPara = ed.getAttributes("paragraph").textAlign;
     if (fromPara && ["left", "center", "right"].includes(fromPara)) return fromPara;
     const fromHead = ed.getAttributes("heading").textAlign;
     if (fromHead && ["left", "center", "right"].includes(fromHead)) return fromHead;
     return "left";
+  };
+
+  /** @param {"left" | "center" | "right"} alignment */
+  const applyTextAlign = (alignment) => {
+    if (editor.isActive("image")) {
+      const pos = editor.state.selection.from;
+      editor
+        .chain()
+        .focus()
+        .updateAttributes("image", { textAlign: alignment === "left" ? null : alignment })
+        .setNodeSelection(pos)
+        .run();
+      return;
+    }
+    editor.chain().focus().setTextAlign(alignment).run();
   };
 
   if (!editor) {
@@ -588,7 +613,7 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
               isLight={isLight}
               idleTone={ts}
               title="Align left"
-              onClick={() => editor.chain().focus().setTextAlign("left").run()}
+              onClick={() => applyTextAlign("left")}
             >
               <AlignLeft className={iconCls} strokeWidth={2.25} />
             </ToolbarIconButton>
@@ -597,7 +622,7 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
               isLight={isLight}
               idleTone={ts}
               title="Align center"
-              onClick={() => editor.chain().focus().setTextAlign("center").run()}
+              onClick={() => applyTextAlign("center")}
             >
               <AlignCenter className={iconCls} strokeWidth={2.25} />
             </ToolbarIconButton>
@@ -606,7 +631,7 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
               isLight={isLight}
               idleTone={ts}
               title="Align right"
-              onClick={() => editor.chain().focus().setTextAlign("right").run()}
+              onClick={() => applyTextAlign("right")}
             >
               <AlignRight className={iconCls} strokeWidth={2.25} />
             </ToolbarIconButton>
