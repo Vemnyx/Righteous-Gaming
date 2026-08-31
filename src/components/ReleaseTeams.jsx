@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
-import { cardFormatName } from "../constants/cardFormat";
+import { CARD_FORMAT_NAMES, cardFormatName } from "../constants/cardFormat";
 import { canWriteDecksAndRecordings, isAdminRole } from "../constants/roles";
 import { RichTextEditor } from "./RichTextEditor";
 import { RichTextHtml } from "./RichTextHtml";
@@ -13,6 +13,10 @@ import {
   panelTabButton,
 } from "./PanelTabs";
 import { bodyToRichHtml, isEmptyRichHtml } from "../utils/richTextDomPurify";
+import { deckDisplayName } from "../utils/deckDisplayName";
+import { deckHeroLabel } from "../utils/deckHeroLabel";
+import { deckSourceLabel } from "../utils/deckSourceLabel";
+import { deckFormatColumnLabel } from "../utils/deckTableFilters";
 import {
   extFromFilename,
   MAX_UPLOAD_SIZE_LABEL,
@@ -34,9 +38,65 @@ const MEMBER_SLOT_SECONDARY = 1;
 
 /** @typedef {{ id: number, user_id: number, body: string, published?: boolean, published_at?: string | null, updated_at: string, first_name?: string | null, username?: string | null, email: string }} ReleaseNote */
 
-/** @typedef {{ id: number, deck_id: number, deck_name: string, user_id: number, fabrary_link?: string | null, first_name?: string | null, username?: string | null, email: string }} ReleaseDeck */
+/** @typedef {{ id: number, deck_id: number, deck_name?: string, name?: string, format?: number, hero_id?: number, hero_name?: string | null, hero_art_image_url?: string | null, set_id?: number | null, fabrary_format?: string | null, deck_source_id?: number, source?: string, user_id: number, fabrary_link?: string | null, first_name?: string | null, username?: string | null, owner_username?: string | null, email?: string, owner_email?: string | null }} ReleaseDeck */
 
-/** @typedef {{ id: number, recording_id: number, url: string, label?: string | null, user_id: number, first_name?: string | null, username?: string | null, email: string }} ReleaseRecording */
+/** @typedef {{ id: number, recording_id: number, url: string, label?: string | null, format?: number, created_at?: string, user_id: number, first_name?: string | null, username?: string | null, owner_username?: string | null, email: string, owner_email?: string | null, first_hero_name?: string | null, first_hero_art_image_url?: string | null, second_hero_name?: string | null, second_hero_art_image_url?: string | null }} ReleaseRecording */
+
+const RECORDING_ROW_H = "h-[6.65rem] min-h-[6.65rem]";
+
+const recordingHeroArtFadeToRight =
+  "[mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_82%,transparent_100%)]";
+
+const recordingHeroArtFadeToLeft =
+  "[mask-image:linear-gradient(to_left,black_0%,black_82%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_left,black_0%,black_82%,transparent_100%)]";
+
+/**
+ * @param {{ side: "left" | "right", src?: string | null, name?: string | null }} props
+ */
+function RecordingRowHeroArt({ side, src, name }) {
+  const label = name != null && String(name).trim() !== "" ? String(name).trim() : "Hero";
+  const isLeft = side === "left";
+  const objectCls = isLeft ? "object-left" : "object-right";
+  const fadeCls = isLeft ? recordingHeroArtFadeToRight : recordingHeroArtFadeToLeft;
+  const placeholderGradient = isLeft
+    ? "bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent"
+    : "bg-gradient-to-l from-purple-900/35 via-purple-800/15 to-transparent";
+
+  return (
+    <div className={`relative ${RECORDING_ROW_H} min-w-0 overflow-hidden`} aria-hidden>
+      {src ? (
+        <img
+          src={src}
+          alt=""
+          className={`h-full w-full object-cover object-top ${objectCls} ${fadeCls}`}
+          draggable={false}
+        />
+      ) : (
+        <div className={`h-full w-full ${placeholderGradient} ${fadeCls}`} title={label} />
+      )}
+    </div>
+  );
+}
+
+/** @param {string | undefined | null} iso */
+function formatDateTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+}
+
+/** @param {{ owner_username?: string | null, username?: string | null, owner_email?: string | null, email?: string }} row */
+function recordingUploaderLabel(row) {
+  const username =
+    (row.owner_username != null ? String(row.owner_username).trim() : "") ||
+    (row.username != null ? String(row.username).trim() : "");
+  if (username) return username;
+  const email =
+    (row.owner_email != null ? String(row.owner_email).trim() : "") ||
+    (row.email != null ? String(row.email).trim() : "");
+  return email || "—";
+}
 
 /**
  * @param {string | undefined | null} errText
@@ -94,6 +154,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
   const [listTab, setListTab] = useState(/** @type {"current" | "past"} */ ("current"));
   const [sessions, setSessions] = useState(/** @type {ReleaseSession[]} */ ([]));
   const [heroesMeta, setHeroesMeta] = useState(/** @type {ReleaseHero[]} */ ([]));
+  const [setNameById, setSetNameById] = useState(/** @type {Record<number, string>} */ ({}));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [reloadSeq, setReloadSeq] = useState(0);
@@ -165,6 +226,11 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
     "w-full rounded-lg border border-white/20 bg-black/35 px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none focus:border-purple-300/55";
   const textMuted = "text-[#f4f0fa]/80";
   const textFaint = "text-[#f4f0fa]/70";
+  const cardChromeBorder = isLight
+    ? "border-white/[0.12] bg-black/25"
+    : "border-white/[0.20] bg-black/20 ring-1 ring-white/[0.05]";
+  const heroArtFadeMask =
+    "[mask-image:linear-gradient(to_right,black_0%,black_70%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_right,black_0%,black_70%,transparent_100%)]";
 
   const isPast = session?.status === 1;
   const isCurrent = session?.status === 0;
@@ -213,11 +279,28 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
       try {
         const token = await user.getIdToken();
         const headers = { Authorization: `Bearer ${token}` };
-        const metaRes = await fetch("/api/release-teams/meta", { headers });
+        const [metaRes, setsRes] = await Promise.all([
+          fetch("/api/release-teams/meta", { headers }),
+          fetch("/api/sets"),
+        ]);
         if (cancelled) return;
         if (metaRes.ok) {
           const meta = await metaRes.json();
           setHeroesMeta(Array.isArray(meta.heroes) ? meta.heroes : []);
+        }
+        if (setsRes.ok) {
+          const setsData = await setsRes.json();
+          const list = Array.isArray(setsData.sets)
+            ? setsData.sets
+            : Array.isArray(setsData)
+              ? setsData
+              : [];
+          /** @type {Record<number, string>} */
+          const next = {};
+          for (const s of list) {
+            if (s && typeof s.id === "number" && typeof s.name === "string") next[s.id] = s.name;
+          }
+          setSetNameById(next);
         }
       } catch {
         /* ignore meta load errors */
@@ -293,10 +376,18 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
         nData.my_note && typeof nData.my_note === "object" && typeof nData.my_note.id === "number"
           ? /** @type {ReleaseNote} */ (nData.my_note)
           : null;
+      const nextDecks = (Array.isArray(dData.decks) ? dData.decks : [])
+        .filter((d) => d && typeof d.deck_id === "number")
+        .map((d) => ({
+          ...d,
+          name: d.name || d.deck_name || "",
+          owner_username: d.owner_username ?? d.username ?? null,
+          owner_email: d.owner_email ?? d.email ?? "",
+        }));
       setMembers(Array.isArray(mData.members) ? mData.members : []);
       setNotes(nextNotes);
       setMyNote(nextMyNote);
-      setDecks(Array.isArray(dData.decks) ? dData.decks : []);
+      setDecks(nextDecks);
       setRecordings(Array.isArray(rData.recordings) ? rData.recordings : []);
       setExpandedNoteId(nextNotes[0]?.id ?? null);
     } catch (e) {
@@ -934,53 +1025,71 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                     </p>
                   </div>
                 ) : null}
-                <div className={`overflow-x-auto ${innerShell}`}>
-                  <table className="w-full min-w-[28rem] border-collapse text-left text-[0.9rem] text-[#f4f0fa]">
-                    <thead>
-                      <tr className={`border-b border-white/15 ${textMuted}`}>
-                        <th className="px-4 py-3 font-medium">Deck</th>
-                        <th className="px-4 py-3 font-medium">Submitted by</th>
-                        <th className="px-4 py-3 font-medium">Link</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {decks.length === 0 ? (
-                        <tr>
-                          <td colSpan={3} className={`px-4 py-6 ${textFaint}`}>
-                            No decklists yet.
-                          </td>
-                        </tr>
-                      ) : (
-                        decks.map((d) => (
-                          <tr key={d.id} className="border-b border-white/10">
-                            <td className="px-4 py-3">
-                              <a
-                                className="font-medium text-purple-100 underline-offset-2 hover:underline"
-                                href={`/resources/decks/${d.deck_id}`}
-                              >
-                                {d.deck_name}
-                              </a>
-                            </td>
-                            <td className="px-4 py-3 text-[#f4f0fa]">{personLabel(d)}</td>
-                            <td className="px-4 py-3">
-                              {d.fabrary_link ? (
-                                <a
-                                  className="text-purple-100 underline-offset-2 hover:underline"
-                                  href={d.fabrary_link}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  Fabrary
-                                </a>
-                              ) : (
-                                "—"
-                              )}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {decks.length === 0 ? (
+                    <div
+                      className={`col-span-full rounded-xl border px-4 py-10 text-center text-[0.875rem] text-[#f4f0fa]/65 ${cardChromeBorder}`}
+                    >
+                      No decklists yet.
+                    </div>
+                  ) : (
+                    decks.map((d) => {
+                      const row = {
+                        name: d.name || d.deck_name || "",
+                        format: typeof d.format === "number" ? d.format : session.format,
+                        hero_id: d.hero_id,
+                        hero_name: d.hero_name ?? selectedHero?.name ?? null,
+                        hero_art_image_url: d.hero_art_image_url ?? null,
+                        set_id: d.set_id ?? null,
+                        fabrary_format: d.fabrary_format ?? null,
+                        source: d.source ?? "",
+                        owner_username: d.owner_username ?? d.username ?? null,
+                        owner_email: d.owner_email ?? d.email ?? "",
+                      };
+                      const displayName = deckDisplayName(row, setNameById);
+                      const fmtLabel = deckFormatColumnLabel(row, setNameById);
+                      const heroLabel = deckHeroLabel(row);
+                      const heroArt = row.hero_art_image_url ?? null;
+                      return (
+                        <a
+                          key={d.id}
+                          href={`/resources/decks/${d.deck_id}`}
+                          className={`group relative grid min-h-[6.75rem] w-full cursor-pointer grid-cols-1 overflow-hidden rounded-xl border text-right no-underline transition-[border-color,box-shadow,filter] hover:border-purple-400/45 hover:shadow-[0_6px_28px_rgba(90,47,143,0.22)] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 ${cardChromeBorder}`}
+                          aria-label={displayName ? `Open deck: ${displayName}` : "Open deck"}
+                        >
+                          <div
+                            className="pointer-events-none absolute inset-y-0 left-0 w-[58%] sm:w-[54%]"
+                            aria-hidden
+                          >
+                            {heroArt ? (
+                              <img
+                                src={heroArt}
+                                alt=""
+                                className={`h-full w-full object-cover object-left ${heroArtFadeMask}`}
+                                draggable={false}
+                              />
+                            ) : (
+                              <div
+                                className={`h-full w-full bg-gradient-to-r from-purple-900/35 via-purple-800/15 to-transparent ${heroArtFadeMask}`}
+                              />
+                            )}
+                          </div>
+                          <div className="relative z-[1] col-start-1 row-start-1 flex min-h-[6.75rem] flex-col items-end justify-center gap-1 self-stretch py-3.5 pl-[52%] pr-4 sm:pl-[48%]">
+                            <p className="m-0 max-w-full truncate text-[0.95rem] font-semibold leading-snug text-[#f4f0fa] group-hover:text-purple-100">
+                              {displayName}
+                            </p>
+                            <p className="m-0 max-w-full truncate text-[0.8125rem] text-[#f4f0fa]/72">{fmtLabel}</p>
+                            <p className="m-0 max-w-full truncate text-[0.8125rem] text-[#f4f0fa]/72">
+                              {heroLabel || "—"}
+                            </p>
+                            <p className="m-0 max-w-full truncate text-[0.75rem] text-[#f4f0fa]/55">
+                              {deckSourceLabel(row)}
+                            </p>
+                          </div>
+                        </a>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             ) : null}
@@ -1072,42 +1181,55 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
                     Add recording
                   </button>
                 ) : null}
-                <div className={`overflow-x-auto ${innerShell}`}>
-                  <table className="w-full min-w-[28rem] border-collapse text-left text-[0.9rem] text-[#f4f0fa]">
-                    <thead>
-                      <tr className={`border-b border-white/15 ${textMuted}`}>
-                        <th className="px-4 py-3 font-medium">Recording</th>
-                        <th className="px-4 py-3 font-medium">By</th>
-                        <th className="px-4 py-3 font-medium">Open</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recordings.length === 0 ? (
-                        <tr>
-                          <td colSpan={3} className={`px-4 py-6 ${textFaint}`}>
-                            No recordings yet.
-                          </td>
-                        </tr>
-                      ) : (
-                        recordings.map((rec) => (
-                          <tr key={rec.id} className="border-b border-white/10">
-                            <td className="px-4 py-3 text-[#f4f0fa]">
-                              {rec.label?.trim() || "Untitled recording"}
-                            </td>
-                            <td className="px-4 py-3 text-[#f4f0fa]">{personLabel(rec)}</td>
-                            <td className="px-4 py-3">
-                              <a
-                                className="text-purple-100 underline-offset-2 hover:underline"
-                                href={`/resources/recordings/${rec.recording_id}`}
-                              >
-                                View
-                              </a>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+                <div className="flex flex-col gap-2.5">
+                  {recordings.length === 0 ? (
+                    <div
+                      className={`rounded-xl border px-4 py-10 text-center text-[0.875rem] text-[#f4f0fa]/65 ${cardChromeBorder}`}
+                    >
+                      No recordings yet.
+                    </div>
+                  ) : (
+                    recordings.map((rec) => {
+                      const title = rec.label?.trim() || `Recording #${rec.recording_id}`;
+                      const formatId = typeof rec.format === "number" ? rec.format : session.format;
+                      const formatName = CARD_FORMAT_NAMES[formatId] ?? `Format ${formatId}`;
+                      return (
+                        <a
+                          key={rec.id}
+                          href={`/resources/recordings/${rec.recording_id}`}
+                          className={`group grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_minmax(10.75rem,15.2rem)_minmax(0,1fr)] items-stretch overflow-hidden rounded-xl border text-center no-underline transition-[border-color,box-shadow,filter] hover:border-purple-400/45 hover:shadow-[0_6px_28px_rgba(90,47,143,0.22)] hover:brightness-[1.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/55 ${RECORDING_ROW_H} ${cardChromeBorder}`}
+                          aria-label={`Open recording: ${title}`}
+                        >
+                          <RecordingRowHeroArt
+                            side="left"
+                            src={rec.first_hero_art_image_url}
+                            name={rec.first_hero_name}
+                          />
+                          <div
+                            className={`relative z-[1] flex ${RECORDING_ROW_H} flex-col items-center justify-center gap-0 px-2.5 py-1.5 sm:px-3`}
+                          >
+                            <p className="m-0 max-w-full truncate text-[0.85rem] font-semibold leading-tight text-[#f4f0fa] group-hover:text-purple-100">
+                              {title}
+                            </p>
+                            <p className="m-0 max-w-full truncate text-[0.75rem] leading-tight text-[#f4f0fa]/72">
+                              {formatName}
+                            </p>
+                            <p className="m-0 max-w-full truncate text-[0.75rem] leading-tight text-[#f4f0fa]/72">
+                              Uploaded {formatDateTime(rec.created_at)}
+                            </p>
+                            <p className="m-0 max-w-full truncate text-[0.7rem] leading-tight text-[#f4f0fa]/55">
+                              {recordingUploaderLabel(rec)}
+                            </p>
+                          </div>
+                          <RecordingRowHeroArt
+                            side="right"
+                            src={rec.second_hero_art_image_url}
+                            name={rec.second_hero_name}
+                          />
+                        </a>
+                      );
+                    })
+                  )}
                 </div>
               </div>
             ) : null}

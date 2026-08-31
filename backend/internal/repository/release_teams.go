@@ -86,34 +86,44 @@ type ReleaseTeamNote struct {
 
 // ReleaseTeamDeckLink joins a deck to a release-team hero slot.
 type ReleaseTeamDeckLink struct {
-	ID        int
-	SessionID int
-	HeroID    int
-	UserID    int
-	DeckID    int
-	CreatedAt time.Time
-	DeckName  string
-	Format    int16
-	FirstName *string
-	Username  *string
-	Email     string
-	FabraryLink *string
+	ID             int
+	SessionID      int
+	HeroID         int
+	UserID         int
+	DeckID         int
+	CreatedAt      time.Time
+	DeckName       string
+	Format         int16
+	HeroName       *string
+	HeroArtURL     *string
+	SetID          *int
+	FabraryFormat  *string
+	DeckSourceID   int
+	Source         string
+	FirstName      *string
+	Username       *string
+	Email          string
+	FabraryLink    *string
 }
 
 // ReleaseTeamRecordingLink joins a recording to a release-team hero slot.
 type ReleaseTeamRecordingLink struct {
-	ID          int
-	SessionID   int
-	HeroID      int
-	UserID      int
-	RecordingID int
-	CreatedAt   time.Time
-	URL         string
-	Label       *string
-	Format      int16
-	FirstName   *string
-	Username    *string
-	Email       string
+	ID                    int
+	SessionID             int
+	HeroID                int
+	UserID                int
+	RecordingID           int
+	CreatedAt             time.Time
+	URL                   string
+	Label                 *string
+	Format                int16
+	FirstHeroName         *string
+	FirstHeroArtImageURL  *string
+	SecondHeroName        *string
+	SecondHeroArtImageURL *string
+	FirstName             *string
+	Username              *string
+	Email                 string
 }
 
 // CreateReleaseTeamSessionInput creates a session with selected heroes.
@@ -695,9 +705,12 @@ func (r *Repository) ListReleaseTeamDecks(ctx context.Context, sessionID, heroID
 	}
 	const q = `
 SELECT rd.id, rd.session_id, rd.hero_id, rd.user_id, rd.deck_id, rd.created_at,
-       d.name, d.format, d.fabrary_link, u.first_name, u.username, u.email
+       d.name, d.format, h.name, h.art_image_url, d.set_id, d.fabrary_format,
+       d.deck_source_id, ds.source, d.fabrary_link, u.first_name, u.username, u.email
 FROM release_team_decks rd
 INNER JOIN decks d ON d.id = rd.deck_id
+INNER JOIN heroes h ON h.id = d.hero_id
+INNER JOIN deck_source ds ON ds.id = d.deck_source_id
 INNER JOIN users u ON u.id = rd.user_id
 WHERE rd.session_id = $1 AND rd.hero_id = $2
 ORDER BY rd.created_at DESC, rd.id DESC`
@@ -712,7 +725,8 @@ ORDER BY rd.created_at DESC, rd.id DESC`
 		var d ReleaseTeamDeckLink
 		if err := rows.Scan(
 			&d.ID, &d.SessionID, &d.HeroID, &d.UserID, &d.DeckID, &d.CreatedAt,
-			&d.DeckName, &d.Format, &d.FabraryLink, &d.FirstName, &d.Username, &d.Email,
+			&d.DeckName, &d.Format, &d.HeroName, &d.HeroArtURL, &d.SetID, &d.FabraryFormat,
+			&d.DeckSourceID, &d.Source, &d.FabraryLink, &d.FirstName, &d.Username, &d.Email,
 		); err != nil {
 			return nil, fmt.Errorf("repository: scan release team deck: %w", err)
 		}
@@ -753,15 +767,19 @@ RETURNING id`, sessionID, heroID, userID, deckID).Scan(&id)
 func (r *Repository) getReleaseTeamDeckByID(ctx context.Context, id int) (*ReleaseTeamDeckLink, error) {
 	const q = `
 SELECT rd.id, rd.session_id, rd.hero_id, rd.user_id, rd.deck_id, rd.created_at,
-       d.name, d.format, d.fabrary_link, u.first_name, u.username, u.email
+       d.name, d.format, h.name, h.art_image_url, d.set_id, d.fabrary_format,
+       d.deck_source_id, ds.source, d.fabrary_link, u.first_name, u.username, u.email
 FROM release_team_decks rd
 INNER JOIN decks d ON d.id = rd.deck_id
+INNER JOIN heroes h ON h.id = d.hero_id
+INNER JOIN deck_source ds ON ds.id = d.deck_source_id
 INNER JOIN users u ON u.id = rd.user_id
 WHERE rd.id = $1`
 	var d ReleaseTeamDeckLink
 	err := r.pool.QueryRow(ctx, q, id).Scan(
 		&d.ID, &d.SessionID, &d.HeroID, &d.UserID, &d.DeckID, &d.CreatedAt,
-		&d.DeckName, &d.Format, &d.FabraryLink, &d.FirstName, &d.Username, &d.Email,
+		&d.DeckName, &d.Format, &d.HeroName, &d.HeroArtURL, &d.SetID, &d.FabraryFormat,
+		&d.DeckSourceID, &d.Source, &d.FabraryLink, &d.FirstName, &d.Username, &d.Email,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -778,13 +796,17 @@ func (r *Repository) ListReleaseTeamRecordings(ctx context.Context, sessionID, h
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-SELECT rr.id, rr.session_id, rr.hero_id, rr.user_id, rr.recording_id, rr.created_at,
-       rec.url, rec.label, rec.format, u.first_name, u.username, u.email
+SELECT rr.id, rr.session_id, rr.hero_id, rr.user_id, rr.recording_id, rec.created_at,
+       rec.url, rec.label, rec.format,
+       h1.name, h1.art_image_url, h2.name, h2.art_image_url,
+       u.first_name, u.username, u.email
 FROM release_team_recordings rr
 INNER JOIN recordings rec ON rec.id = rr.recording_id
 INNER JOIN users u ON u.id = rr.user_id
+LEFT JOIN heroes h1 ON h1.id = rec.first_hero_id
+LEFT JOIN heroes h2 ON h2.id = rec.second_hero_id
 WHERE rr.session_id = $1 AND rr.hero_id = $2
-ORDER BY rr.created_at DESC, rr.id DESC`
+ORDER BY rec.created_at DESC, rr.id DESC`
 	rows, err := r.pool.Query(ctx, q, sessionID, heroID)
 	if err != nil {
 		return nil, fmt.Errorf("repository: list release team recordings: %w", err)
@@ -796,7 +818,9 @@ ORDER BY rr.created_at DESC, rr.id DESC`
 		var rec ReleaseTeamRecordingLink
 		if err := rows.Scan(
 			&rec.ID, &rec.SessionID, &rec.HeroID, &rec.UserID, &rec.RecordingID, &rec.CreatedAt,
-			&rec.URL, &rec.Label, &rec.Format, &rec.FirstName, &rec.Username, &rec.Email,
+			&rec.URL, &rec.Label, &rec.Format,
+			&rec.FirstHeroName, &rec.FirstHeroArtImageURL, &rec.SecondHeroName, &rec.SecondHeroArtImageURL,
+			&rec.FirstName, &rec.Username, &rec.Email,
 		); err != nil {
 			return nil, fmt.Errorf("repository: scan release team recording: %w", err)
 		}
@@ -836,16 +860,22 @@ RETURNING id`, sessionID, heroID, userID, recordingID).Scan(&id)
 
 func (r *Repository) getReleaseTeamRecordingByID(ctx context.Context, id int) (*ReleaseTeamRecordingLink, error) {
 	const q = `
-SELECT rr.id, rr.session_id, rr.hero_id, rr.user_id, rr.recording_id, rr.created_at,
-       rec.url, rec.label, rec.format, u.first_name, u.username, u.email
+SELECT rr.id, rr.session_id, rr.hero_id, rr.user_id, rr.recording_id, rec.created_at,
+       rec.url, rec.label, rec.format,
+       h1.name, h1.art_image_url, h2.name, h2.art_image_url,
+       u.first_name, u.username, u.email
 FROM release_team_recordings rr
 INNER JOIN recordings rec ON rec.id = rr.recording_id
 INNER JOIN users u ON u.id = rr.user_id
+LEFT JOIN heroes h1 ON h1.id = rec.first_hero_id
+LEFT JOIN heroes h2 ON h2.id = rec.second_hero_id
 WHERE rr.id = $1`
 	var rec ReleaseTeamRecordingLink
 	err := r.pool.QueryRow(ctx, q, id).Scan(
 		&rec.ID, &rec.SessionID, &rec.HeroID, &rec.UserID, &rec.RecordingID, &rec.CreatedAt,
-		&rec.URL, &rec.Label, &rec.Format, &rec.FirstName, &rec.Username, &rec.Email,
+		&rec.URL, &rec.Label, &rec.Format,
+		&rec.FirstHeroName, &rec.FirstHeroArtImageURL, &rec.SecondHeroName, &rec.SecondHeroArtImageURL,
+		&rec.FirstName, &rec.Username, &rec.Email,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

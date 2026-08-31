@@ -72,33 +72,48 @@ type releaseTeamNoteJSON struct {
 }
 
 type releaseTeamDeckJSON struct {
-	ID          int       `json:"id"`
-	SessionID   int       `json:"session_id"`
-	HeroID      int       `json:"hero_id"`
-	UserID      int       `json:"user_id"`
-	DeckID      int       `json:"deck_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	DeckName    string    `json:"deck_name"`
-	Format      int16     `json:"format"`
-	FabraryLink *string   `json:"fabrary_link,omitempty"`
-	FirstName   *string   `json:"first_name,omitempty"`
-	Username    *string   `json:"username,omitempty"`
-	Email       string    `json:"email"`
+	ID              int       `json:"id"`
+	SessionID       int       `json:"session_id"`
+	HeroID          int       `json:"hero_id"`
+	UserID          int       `json:"user_id"`
+	DeckID          int       `json:"deck_id"`
+	CreatedAt       time.Time `json:"created_at"`
+	DeckName        string    `json:"deck_name"`
+	Name            string    `json:"name"`
+	Format          int16     `json:"format"`
+	HeroName        *string   `json:"hero_name,omitempty"`
+	HeroArtImageURL *string   `json:"hero_art_image_url,omitempty"`
+	SetID           *int      `json:"set_id,omitempty"`
+	FabraryFormat   *string   `json:"fabrary_format,omitempty"`
+	DeckSourceID    int       `json:"deck_source_id"`
+	Source          string    `json:"source"`
+	FabraryLink     *string   `json:"fabrary_link,omitempty"`
+	FirstName       *string   `json:"first_name,omitempty"`
+	Username        *string   `json:"username,omitempty"`
+	OwnerUsername   *string   `json:"owner_username,omitempty"`
+	Email           string    `json:"email"`
+	OwnerEmail      string    `json:"owner_email"`
 }
 
 type releaseTeamRecordingJSON struct {
-	ID          int       `json:"id"`
-	SessionID   int       `json:"session_id"`
-	HeroID      int       `json:"hero_id"`
-	UserID      int       `json:"user_id"`
-	RecordingID int       `json:"recording_id"`
-	CreatedAt   time.Time `json:"created_at"`
-	URL         string    `json:"url"`
-	Label       *string   `json:"label,omitempty"`
-	Format      int16     `json:"format"`
-	FirstName   *string   `json:"first_name,omitempty"`
-	Username    *string   `json:"username,omitempty"`
-	Email       string    `json:"email"`
+	ID                    int       `json:"id"`
+	SessionID             int       `json:"session_id"`
+	HeroID                int       `json:"hero_id"`
+	UserID                int       `json:"user_id"`
+	RecordingID           int       `json:"recording_id"`
+	CreatedAt             time.Time `json:"created_at"`
+	URL                   string    `json:"url"`
+	Label                 *string   `json:"label,omitempty"`
+	Format                int16     `json:"format"`
+	FirstHeroName         *string   `json:"first_hero_name,omitempty"`
+	FirstHeroArtImageURL  *string   `json:"first_hero_art_image_url,omitempty"`
+	SecondHeroName        *string   `json:"second_hero_name,omitempty"`
+	SecondHeroArtImageURL *string   `json:"second_hero_art_image_url,omitempty"`
+	FirstName             *string   `json:"first_name,omitempty"`
+	Username              *string   `json:"username,omitempty"`
+	OwnerUsername         *string   `json:"owner_username,omitempty"`
+	Email                 string    `json:"email"`
+	OwnerEmail            string    `json:"owner_email"`
 }
 
 type createReleaseTeamSessionBody struct {
@@ -189,8 +204,11 @@ func releaseTeamMyNoteJSON(n *repository.ReleaseTeamNote) releaseTeamNoteJSON {
 func releaseTeamDeckToJSON(d *repository.ReleaseTeamDeckLink) releaseTeamDeckJSON {
 	return releaseTeamDeckJSON{
 		ID: d.ID, SessionID: d.SessionID, HeroID: d.HeroID, UserID: d.UserID, DeckID: d.DeckID,
-		CreatedAt: d.CreatedAt, DeckName: d.DeckName, Format: d.Format, FabraryLink: d.FabraryLink,
-		FirstName: d.FirstName, Username: d.Username, Email: d.Email,
+		CreatedAt: d.CreatedAt, DeckName: d.DeckName, Name: d.DeckName, Format: d.Format,
+		HeroName: d.HeroName, HeroArtImageURL: d.HeroArtURL, SetID: d.SetID, FabraryFormat: d.FabraryFormat,
+		DeckSourceID: d.DeckSourceID, Source: d.Source, FabraryLink: d.FabraryLink,
+		FirstName: d.FirstName, Username: d.Username, OwnerUsername: d.Username,
+		Email: d.Email, OwnerEmail: d.Email,
 	}
 }
 
@@ -198,7 +216,11 @@ func releaseTeamRecordingToJSON(rec *repository.ReleaseTeamRecordingLink) releas
 	return releaseTeamRecordingJSON{
 		ID: rec.ID, SessionID: rec.SessionID, HeroID: rec.HeroID, UserID: rec.UserID,
 		RecordingID: rec.RecordingID, CreatedAt: rec.CreatedAt, URL: rec.URL, Label: rec.Label,
-		Format: rec.Format, FirstName: rec.FirstName, Username: rec.Username, Email: rec.Email,
+		Format: rec.Format,
+		FirstHeroName: rec.FirstHeroName, FirstHeroArtImageURL: rec.FirstHeroArtImageURL,
+		SecondHeroName: rec.SecondHeroName, SecondHeroArtImageURL: rec.SecondHeroArtImageURL,
+		FirstName: rec.FirstName, Username: rec.Username, OwnerUsername: rec.Username,
+		Email: rec.Email, OwnerEmail: rec.Email,
 	}
 }
 
