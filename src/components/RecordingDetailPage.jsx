@@ -111,9 +111,7 @@ export function RecordingDetailPage({ isLight, recordingId, active, onBack, onRe
   const isAdmin = isAdminRole(sessionProfile?.role);
   const canWrite = canWriteDecksAndRecordings(sessionProfile?.role);
   const [meta, setMeta] = useState(
-    /** @type {{ id: number, user_id: number, url: string, label?: string | null, format: number, start_seconds?: number | null, created_at: string, owner_username?: string | null, owner_email?: string, first_hero_name?: string | null, first_hero_art_image_url?: string | null, second_hero_name?: string | null, second_hero_art_image_url?: string | null } | null} */ (
-      null,
-    ),
+    /** @type {{ id: number, user_id: number, url: string, label?: string | null, format: number, start_seconds?: number | null, created_at: string, owner_username?: string | null, owner_email?: string, first_hero_name?: string | null, first_hero_art_image_url?: string | null, second_hero_name?: string | null, second_hero_art_image_url?: string | null } | null} */ (null),
   );
   const [comments, setComments] = useState(
     /** @type {{ id: number, user_id: number, comment: string, created_at: string, owner_username?: string | null, owner_email?: string }[]} */ ([]),

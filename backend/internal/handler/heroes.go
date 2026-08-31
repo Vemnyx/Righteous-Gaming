@@ -151,6 +151,154 @@ func (h *heroesHTTP) adminListHeroes(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(heroAdminListResponse{Heroes: out})
 }
 
+type missingHeroCardJSON struct {
+	CardID         int     `json:"card_id"`
+	Name           string  `json:"name"`
+	CardIdentifier *string `json:"card_identifier,omitempty"`
+	Type           *int16  `json:"type,omitempty"`
+	Young          bool    `json:"young"`
+	Classes        []int16 `json:"classes"`
+	Talents        []int16 `json:"talents"`
+	CardImageURL   *string `json:"card_image_url,omitempty"`
+	Eligible       bool    `json:"eligible"`
+	SkipReason     string  `json:"skip_reason,omitempty"`
+}
+
+type missingHeroCardsResponse struct {
+	Cards []missingHeroCardJSON `json:"cards"`
+}
+
+type createHeroesFromCardsRequest struct {
+	CardIDs []int `json:"card_ids"`
+}
+
+type createHeroesFromCardsSkippedJSON struct {
+	CardID int    `json:"card_id"`
+	Reason string `json:"reason"`
+}
+
+type createHeroesFromCardsResponse struct {
+	Created []heroAdminJSON                   `json:"created"`
+	Skipped []createHeroesFromCardsSkippedJSON `json:"skipped"`
+}
+
+func missingHeroCardToJSON(row repository.MissingHeroCard) missingHeroCardJSON {
+	classes := row.Classes
+	if classes == nil {
+		classes = []int16{}
+	}
+	talents := row.Talents
+	if talents == nil {
+		talents = []int16{}
+	}
+	return missingHeroCardJSON{
+		CardID:         row.CardID,
+		Name:           row.Name,
+		CardIdentifier: row.CardIdentifier,
+		Type:           row.HeroType,
+		Young:          row.Young,
+		Classes:        classes,
+		Talents:        talents,
+		CardImageURL:   row.CardImageURL,
+		Eligible:       row.Eligible,
+		SkipReason:     row.SkipReason,
+	}
+}
+
+func (h *heroesHTTP) adminListMissingHeroCards(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+
+	rows, err := h.app.Repo.ListMissingHeroCards(r.Context())
+	if err != nil {
+		log.Error("admin list missing hero cards", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	out := make([]missingHeroCardJSON, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, missingHeroCardToJSON(row))
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(missingHeroCardsResponse{Cards: out})
+}
+
+func (h *heroesHTTP) adminCreateHeroesFromCards(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, ok := h.requireAdmin(w, r); !ok {
+		return
+	}
+
+	var body createHeroesFromCardsRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	cardIDs := body.CardIDs
+	if len(cardIDs) == 0 {
+		missing, err := h.app.Repo.ListMissingHeroCards(r.Context())
+		if err != nil {
+			log.Error("admin create heroes list missing", "error", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		for _, row := range missing {
+			if row.Eligible {
+				cardIDs = append(cardIDs, row.CardID)
+			}
+		}
+	}
+
+	created := make([]heroAdminJSON, 0, len(cardIDs))
+	skipped := make([]createHeroesFromCardsSkippedJSON, 0)
+	seen := make(map[int]struct{}, len(cardIDs))
+	for _, cardID := range cardIDs {
+		if cardID <= 0 {
+			skipped = append(skipped, createHeroesFromCardsSkippedJSON{CardID: cardID, Reason: "invalid card id"})
+			continue
+		}
+		if _, ok := seen[cardID]; ok {
+			continue
+		}
+		seen[cardID] = struct{}{}
+
+		hero, err := h.app.Repo.CreateHeroFromCard(r.Context(), cardID)
+		if err != nil {
+			reason := "failed to create hero"
+			switch {
+			case errors.Is(err, repository.ErrCardNotFound):
+				reason = "card not found"
+			case errors.Is(err, repository.ErrHeroCardAlreadyLinked):
+				reason = "hero already exists for card"
+			case strings.Contains(err.Error(), "not a hero card"):
+				reason = "card is not a hero card"
+			case strings.Contains(err.Error(), "no valid heroes enum"):
+				reason = "card has no valid heroes enum"
+			case strings.Contains(err.Error(), "empty hero name"):
+				reason = "card has empty name"
+			default:
+				log.Error("admin create hero from card", "card_id", cardID, "error", err)
+			}
+			skipped = append(skipped, createHeroesFromCardsSkippedJSON{CardID: cardID, Reason: reason})
+			continue
+		}
+		created = append(created, heroAdminToJSON(*hero))
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(createHeroesFromCardsResponse{Created: created, Skipped: skipped})
+}
+
 func (h *heroesHTTP) adminUpdateHero(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPatch && r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

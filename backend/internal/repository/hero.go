@@ -6,11 +6,16 @@ import (
 	"fmt"
 	"strings"
 
+	"righteous-gaming/backend/internal/domain"
+
 	"github.com/jackc/pgx/v5"
 )
 
 // ErrHeroNotFound is returned when no heroes row matches the lookup.
 var ErrHeroNotFound = errors.New("repository: hero not found")
+
+// ErrHeroCardAlreadyLinked is returned when a heroes row already references the card.
+var ErrHeroCardAlreadyLinked = errors.New("repository: hero already exists for card")
 
 // Hero is a row from heroes.
 type Hero struct {
@@ -398,6 +403,163 @@ WHERE id = $1`
 	}
 	if tag.RowsAffected() == 0 {
 		return nil, ErrHeroNotFound
+	}
+	return r.GetHeroAdminByID(ctx, heroID)
+}
+
+// MissingHeroCard is a catalog Hero card with no heroes.card_id row yet.
+type MissingHeroCard struct {
+	CardID         int
+	Name           string
+	CardIdentifier *string
+	HeroType       *int16
+	Young          bool
+	Classes        []int16
+	Talents        []int16
+	CardImageURL   *string
+	Eligible       bool
+	SkipReason     string
+}
+
+// ListMissingHeroCards returns Hero-type cards that do not yet have a heroes row linked by card_id.
+func (r *Repository) ListMissingHeroCards(ctx context.Context) ([]MissingHeroCard, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	const q = `
+SELECT
+  c.id,
+  c.name,
+  c.card_identifier,
+  CASE WHEN c.heroes IS NOT NULL AND cardinality(c.heroes) >= 1 THEN c.heroes[1] ELSE NULL END AS hero_type,
+  COALESCE($1 = ANY (c.subtypes), false) AS young,
+  COALESCE(c.classes, '{}'::smallint[]) AS classes,
+  COALESCE(c.talents, '{}'::smallint[]) AS talents,
+  (
+    SELECT cp.image_url
+    FROM card_printings cp
+    WHERE cp.card_id = c.id
+    ORDER BY cp.id ASC
+    LIMIT 1
+  ) AS card_image_url
+FROM cards c
+WHERE c.type = $2
+  AND NOT EXISTS (SELECT 1 FROM heroes h WHERE h.card_id = c.id)
+ORDER BY c.name ASC, c.id ASC`
+	rows, err := r.pool.Query(ctx, q, int16(domain.CardSubtypeYoung), int16(domain.CardTypeHero))
+	if err != nil {
+		return nil, fmt.Errorf("repository: list missing hero cards: %w", err)
+	}
+	defer rows.Close()
+
+	var out []MissingHeroCard
+	for rows.Next() {
+		var row MissingHeroCard
+		if err := rows.Scan(
+			&row.CardID, &row.Name, &row.CardIdentifier, &row.HeroType, &row.Young,
+			&row.Classes, &row.Talents, &row.CardImageURL,
+		); err != nil {
+			return nil, fmt.Errorf("repository: list missing hero cards scan: %w", err)
+		}
+		name := strings.TrimSpace(row.Name)
+		switch {
+		case name == "":
+			row.Eligible = false
+			row.SkipReason = "card has empty name"
+		case row.HeroType == nil:
+			row.Eligible = false
+			row.SkipReason = "card has no heroes enum"
+		case !domain.CardHero(*row.HeroType).Valid():
+			row.Eligible = false
+			row.SkipReason = "card has invalid heroes enum"
+		default:
+			row.Eligible = true
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: list missing hero cards rows: %w", err)
+	}
+	return out, nil
+}
+
+// CreateHeroFromCard inserts a heroes row for a Hero-type catalog card that is not already linked.
+func (r *Repository) CreateHeroFromCard(ctx context.Context, cardID int) (*HeroAdminRow, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	if cardID <= 0 {
+		return nil, fmt.Errorf("repository: invalid card id")
+	}
+
+	const sel = `
+SELECT
+  c.name,
+  CASE WHEN c.heroes IS NOT NULL AND cardinality(c.heroes) >= 1 THEN c.heroes[1] ELSE NULL END AS hero_type,
+  COALESCE($2 = ANY (c.subtypes), false) AS young,
+  COALESCE(c.classes, '{}'::smallint[]) AS classes,
+  COALESCE(c.talents, '{}'::smallint[]) AS talents,
+  (
+    SELECT cp.image_url
+    FROM card_printings cp
+    WHERE cp.card_id = c.id
+    ORDER BY cp.id ASC
+    LIMIT 1
+  ) AS card_image_url,
+  EXISTS (SELECT 1 FROM heroes h WHERE h.card_id = c.id) AS already_linked,
+  c.type
+FROM cards c
+WHERE c.id = $1`
+
+	var (
+		name           string
+		heroType       *int16
+		young          bool
+		classes        []int16
+		talents        []int16
+		cardImageURL   *string
+		alreadyLinked  bool
+		cardType       int16
+	)
+	err := r.pool.QueryRow(ctx, sel, cardID, int16(domain.CardSubtypeYoung)).Scan(
+		&name, &heroType, &young, &classes, &talents, &cardImageURL, &alreadyLinked, &cardType,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrCardNotFound
+		}
+		return nil, fmt.Errorf("repository: create hero from card load: %w", err)
+	}
+	if alreadyLinked {
+		return nil, ErrHeroCardAlreadyLinked
+	}
+	if cardType != int16(domain.CardTypeHero) {
+		return nil, fmt.Errorf("repository: card is not a hero card")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fmt.Errorf("repository: empty hero name")
+	}
+	if len(name) > 100 {
+		name = name[:100]
+	}
+	if heroType == nil || !domain.CardHero(*heroType).Valid() {
+		return nil, fmt.Errorf("repository: card has no valid heroes enum")
+	}
+	if classes == nil {
+		classes = []int16{}
+	}
+	if talents == nil {
+		talents = []int16{}
+	}
+
+	const ins = `
+INSERT INTO heroes (name, type, young, classes, talents, card_id, card_image_url, art_image_url)
+VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
+RETURNING id`
+	var heroID int
+	if err := r.pool.QueryRow(ctx, ins, name, *heroType, young, classes, talents, cardID, cardImageURL).Scan(&heroID); err != nil {
+		return nil, fmt.Errorf("repository: create hero from card insert: %w", err)
 	}
 	return r.GetHeroAdminByID(ctx, heroID)
 }

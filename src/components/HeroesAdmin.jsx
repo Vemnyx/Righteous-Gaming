@@ -28,6 +28,21 @@ import {
  */
 
 /**
+ * @typedef {{
+ *   card_id: number,
+ *   name: string,
+ *   card_identifier?: string | null,
+ *   type?: number | null,
+ *   young: boolean,
+ *   classes: number[],
+ *   talents: number[],
+ *   card_image_url?: string | null,
+ *   eligible: boolean,
+ *   skip_reason?: string,
+ * }} MissingHeroCard
+ */
+
+/**
  * @param {string | undefined | null} errText
  * @returns {string}
  */
@@ -104,6 +119,12 @@ export function HeroesAdmin({ isLight, active }) {
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [reloadSeq, setReloadSeq] = useState(0);
 
+  const [missingCards, setMissingCards] = useState(/** @type {MissingHeroCard[]} */ ([]));
+  const [missingLoading, setMissingLoading] = useState(false);
+  const [missingError, setMissingError] = useState(/** @type {string | null} */ (null));
+  const [creatingCardIds, setCreatingCardIds] = useState(/** @type {number[]} */ ([]));
+  const [createBanner, setCreateBanner] = useState(/** @type {string | null} */ (null));
+
   const [editingHero, setEditingHero] = useState(/** @type {HeroAdminRow | null} */ (null));
   const [editName, setEditName] = useState("");
   const [editType, setEditType] = useState(0);
@@ -149,18 +170,113 @@ export function HeroesAdmin({ isLight, active }) {
     }
   }, [user]);
 
+  const loadMissing = useCallback(async () => {
+    if (!user) return;
+    setMissingLoading(true);
+    setMissingError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/admin/heroes/missing-cards", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(parseApiError(await res.text()));
+      const data = await res.json();
+      const list = Array.isArray(data.cards) ? data.cards : [];
+      /** @type {MissingHeroCard[]} */
+      const next = [];
+      for (const c of list) {
+        if (!c || typeof c.card_id !== "number") continue;
+        next.push({
+          card_id: c.card_id,
+          name: String(c.name ?? "").trim() || `Card #${c.card_id}`,
+          card_identifier: c.card_identifier != null ? String(c.card_identifier) : null,
+          type: typeof c.type === "number" ? c.type : null,
+          young: Boolean(c.young),
+          classes: asInt16Array(c.classes),
+          talents: asInt16Array(c.talents),
+          card_image_url: c.card_image_url != null ? String(c.card_image_url) : null,
+          eligible: Boolean(c.eligible),
+          skip_reason: c.skip_reason != null ? String(c.skip_reason) : undefined,
+        });
+      }
+      setMissingCards(next);
+    } catch (e) {
+      setMissingError(e instanceof Error ? e.message : "Failed to load missing hero cards");
+      setMissingCards([]);
+    } finally {
+      setMissingLoading(false);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (!active || !user) return undefined;
     let cancelled = false;
     void (async () => {
-      await load();
+      await Promise.all([load(), loadMissing()]);
       if (cancelled) return;
     })();
     return () => {
       cancelled = true;
     };
-  }, [active, user, load, reloadSeq]);
+  }, [active, user, load, loadMissing, reloadSeq]);
 
+  const eligibleMissing = useMemo(() => missingCards.filter((c) => c.eligible), [missingCards]);
+  const creatingAny = creatingCardIds.length > 0;
+
+  const createFromCards = useCallback(
+    /** @param {number[] | null} cardIds */
+    async (cardIds) => {
+      if (!user || creatingAny) return;
+      const ids = cardIds && cardIds.length > 0 ? cardIds : eligibleMissing.map((c) => c.card_id);
+      if (ids.length === 0) return;
+      setCreatingCardIds(ids);
+      setCreateBanner(null);
+      setMissingError(null);
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch("/api/admin/heroes/from-cards", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ card_ids: ids }),
+        });
+        const errText = await res.text();
+        if (!res.ok) throw new Error(parseApiError(errText));
+        const data = JSON.parse(errText);
+        const createdRaw = Array.isArray(data.created) ? data.created : [];
+        const skippedRaw = Array.isArray(data.skipped) ? data.skipped : [];
+        /** @type {HeroAdminRow[]} */
+        const created = [];
+        for (const h of createdRaw) {
+          const row = normalizeHeroRow(h);
+          if (row) created.push(row);
+        }
+        if (created.length > 0) {
+          setRows((prev) => {
+            const byId = new Map(prev.map((r) => [r.id, r]));
+            for (const row of created) byId.set(row.id, row);
+            return Array.from(byId.values()).sort((a, b) =>
+              a.name.localeCompare(b.name) || a.id - b.id,
+            );
+          });
+        }
+        await loadMissing();
+        const skippedCount = skippedRaw.length;
+        setCreateBanner(
+          skippedCount > 0
+            ? `Created ${created.length} hero${created.length === 1 ? "" : "es"}; skipped ${skippedCount}.`
+            : `Created ${created.length} hero${created.length === 1 ? "" : "es"}.`,
+        );
+      } catch (e) {
+        setMissingError(e instanceof Error ? e.message : "Failed to create heroes");
+      } finally {
+        setCreatingCardIds([]);
+      }
+    },
+    [user, creatingAny, eligibleMissing, loadMissing],
+  );
   const openEdit = useCallback((/** @type {HeroAdminRow} */ hero) => {
     setEditingHero(hero);
     setEditName(hero.name);
@@ -376,6 +492,101 @@ export function HeroesAdmin({ isLight, active }) {
           </button>
         </div>
       ) : null}
+
+      <div className={`rounded-xl border bg-black/20 ${tableChromeBorder}`}>
+        <div className="flex flex-col gap-3 border-b border-white/[0.1] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="m-0 text-[0.95rem] font-semibold text-[#f4f0fa]">Missing hero cards</h3>
+            <p className="m-0 mt-1 text-[0.8rem] text-[#f4f0fa]/65">
+              Catalog Hero cards with no linked heroes row yet.
+              {missingLoading
+                ? " Loading…"
+                : ` ${eligibleMissing.length} ready to create${
+                    missingCards.length > eligibleMissing.length
+                      ? ` · ${missingCards.length - eligibleMissing.length} skipped`
+                      : ""
+                  }.`}
+            </p>
+          </div>
+          <button
+            type="button"
+            className={`shrink-0 self-start ${btnPrimary}`}
+            disabled={creatingAny || missingLoading || eligibleMissing.length === 0}
+            onClick={() => void createFromCards(null)}
+          >
+            {creatingAny && creatingCardIds.length > 1 ? "Creating…" : "Create all missing"}
+          </button>
+        </div>
+
+        {createBanner ? (
+          <p className="m-0 border-b border-white/[0.08] px-4 py-2.5 text-[0.8rem] text-emerald-200/90">{createBanner}</p>
+        ) : null}
+
+        {missingError ? (
+          <p className="m-0 border-b border-white/[0.08] px-4 py-2.5 text-[0.8rem] text-red-200/95" role="alert">
+            {missingError}
+          </p>
+        ) : null}
+
+        {missingLoading && missingCards.length === 0 ? (
+          <p className="m-0 px-4 py-6 text-center text-[0.85rem] text-[#f4f0fa]/55">Checking catalog…</p>
+        ) : missingCards.length === 0 ? (
+          <p className="m-0 px-4 py-6 text-center text-[0.85rem] text-[#f4f0fa]/55">
+            Every Hero card already has a heroes row.
+          </p>
+        ) : (
+          <div className="max-h-[16rem] overflow-y-auto">
+            <table className="w-full min-w-[32rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">
+              <thead className="sticky top-0 bg-[rgba(28,22,40,0.98)] backdrop-blur-sm">
+                <tr className={`border-b text-[0.68rem] uppercase tracking-wider text-[#f4f0fa]/55 ${tableHeadBorder}`}>
+                  <th className="px-3 py-2 font-semibold sm:px-4">Card</th>
+                  <th className="px-3 py-2 font-semibold sm:px-4">Type</th>
+                  <th className="px-3 py-2 font-semibold sm:px-4">Age</th>
+                  <th className="px-3 py-2 font-semibold sm:px-4">Status</th>
+                  <th className="px-3 py-2 font-semibold sm:px-4"> </th>
+                </tr>
+              </thead>
+              <tbody>
+                {missingCards.map((card) => {
+                  const busy = creatingCardIds.includes(card.card_id);
+                  return (
+                    <tr key={card.card_id} className={`border-b ${tableRowBorder} last:border-b-0`}>
+                      <td className="px-3 py-2 sm:px-4">
+                        <div className="font-medium text-[#f4f0fa]">{card.name}</div>
+                        <div className="font-mono text-[0.7rem] text-[#f4f0fa]/45">
+                          #{card.card_id}
+                          {card.card_identifier ? ` · ${card.card_identifier}` : ""}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-[#f4f0fa]/75 sm:px-4">
+                        {card.type != null ? (cardHeroName(card.type) ?? `Type ${card.type}`) : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-[#f4f0fa]/75 sm:px-4">{card.young ? "Young" : "Adult"}</td>
+                      <td className="px-3 py-2 text-[0.75rem] sm:px-4">
+                        {card.eligible ? (
+                          <span className="text-emerald-200/85">Ready</span>
+                        ) : (
+                          <span className="text-amber-200/85">{card.skip_reason || "Skipped"}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 sm:px-4">
+                        <button
+                          type="button"
+                          className={`${btnBase} ${btnTheme}`}
+                          disabled={!card.eligible || creatingAny}
+                          onClick={() => void createFromCards([card.card_id])}
+                        >
+                          {busy ? "Creating…" : "Create"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       <div className={`overflow-x-auto rounded-xl border bg-black/20 ${tableChromeBorder}`}>
         <table className="w-full min-w-[40rem] border-collapse text-left text-[0.8125rem] text-[#f4f0fa]/90">

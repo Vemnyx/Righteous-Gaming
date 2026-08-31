@@ -67,6 +67,8 @@ func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient 
 	mux.HandleFunc("PATCH /api/admin/users/{id}", uh.adminUpdateUserProfile)
 	mux.HandleFunc("POST /api/admin/users/{id}", uh.adminUpdateUserProfile)
 	mux.HandleFunc("GET /api/admin/heroes", hh.adminListHeroes)
+	mux.HandleFunc("GET /api/admin/heroes/missing-cards", hh.adminListMissingHeroCards)
+	mux.HandleFunc("POST /api/admin/heroes/from-cards", hh.adminCreateHeroesFromCards)
 	mux.HandleFunc("PATCH /api/admin/heroes/{id}", hh.adminUpdateHero)
 	mux.HandleFunc("POST /api/admin/heroes/{id}", hh.adminUpdateHero)
 	mux.HandleFunc("POST /api/admin/heroes/{id}/recrop-art", hh.adminRecropHeroArt)
