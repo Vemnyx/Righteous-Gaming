@@ -5,6 +5,9 @@ import { roleLabel } from "../constants/roles";
 
 const PAGE_SIZE = 15;
 
+/** Must match backend service.DefaultUserPassword / CreateUser DEFAULT_PASSWORD */
+const TEMPORARY_PASSWORD = "password123+";
+
 /** @param {string | undefined | null} iso */
 function formatDateTime(iso) {
   if (iso == null || iso === "") return "—";
@@ -47,8 +50,10 @@ export function UsersAdminTable({ isLight, active, onCreateUser }) {
   const [editLastName, setEditLastName] = useState("");
   const [editDiscordName, setEditDiscordName] = useState("");
   const [editSaving, setEditSaving] = useState(false);
+  const [editResettingPassword, setEditResettingPassword] = useState(false);
   const [editError, setEditError] = useState(/** @type {string | null} */ (null));
   const [editDiscordError, setEditDiscordError] = useState(/** @type {string | null} */ (null));
+  const [editPasswordNotice, setEditPasswordNotice] = useState(/** @type {string | null} */ (null));
   const editTitleId = useId();
 
   const totalPages = useMemo(
@@ -93,11 +98,11 @@ export function UsersAdminTable({ isLight, active, onCreateUser }) {
   useEffect(() => {
     if (!editingUser) return undefined;
     const onKey = (e) => {
-      if (e.key === "Escape" && !editSaving) setEditingUser(null);
+      if (e.key === "Escape" && !editSaving && !editResettingPassword) setEditingUser(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [editingUser, editSaving]);
+  }, [editingUser, editSaving, editResettingPassword]);
 
   const openEdit = (row) => {
     setEditingUser(row);
@@ -106,19 +111,22 @@ export function UsersAdminTable({ isLight, active, onCreateUser }) {
     setEditDiscordName(row.username != null ? String(row.username) : "");
     setEditError(null);
     setEditDiscordError(null);
+    setEditPasswordNotice(null);
   };
 
   const closeEdit = () => {
-    if (editSaving) return;
+    if (editSaving || editResettingPassword) return;
     setEditingUser(null);
     setEditError(null);
     setEditDiscordError(null);
+    setEditPasswordNotice(null);
   };
 
   const saveEdit = async () => {
-    if (!user || !editingUser || editSaving) return;
+    if (!user || !editingUser || editSaving || editResettingPassword) return;
     setEditError(null);
     setEditDiscordError(null);
+    setEditPasswordNotice(null);
     setEditSaving(true);
     try {
       const token = await user.getIdToken();
@@ -162,6 +170,56 @@ export function UsersAdminTable({ isLight, active, onCreateUser }) {
       }
     } finally {
       setEditSaving(false);
+    }
+  };
+
+  const resetTemporaryPassword = async () => {
+    if (!user || !editingUser || editSaving || editResettingPassword) return;
+    const email = editingUser.email != null ? String(editingUser.email) : "this user";
+    if (
+      !window.confirm(
+        `Reset password for ${email} to the temporary password?\n\nThey will be signed out of existing sessions and must change it on next sign-in.`,
+      )
+    ) {
+      return;
+    }
+    setEditError(null);
+    setEditDiscordError(null);
+    setEditPasswordNotice(null);
+    setEditResettingPassword(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/admin/users/${editingUser.id}/reset-temporary-password`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(t?.trim() || res.statusText || `HTTP ${res.status}`);
+      }
+      const updated = await res.json();
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === updated.id
+            ? {
+                ...r,
+                default_password_changed: updated.default_password_changed === true,
+              }
+            : r
+        )
+      );
+      setEditingUser((prev) =>
+        prev && prev.id === updated.id
+          ? { ...prev, default_password_changed: updated.default_password_changed === true }
+          : prev
+      );
+      setEditPasswordNotice(
+        `Password reset to temporary (${TEMPORARY_PASSWORD}). They must change it on next sign-in.`,
+      );
+    } catch (e) {
+      setEditError(e instanceof Error ? parseApiError(e.message) : "Failed to reset password");
+    } finally {
+      setEditResettingPassword(false);
     }
   };
 
@@ -358,7 +416,7 @@ export function UsersAdminTable({ isLight, active, onCreateUser }) {
                       className={inputCls}
                       value={editFirstName}
                       autoComplete="given-name"
-                      disabled={editSaving}
+                      disabled={editSaving || editResettingPassword}
                       onChange={(e) => setEditFirstName(e.target.value)}
                     />
                   </label>
@@ -371,7 +429,7 @@ export function UsersAdminTable({ isLight, active, onCreateUser }) {
                       className={inputCls}
                       value={editLastName}
                       autoComplete="family-name"
-                      disabled={editSaving}
+                      disabled={editSaving || editResettingPassword}
                       onChange={(e) => setEditLastName(e.target.value)}
                     />
                   </label>
@@ -384,7 +442,7 @@ export function UsersAdminTable({ isLight, active, onCreateUser }) {
                       className={inputCls}
                       value={editDiscordName}
                       autoComplete="off"
-                      disabled={editSaving}
+                      disabled={editSaving || editResettingPassword}
                       onChange={(e) => {
                         setEditDiscordName(e.target.value);
                         setEditDiscordError(null);
@@ -394,18 +452,48 @@ export function UsersAdminTable({ isLight, active, onCreateUser }) {
                       <span className="text-[0.8rem] text-red-200/90">{editDiscordError}</span>
                     ) : null}
                   </label>
+                  <div className="rounded-xl border border-white/[0.12] bg-black/25 px-3.5 py-3">
+                    <p className="m-0 text-[0.78rem] font-semibold uppercase tracking-wide text-[#f4f0fa]/55">
+                      Password
+                    </p>
+                    <p className="mt-1 m-0 text-[0.875rem] text-[#f4f0fa]/85">
+                      {editingUser.default_password_changed ? "Updated" : "Temporary"}
+                      <span className="text-[#f4f0fa]/50"> · </span>
+                      temporary is{" "}
+                      <code className="rounded bg-black/40 px-1.5 py-0.5 text-[0.8rem] text-[#e8def5]">
+                        {TEMPORARY_PASSWORD}
+                      </code>
+                    </p>
+                    <button
+                      type="button"
+                      className={`mt-3 ${btnBase} ${btnTheme}`}
+                      disabled={editSaving || editResettingPassword || !editingUser.uid}
+                      title={!editingUser.uid ? "User is not registered in Firebase" : undefined}
+                      onClick={() => void resetTemporaryPassword()}
+                    >
+                      {editResettingPassword ? "Resetting…" : "Reset to temporary password"}
+                    </button>
+                    {editPasswordNotice ? (
+                      <p className="mt-2 m-0 text-[0.8rem] text-emerald-200/90">{editPasswordNotice}</p>
+                    ) : null}
+                  </div>
                 </div>
                 {editError ? <p className="mt-3 text-[0.85rem] text-red-200/90">{editError}</p> : null}
                 <div className="mt-5 flex justify-end gap-2">
                   <button
                     type="button"
                     className={`${btnBase} ${btnTheme}`}
-                    disabled={editSaving}
+                    disabled={editSaving || editResettingPassword}
                     onClick={closeEdit}
                   >
                     Cancel
                   </button>
-                  <button type="button" className={btnPrimary} disabled={editSaving} onClick={() => void saveEdit()}>
+                  <button
+                    type="button"
+                    className={btnPrimary}
+                    disabled={editSaving || editResettingPassword}
+                    onClick={() => void saveEdit()}
+                  >
                     {editSaving ? "Saving…" : "Save"}
                   </button>
                 </div>

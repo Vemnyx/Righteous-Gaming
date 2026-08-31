@@ -437,6 +437,54 @@ func (s *UserService) ChangePasswordForIDToken(ctx context.Context, idToken, new
 	return u, nil
 }
 
+// ResetTemporaryPasswordForAdmin sets a user's Firebase password back to DefaultUserPassword
+// and requires them to change it on next sign-in.
+func (s *UserService) ResetTemporaryPasswordForAdmin(ctx context.Context, idToken string, userID int) (*repository.User, error) {
+	idToken = strings.TrimSpace(idToken)
+	if idToken == "" {
+		return nil, fmt.Errorf("%w: id token required", ErrValidation)
+	}
+	if userID <= 0 {
+		return nil, fmt.Errorf("%w: invalid user id", ErrValidation)
+	}
+	caller, err := s.UserForIDToken(ctx, idToken)
+	if err != nil {
+		return nil, err
+	}
+	if caller.Role == nil || *caller.Role != domain.RoleAdmin {
+		return nil, fmt.Errorf("%w", ErrForbidden)
+	}
+
+	row, err := s.repo.UserByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, repository.ErrUserNotFound) {
+			return nil, fmt.Errorf("%w", ErrUserNotFound)
+		}
+		return nil, fmt.Errorf("service: user by id: %w", err)
+	}
+	uid := strings.TrimSpace(row.UID)
+	if uid == "" {
+		return nil, fmt.Errorf("%w: user is not registered in Firebase", ErrValidation)
+	}
+
+	params := (&firebaseauth.UserToUpdate{}).Password(DefaultUserPassword)
+	if _, err := s.fb.UpdateUser(ctx, uid, params); err != nil {
+		return nil, fmt.Errorf("service: firebase reset password: %w", err)
+	}
+	if err := s.fb.RevokeRefreshTokens(ctx, uid); err != nil {
+		return nil, fmt.Errorf("service: revoke refresh tokens: %w", err)
+	}
+	if err := s.repo.ClearDefaultPasswordChanged(ctx, row.ID); err != nil {
+		return nil, fmt.Errorf("service: clear default password changed: %w", err)
+	}
+
+	updated, err := s.repo.UserByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("service: reload user: %w", err)
+	}
+	return updated, nil
+}
+
 func firebaseParamsFromRow(email, uid string, username *string) *firebaseauth.UserToCreate {
 	p := (&firebaseauth.UserToCreate{}).
 		UID(uid).

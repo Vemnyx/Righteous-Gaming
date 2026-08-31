@@ -220,6 +220,27 @@ WHERE id = $1`, userID)
 	return nil
 }
 
+// ClearDefaultPasswordChanged sets default_password_changed = false (force change on next sign-in).
+func (r *Repository) ClearDefaultPasswordChanged(ctx context.Context, userID int) error {
+	if r.pool == nil {
+		return fmt.Errorf("repository: pool is closed")
+	}
+	if userID <= 0 {
+		return fmt.Errorf("repository: invalid user id")
+	}
+	tag, err := r.pool.Exec(ctx, `
+UPDATE users
+SET default_password_changed = false
+WHERE id = $1`, userID)
+	if err != nil {
+		return fmt.Errorf("repository: clear default password changed: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
 // UpdateUserProfile updates username, first name, and last name for a user.
 func (r *Repository) UpdateUserProfile(ctx context.Context, userID int, username, firstName, lastName *string) (*User, error) {
 	if r.pool == nil {

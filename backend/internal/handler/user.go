@@ -193,6 +193,59 @@ func (h *userHTTP) adminUpdateUserProfile(w http.ResponseWriter, r *http.Request
 	})
 }
 
+func (h *userHTTP) adminResetTemporaryPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	idToken := bearerIDToken(r.Header.Get("Authorization"))
+	if idToken == "" {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	userID, err := strconv.Atoi(strings.TrimSpace(r.PathValue("id")))
+	if err != nil || userID <= 0 {
+		http.Error(w, "invalid user id", http.StatusBadRequest)
+		return
+	}
+	updated, err := h.svc.ResetTemporaryPasswordForAdmin(r.Context(), idToken, userID)
+	if err != nil {
+		if errors.Is(err, service.ErrValidation) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if errors.Is(err, service.ErrUnauthenticated) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if errors.Is(err, service.ErrForbidden) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		if errors.Is(err, service.ErrUserNotFound) {
+			http.Error(w, "User not found", http.StatusNotFound)
+			return
+		}
+		log.Error("failed to reset temporary password as admin", "error", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(adminListedUserJSON{
+		ID:                     updated.ID,
+		Email:                  updated.Email,
+		Username:               updated.Username,
+		FirstName:              updated.FirstName,
+		LastName:               updated.LastName,
+		UID:                    updated.UID,
+		Role:                   updated.Role,
+		CreatedAt:              updated.CreatedAt,
+		RegisteredAt:           updated.RegisteredAt,
+		DefaultPasswordChanged: updated.DefaultPasswordChanged,
+	})
+}
+
 func clampIntQuery(s string, fallback, min, max int) int {
 	s = strings.TrimSpace(s)
 	if s == "" {
