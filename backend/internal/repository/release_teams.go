@@ -309,6 +309,24 @@ WHERE id = $1 AND status = $3`,
 	return r.GetReleaseTeamSession(ctx, sessionID)
 }
 
+// DeleteReleaseTeamSession permanently removes a session and cascaded rows.
+func (r *Repository) DeleteReleaseTeamSession(ctx context.Context, sessionID int) error {
+	if r.pool == nil {
+		return fmt.Errorf("repository: pool is closed")
+	}
+	if sessionID <= 0 {
+		return ErrReleaseTeamSessionNotFound
+	}
+	tag, err := r.pool.Exec(ctx, `DELETE FROM release_team_sessions WHERE id = $1`, sessionID)
+	if err != nil {
+		return fmt.Errorf("repository: delete release team session: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrReleaseTeamSessionNotFound
+	}
+	return nil
+}
+
 // SessionHasHero reports whether heroID belongs to the session.
 func (r *Repository) SessionHasHero(ctx context.Context, sessionID, heroID int) (bool, error) {
 	if r.pool == nil {

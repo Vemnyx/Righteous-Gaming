@@ -21,12 +21,11 @@ import { DecksList } from "../components/DecksList";
 import { DeckDetailPage } from "../components/DeckDetailPage";
 import { RecordingsList } from "../components/RecordingsList";
 import { RecordingDetailPage } from "../components/RecordingDetailPage";
-import { SetsAdmin } from "../components/SetsAdmin";
-import { HeroesAdmin } from "../components/HeroesAdmin";
-import { CardsAdmin } from "../components/CardsAdmin";
+import { CatalogAdmin } from "../components/CatalogAdmin";
 import { PlayTesting } from "../components/PlayTesting";
 import { Meetings } from "../components/Meetings";
 import { ReleaseTeams } from "../components/ReleaseTeams";
+import { ReleaseTeamsAdmin } from "../components/ReleaseTeamsAdmin";
 import { UserAccountMenu } from "../components/UserAccountMenu";
 import { UserSettings } from "../components/UserSettings";
 import { UserProfile } from "../components/UserProfile";
@@ -90,12 +89,11 @@ const DATA_SUB_LINKS = [
 /** @type {ResourceSubLink[]} */
 const ADMIN_SUB_LINKS = [
   { segment: "users", label: "Users", path: "/admin/users" },
-  { segment: "sets", label: "Sets", path: "/admin/sets" },
-  { segment: "cards", label: "Cards", path: "/admin/cards" },
-  { segment: "heroes", label: "Heroes", path: "/admin/heroes" },
+  { segment: "catalog", label: "Catalog", path: "/admin/catalog" },
   { segment: "announcements", label: "Announcements", path: "/admin/announcements" },
   { segment: "card-rater", label: "Card Rater", path: "/admin/card-rater" },
   { segment: "events", label: "Events", path: "/admin/events" },
+  { segment: "release-teams", label: "Release Teams", path: "/admin/release-teams" },
 ];
 
 /** Prefix so admin section tab ids never collide with member tabs (e.g. announcements). */
@@ -221,13 +219,18 @@ function buildDashboardPathname(
   if (tabId === ADMIN_TAB_ID) {
     const seg =
       adminChild === "users" ||
-      adminChild === "sets" ||
-      adminChild === "cards" ||
-      adminChild === "heroes" ||
+      adminChild === "catalog" ||
       adminChild === "announcements" ||
       adminChild === "card-rater" ||
-      adminChild === "events"
-        ? adminChild
+      adminChild === "events" ||
+      adminChild === "release-teams" ||
+      // Legacy catalog URLs still resolve in parse; normalize for path building.
+      adminChild === "sets" ||
+      adminChild === "cards" ||
+      adminChild === "heroes"
+        ? adminChild === "sets" || adminChild === "cards" || adminChild === "heroes"
+          ? "catalog"
+          : adminChild
         : DEFAULT_ADMIN_SEGMENT;
     if (seg === "announcements") {
       if (announcementForm === "new") return "/admin/announcements/new";
@@ -618,7 +621,8 @@ function parseDashboardPathname(pathname) {
         adminAnnouncementForm: null,
       };
     }
-    if (b === "sets") {
+    if (b === "sets" || b === "cards" || b === "heroes") {
+      /** Legacy `/admin/sets|cards|heroes` → Catalog tab. */
       if (c !== undefined || rest.length > 0) return { kind: "invalid" };
       return {
         kind: "ok",
@@ -626,11 +630,11 @@ function parseDashboardPathname(pathname) {
         resourcesChild: null,
         resourcesCardIdentifier: null,
         resourcesCardRaterId: null,
-        adminChild: "sets",
+        adminChild: "catalog",
         adminAnnouncementForm: null,
       };
     }
-    if (b === "cards") {
+    if (b === "catalog") {
       if (c !== undefined || rest.length > 0) return { kind: "invalid" };
       return {
         kind: "ok",
@@ -638,11 +642,11 @@ function parseDashboardPathname(pathname) {
         resourcesChild: null,
         resourcesCardIdentifier: null,
         resourcesCardRaterId: null,
-        adminChild: "cards",
+        adminChild: "catalog",
         adminAnnouncementForm: null,
       };
     }
-    if (b === "heroes") {
+    if (b === "release-teams") {
       if (c !== undefined || rest.length > 0) return { kind: "invalid" };
       return {
         kind: "ok",
@@ -650,7 +654,7 @@ function parseDashboardPathname(pathname) {
         resourcesChild: null,
         resourcesCardIdentifier: null,
         resourcesCardRaterId: null,
-        adminChild: "heroes",
+        adminChild: "release-teams",
         adminAnnouncementForm: null,
       };
     }
@@ -2665,12 +2669,8 @@ export default function Dashboard({ onNavigate }) {
                 announcementForm={adminAnnouncementForm}
                 navigateAnnouncementForm={navigateAdminAnnouncementForm}
               />
-            ) : tab.segment === "sets" ? (
-              <SetsAdmin isLight={isLight} active={activeTab === ADMIN_TAB_ID && adminChild === "sets"} />
-            ) : tab.segment === "cards" ? (
-              <CardsAdmin isLight={isLight} active={activeTab === ADMIN_TAB_ID && adminChild === "cards"} />
-            ) : tab.segment === "heroes" ? (
-              <HeroesAdmin isLight={isLight} active={activeTab === ADMIN_TAB_ID && adminChild === "heroes"} />
+            ) : tab.segment === "catalog" ? (
+              <CatalogAdmin isLight={isLight} active={activeTab === ADMIN_TAB_ID && adminChild === "catalog"} />
             ) : tab.segment === "card-rater" ? (
               <CardRaterAdmin
                 isLight={isLight}
@@ -2683,6 +2683,11 @@ export default function Dashboard({ onNavigate }) {
                 active={activeTab === ADMIN_TAB_ID && adminChild === "events"}
                 onOpenEvent={openEventDetail}
                 onEventDeleted={onAdminEventDeleted}
+              />
+            ) : tab.segment === "release-teams" ? (
+              <ReleaseTeamsAdmin
+                isLight={isLight}
+                active={activeTab === ADMIN_TAB_ID && adminChild === "release-teams"}
               />
             ) : tab.id === RESOURCES_TAB_ID ? (
               resourcesChild === "cards" && resourcesCardIdentifier ? (

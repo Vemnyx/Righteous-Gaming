@@ -461,6 +461,30 @@ func (h *releaseTeamsHTTP) closeSession(w http.ResponseWriter, r *http.Request) 
 	_ = json.NewEncoder(w).Encode(map[string]any{"session": releaseTeamSessionToJSON(s)})
 }
 
+// DELETE /api/release-teams/sessions/{id}
+func (h *releaseTeamsHTTP) deleteSession(w http.ResponseWriter, r *http.Request) {
+	u, ok := h.sessionUser(w, r)
+	if !ok {
+		return
+	}
+	if !requireReleaseTeamsAccess(w, u) {
+		return
+	}
+	if !h.isAdmin(u) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	id, ok := h.parseSessionID(w, r)
+	if !ok {
+		return
+	}
+	if err := h.app.Repo.DeleteReleaseTeamSession(r.Context(), id); err != nil {
+		h.writeRepoErr(w, err, "delete release team session")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // GET /api/release-teams/sessions/{id}/heroes/{heroId}/members
 func (h *releaseTeamsHTTP) listMembers(w http.ResponseWriter, r *http.Request) {
 	u, ok := h.sessionUser(w, r)

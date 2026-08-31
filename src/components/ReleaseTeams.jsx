@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
-import {
-  CARD_FORMAT_NAMES,
-  cardFormatName,
-  formatUsesYoungHeroes,
-  isValidCardFormatId,
-} from "../constants/cardFormat";
+import { cardFormatName } from "../constants/cardFormat";
 import { canWriteDecksAndRecordings, isAdminRole } from "../constants/roles";
 
 /** @typedef {{ id: number, name: string, young?: boolean, card_image_url?: string | null, art_image_url?: string | null, formats?: number[] }} ReleaseHero */
@@ -45,14 +40,12 @@ function heroPortraitURL(hero) {
   return card || null;
 }
 
-/** @param {ReleaseHero} hero @param {number} formatId */
-function heroLegalForFormat(hero, formatId) {
-  if (!isValidCardFormatId(formatId)) return false;
-  const formats = Array.isArray(hero.formats) ? hero.formats : [];
-  if (formats.length > 0 && !formats.includes(formatId)) return false;
-  const preferYoung = formatUsesYoungHeroes(formatId);
-  if (preferYoung === undefined) return true;
-  return preferYoung ? hero.young === true : hero.young !== true;
+/** Full card image (not cropped art) for Team tab display. @param {ReleaseHero} hero */
+function heroCardImageURL(hero) {
+  const card = hero?.card_image_url != null ? String(hero.card_image_url).trim() : "";
+  if (card) return card;
+  const art = hero?.art_image_url != null ? String(hero.art_image_url).trim() : "";
+  return art || null;
 }
 
 /** @param {{ first_name?: string | null, last_name?: string | null, username?: string | null, email?: string }} row */
@@ -79,18 +72,9 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
   const [listTab, setListTab] = useState(/** @type {"current" | "past"} */ ("current"));
   const [sessions, setSessions] = useState(/** @type {ReleaseSession[]} */ ([]));
   const [heroesMeta, setHeroesMeta] = useState(/** @type {ReleaseHero[]} */ ([]));
-  const [sets, setSets] = useState(/** @type {Array<{ id: number, name: string }>} */ ([]));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [reloadSeq, setReloadSeq] = useState(0);
-
-  const [createOpen, setCreateOpen] = useState(false);
-  const [createTitle, setCreateTitle] = useState("");
-  const [createFormat, setCreateFormat] = useState(/** @type {number | ""} */ (""));
-  const [createSetId, setCreateSetId] = useState(/** @type {number | ""} */ (""));
-  const [createHeroIds, setCreateHeroIds] = useState(/** @type {number[]} */ ([]));
-  const [createSubmitting, setCreateSubmitting] = useState(false);
-  const [createError, setCreateError] = useState(/** @type {string | null} */ (null));
 
   const [session, setSession] = useState(/** @type {ReleaseSession | null} */ (null));
   const [sessionLoading, setSessionLoading] = useState(false);
@@ -134,6 +118,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
   const cardShell = isLight
     ? "border border-white/15 bg-[rgba(42,37,54,0.88)] shadow-[0_8px_28px_rgb(40_20_70/0.18)]"
     : "border border-white/15 bg-black/35 shadow-[0_8px_28px_rgb(0_0_0/0.35)]";
+  const innerShell = "rounded-xl border border-white/12 bg-black/25";
   const btnBase =
     "inline-flex items-center justify-center rounded-lg border px-3 py-1.5 text-[0.85rem] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50";
   const btnTheme = isLight
@@ -143,6 +128,30 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
     "border-white/20 bg-transparent text-[#f4f0fa]/85 hover:border-white/35 hover:bg-white/5";
   const inputCls =
     "w-full rounded-lg border border-white/20 bg-black/35 px-3 py-2 text-[0.9rem] text-[#f4f0fa] outline-none focus:border-purple-300/55";
+
+  /**
+   * Tab control meant to sit in the top-left of a shared panel header.
+   * @param {string} id
+   * @param {boolean} on
+   * @param {string} label
+   * @param {() => void} onClick
+   */
+  const panelTabBtn = (id, on, label, onClick) => (
+    <button
+      key={id}
+      type="button"
+      role="tab"
+      aria-selected={on}
+      className={`relative min-w-[8.5rem] px-7 py-3.5 text-[1.05rem] font-semibold tracking-wide transition sm:min-w-[10.5rem] sm:px-9 sm:py-4 sm:text-[1.2rem] ${
+        on
+          ? "bg-black/25 text-[#f4f0fa] after:absolute after:inset-x-3 after:bottom-0 after:h-[3px] after:rounded-full after:bg-white/55 sm:after:inset-x-4"
+          : "text-[#f4f0fa]/55 hover:bg-black/15 hover:text-[#f4f0fa]/85"
+      }`}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
 
   const isPast = session?.status === 1;
   const isCurrent = session?.status === 0;
@@ -156,11 +165,6 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
   );
   const canMutateTeam = Boolean(isCurrent && (isAdmin || iAmMember));
   const myNote = useMemo(() => notes.find((n) => n.user_id === myUserId) ?? null, [notes, myUserId]);
-
-  const createLegalHeroes = useMemo(() => {
-    if (createFormat === "" || !isValidCardFormatId(createFormat)) return [];
-    return heroesMeta.filter((h) => heroLegalForFormat(h, createFormat));
-  }, [heroesMeta, createFormat]);
 
   const loadList = useCallback(async () => {
     if (!user) return;
@@ -201,31 +205,14 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
           const meta = await metaRes.json();
           setHeroesMeta(Array.isArray(meta.heroes) ? meta.heroes : []);
         }
-        if (isAdmin) {
-          const setsRes = await fetch("/api/sets");
-          if (cancelled) return;
-          if (setsRes.ok) {
-            const setsData = await setsRes.json();
-            const list = Array.isArray(setsData.sets)
-              ? setsData.sets
-              : Array.isArray(setsData)
-                ? setsData
-                : [];
-            setSets(
-              list
-                .filter((s) => s && typeof s.id === "number" && typeof s.name === "string")
-                .map((s) => ({ id: s.id, name: s.name })),
-            );
-          }
-        }
       } catch {
-        /* ignore meta load errors until create */
+        /* ignore meta load errors */
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [active, user, isAdmin]);
+  }, [active, user]);
 
   const loadSession = useCallback(async () => {
     if (!user || !sessionId) return;
@@ -335,56 +322,6 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
     const token = await user.getIdToken();
     return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
   }, [user]);
-
-  const openCreate = () => {
-    setCreateTitle("");
-    setCreateFormat("");
-    setCreateSetId("");
-    setCreateHeroIds([]);
-    setCreateError(null);
-    setCreateOpen(true);
-  };
-
-  const submitCreate = async () => {
-    if (!user) return;
-    if (!createTitle.trim()) {
-      setCreateError("Enter a title.");
-      return;
-    }
-    if (createFormat === "" || !isValidCardFormatId(createFormat)) {
-      setCreateError("Select a format.");
-      return;
-    }
-    if (createHeroIds.length === 0) {
-      setCreateError("Select at least one hero.");
-      return;
-    }
-    setCreateSubmitting(true);
-    setCreateError(null);
-    try {
-      const headers = await authHeaders();
-      const body = {
-        title: createTitle.trim(),
-        format: createFormat,
-        hero_ids: createHeroIds,
-        set_id: createSetId === "" ? null : createSetId,
-      };
-      const res = await fetch("/api/release-teams/sessions", {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(parseApiError(await res.text()));
-      const data = await res.json();
-      setCreateOpen(false);
-      if (data.session?.id) onOpenSession(data.session.id);
-      else setReloadSeq((n) => n + 1);
-    } catch (e) {
-      setCreateError(e instanceof Error ? e.message : "Failed to create session");
-    } finally {
-      setCreateSubmitting(false);
-    }
-  };
 
   const closeSession = async () => {
     if (!user || !sessionId || !isAdmin) return;
@@ -607,32 +544,6 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
     }
   };
 
-  /**
-   * @param {string} id
-   * @param {boolean} on
-   * @param {string} label
-   * @param {() => void} onClick
-   */
-  const sectionTabBtn = (id, on, label, onClick) => (
-    <button
-      key={id}
-      type="button"
-      role="tab"
-      aria-selected={on}
-      className={`rounded-xl border px-5 py-3 text-[0.95rem] font-semibold transition sm:px-6 sm:py-3.5 sm:text-[1.05rem] ${
-        on
-          ? "border-white/30 bg-white/[0.12] text-[#f4f0fa] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
-          : "border-white/15 bg-black/25 text-[#f4f0fa]/7 hover:border-white/25 hover:bg-black/35 hover:text-[#f4f0fa]"
-      }`}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
-
-  const sectionTabListCls =
-    "inline-flex flex-wrap gap-2 rounded-2xl border border-white/[0.12] bg-black/20 p-2 sm:gap-2.5 sm:p-2.5";
-
   if (sessionId) {
     return (
       <div className="flex w-full flex-col gap-4 px-1 pb-8 pt-1 sm:px-0">
@@ -667,48 +578,54 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
           <p className="text-[0.9rem] text-[#f4f0fa]/65">Loading session…</p>
         ) : session ? (
           <>
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-              <label className="flex min-w-[12rem] flex-col gap-1 text-[0.8rem] text-[#f4f0fa]/7">
-                Hero
-                <select
-                  className={inputCls}
-                  value={selectedHeroId ?? ""}
-                  onChange={(e) => {
-                    setSelectedHeroId(Number(e.target.value));
-                    setHeroTab("team");
-                  }}
-                >
-                  {(session.heroes || []).map((h) => (
-                    <option key={h.id} value={h.id}>
-                      {h.name}
-                      {h.young ? " (Young)" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className={sectionTabListCls} role="tablist" aria-label="Hero sections">
-                {sectionTabBtn("team", heroTab === "team", "Team", () => setHeroTab("team"))}
-                {sectionTabBtn("decklists", heroTab === "decklists", "Decklists", () => setHeroTab("decklists"))}
-                {sectionTabBtn("notes", heroTab === "notes", "Notes", () => setHeroTab("notes"))}
-                {sectionTabBtn("recordings", heroTab === "recordings", "Recordings", () =>
-                  setHeroTab("recordings"),
-                )}
+            <label className="flex max-w-xs flex-col gap-1 text-[0.8rem] text-[#f4f0fa]/7">
+              Hero
+              <select
+                className={inputCls}
+                value={selectedHeroId ?? ""}
+                onChange={(e) => {
+                  setSelectedHeroId(Number(e.target.value));
+                  setHeroTab("team");
+                }}
+              >
+                {(session.heroes || []).map((h) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name}
+                    {h.young ? " (Young)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className={`overflow-hidden rounded-2xl ${cardShell}`}>
+              <div className="flex flex-wrap items-stretch border-b border-white/[0.12] bg-black/20">
+                <div className="flex min-w-0 flex-wrap" role="tablist" aria-label="Hero sections">
+                  {panelTabBtn("team", heroTab === "team", "Team", () => setHeroTab("team"))}
+                  {panelTabBtn("decklists", heroTab === "decklists", "Decklists", () => setHeroTab("decklists"))}
+                  {panelTabBtn("notes", heroTab === "notes", "Notes", () => setHeroTab("notes"))}
+                  {panelTabBtn("recordings", heroTab === "recordings", "Recordings", () =>
+                    setHeroTab("recordings"),
+                  )}
+                </div>
               </div>
-            </div>
 
-            {heroDataError ? (
-              <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100" role="alert">
-                {heroDataError}
-              </p>
-            ) : null}
+              <div className="p-4 sm:p-5" role="tabpanel">
+                {heroDataError ? (
+                  <p
+                    className="mb-3 rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100"
+                    role="alert"
+                  >
+                    {heroDataError}
+                  </p>
+                ) : null}
 
-            {heroDataLoading && members.length === 0 && heroTab === "team" ? (
-              <p className="text-[0.9rem] text-[#f4f0fa]/65">Loading…</p>
-            ) : null}
+                {heroDataLoading && members.length === 0 && heroTab === "team" ? (
+                  <p className="text-[0.9rem] text-[#f4f0fa]/65">Loading…</p>
+                ) : null}
 
             {heroTab === "team" && selectedHero ? (
               <div className="grid gap-4 md:grid-cols-2">
-                <div className={`rounded-2xl p-4 ${cardShell}`}>
+                <div className={`p-4 ${innerShell}`}>
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <h3 className="m-0 text-[1rem] font-semibold text-white">Team</h3>
                     {isCurrent && !isAdmin ? (
@@ -791,16 +708,16 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                     )}
                   </ul>
                 </div>
-                <div className={`flex items-center justify-center rounded-2xl p-4 ${cardShell}`}>
-                  {heroPortraitURL(selectedHero) ? (
+                <div className={`flex items-center justify-center p-4 ${innerShell}`}>
+                  {heroCardImageURL(selectedHero) ? (
                     <img
-                      src={heroPortraitURL(selectedHero)}
+                      src={heroCardImageURL(selectedHero)}
                       alt={selectedHero.name}
                       className="max-h-[28rem] w-auto max-w-full rounded-xl object-contain"
                       draggable={false}
                     />
                   ) : (
-                    <p className="m-0 text-[#f4f0fa]/5">No hero art</p>
+                    <p className="m-0 text-[#f4f0fa]/5">No card image</p>
                   )}
                 </div>
               </div>
@@ -819,7 +736,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                     </p>
                   </div>
                 ) : null}
-                <div className={`overflow-x-auto rounded-2xl ${cardShell}`}>
+                <div className={`overflow-x-auto ${innerShell}`}>
                   <table className="w-full min-w-[28rem] border-collapse text-left text-[0.9rem]">
                     <thead>
                       <tr className="border-b border-white/15 text-[#f4f0fa]/65">
@@ -885,7 +802,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                       const expanded = expandedNoteId === row.id;
                       return (
                         <li key={row.id}>
-                          <div className={`rounded-2xl ${cardShell} overflow-hidden`}>
+                          <div className={`${innerShell} overflow-hidden`}>
                             {!expanded ? (
                               <button
                                 type="button"
@@ -932,7 +849,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                     Add recording
                   </button>
                 ) : null}
-                <div className={`overflow-x-auto rounded-2xl ${cardShell}`}>
+                <div className={`overflow-x-auto ${innerShell}`}>
                   <table className="w-full min-w-[28rem] border-collapse text-left text-[0.9rem]">
                     <thead>
                       <tr className="border-b border-white/15 text-[#f4f0fa]/65">
@@ -971,6 +888,8 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                 </div>
               </div>
             ) : null}
+              </div>
+            </div>
           </>
         ) : null}
 
@@ -1147,190 +1066,76 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
 
   return (
     <div className="flex w-full flex-col gap-4 px-1 pb-8 pt-1 sm:px-0">
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-        <div className={sectionTabListCls} role="tablist" aria-label="Release Teams sections">
-          {sectionTabBtn("current", listTab === "current", "Current", () => setListTab("current"))}
-          {sectionTabBtn("past", listTab === "past", "Past", () => setListTab("past"))}
+      <div className={`overflow-hidden rounded-2xl ${cardShell}`}>
+        <div className="flex flex-wrap items-stretch border-b border-white/[0.12] bg-black/20">
+          <div className="flex min-w-0 flex-wrap" role="tablist" aria-label="Release Teams sections">
+            {panelTabBtn("current", listTab === "current", "Current", () => setListTab("current"))}
+            {panelTabBtn("past", listTab === "past", "Past", () => setListTab("past"))}
+          </div>
         </div>
-        {isAdmin && listTab === "current" ? (
-          <button type="button" className={`${btnBase} ${btnTheme}`} onClick={openCreate}>
-            New session
-          </button>
-        ) : null}
-      </div>
 
-      {error ? (
-        <p className="rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100" role="alert">
-          {error}
-        </p>
-      ) : null}
-
-      {loading && sessions.length === 0 ? (
-        <p className="text-[0.9rem] text-[#f4f0fa]/65">Loading…</p>
-      ) : sessions.length === 0 ? (
-        <p className="text-[0.9rem] text-[#f4f0fa]/60">
-          {listTab === "current" ? "No current release team sessions." : "No past sessions."}
-        </p>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {sessions.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => onOpenSession(s.id)}
-              className={`rounded-2xl p-4 text-left transition hover:border-purple-300/40 ${cardShell}`}
+        <div className="p-4 sm:p-5" role="tabpanel">
+          {error ? (
+            <p
+              className="mb-3 rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100"
+              role="alert"
             >
-              <p className="m-0 text-[1.05rem] font-semibold text-white">{s.title}</p>
-              <p className="mt-1 text-[0.85rem] text-[#f4f0fa]/65">
-                {cardFormatName(s.format)}
-                {s.set_name ? ` · ${s.set_name}` : ""}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {(s.heroes || []).map((h) => {
-                  const url = heroPortraitURL(h);
-                  return (
-                    <span
-                      key={h.id}
-                      title={h.name}
-                      className="size-10 overflow-hidden rounded-full bg-black/40 ring-1 ring-white/20"
-                    >
-                      {url ? (
-                        <img src={url} alt={h.name} className="h-full w-full object-cover" draggable={false} />
-                      ) : (
-                        <span className="flex h-full w-full items-center justify-center text-[0.7rem] font-semibold">
-                          {(h.name || "?").charAt(0)}
-                        </span>
-                      )}
-                    </span>
-                  );
-                })}
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
+              {error}
+            </p>
+          ) : null}
 
-      {createOpen
-        ? createPortal(
-            <div
-              className="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 p-4"
-              role="presentation"
-              onClick={(e) => {
-                if (e.target === e.currentTarget && !createSubmitting) setCreateOpen(false);
-              }}
-            >
-              <div
-                role="dialog"
-                aria-modal="true"
-                className={`max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl p-5 ${cardShell}`}
-              >
-                <h3 className="m-0 text-[1.1rem] font-semibold text-white">New release team session</h3>
-                <label className="mt-4 flex flex-col gap-1 text-[0.8rem] text-[#f4f0fa]/7">
-                  Title
-                  <input
-                    className={inputCls}
-                    value={createTitle}
-                    onChange={(e) => setCreateTitle(e.target.value)}
-                    placeholder="e.g. Heavy Hitters release"
-                  />
-                </label>
-                <label className="mt-3 flex flex-col gap-1 text-[0.8rem] text-[#f4f0fa]/7">
-                  Format
-                  <select
-                    className={inputCls}
-                    value={createFormat}
-                    onChange={(e) => {
-                      setCreateFormat(e.target.value === "" ? "" : Number(e.target.value));
-                      setCreateHeroIds([]);
-                    }}
-                  >
-                    <option value="">Select format…</option>
-                    {CARD_FORMAT_NAMES.map((name, idx) => (
-                      <option key={name} value={idx}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="mt-3 flex flex-col gap-1 text-[0.8rem] text-[#f4f0fa]/7">
-                  Set (optional)
-                  <select
-                    className={inputCls}
-                    value={createSetId}
-                    onChange={(e) => setCreateSetId(e.target.value === "" ? "" : Number(e.target.value))}
-                  >
-                    <option value="">None</option>
-                    {sets.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="mt-3">
-                  <p className="m-0 mb-2 text-[0.8rem] text-[#f4f0fa]/7">Heroes</p>
-                  {createFormat === "" ? (
-                    <p className="m-0 text-[0.85rem] text-[#f4f0fa]/5">Select a format to choose heroes.</p>
-                  ) : createLegalHeroes.length === 0 ? (
-                    <p className="m-0 text-[0.85rem] text-[#f4f0fa]/5">No heroes for this format.</p>
-                  ) : (
-                    <div className="flex max-h-56 flex-wrap gap-2 overflow-y-auto rounded-lg border border-white/10 p-2">
-                      {createLegalHeroes.map((h) => {
-                        const selected = createHeroIds.includes(h.id);
-                        const url = heroPortraitURL(h);
-                        return (
-                          <button
-                            key={h.id}
-                            type="button"
-                            title={h.name}
-                            aria-pressed={selected}
-                            onClick={() =>
-                              setCreateHeroIds((ids) =>
-                                selected ? ids.filter((x) => x !== h.id) : [...ids, h.id],
-                              )
-                            }
-                            className={`flex items-center gap-2 rounded-full border px-2 py-1 text-[0.8rem] ${
-                              selected
-                                ? "border-emerald-300/70 bg-emerald-950/40 text-white"
-                                : "border-white/20 bg-black/30 text-[#f4f0fa]/8"
-                            }`}
-                          >
-                            <span className="size-7 overflow-hidden rounded-full bg-black/40">
-                              {url ? (
-                                <img src={url} alt="" className="h-full w-full object-cover" draggable={false} />
-                              ) : null}
+          {loading && sessions.length === 0 ? (
+            <p className="text-[0.9rem] text-[#f4f0fa]/65">Loading…</p>
+          ) : sessions.length === 0 ? (
+            <p className="text-[0.9rem] text-[#f4f0fa]/60">
+              {listTab === "current" ? "No current release team sessions." : "No past sessions."}
+              {isAdmin && listTab === "current" ? (
+                <>
+                  {" "}
+                  Create sessions from the Admin → Release Teams tab.
+                </>
+              ) : null}
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {sessions.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => onOpenSession(s.id)}
+                  className={`${innerShell} p-4 text-left transition hover:border-purple-300/40 hover:bg-black/35`}
+                >
+                  <p className="m-0 text-[1.05rem] font-semibold text-white">{s.title}</p>
+                  <p className="mt-1 text-[0.85rem] text-[#f4f0fa]/65">
+                    {cardFormatName(s.format)}
+                    {s.set_name ? ` · ${s.set_name}` : ""}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(s.heroes || []).map((h) => {
+                      const url = heroPortraitURL(h);
+                      return (
+                        <span
+                          key={h.id}
+                          title={h.name}
+                          className="size-14 overflow-hidden rounded-full bg-black/40 ring-1 ring-white/20 sm:size-16"
+                        >
+                          {url ? (
+                            <img src={url} alt={h.name} className="h-full w-full object-cover" draggable={false} />
+                          ) : (
+                            <span className="flex h-full w-full items-center justify-center text-[0.85rem] font-semibold sm:text-[0.95rem]">
+                              {(h.name || "?").charAt(0)}
                             </span>
-                            {h.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                {createError ? <p className="mt-3 text-[0.85rem] text-red-200">{createError}</p> : null}
-                <div className="mt-4 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    className={`${btnBase} ${btnGhost}`}
-                    disabled={createSubmitting}
-                    onClick={() => setCreateOpen(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className={`${btnBase} ${btnTheme}`}
-                    disabled={createSubmitting}
-                    onClick={() => void submitCreate()}
-                  >
-                    {createSubmitting ? "Creating…" : "Create"}
-                  </button>
-                </div>
-              </div>
-            </div>,
-            document.body,
-          )
-        : null}
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
