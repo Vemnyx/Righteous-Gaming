@@ -71,9 +71,9 @@ function personLabel(row) {
 }
 
 /**
- * @param {{ isLight: boolean, active: boolean, sessionId: string | null, onOpenSession: (id: number) => void, onCloseSession: () => void }} props
+ * @param {{ isLight: boolean, active: boolean, sessionId: string | null, onOpenSession: (id: number) => void }} props
  */
-export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onCloseSession }) {
+export function ReleaseTeams({ isLight, active, sessionId, onOpenSession }) {
   const { user, sessionProfile } = useAuth();
   const isAdmin = isAdminRole(sessionProfile?.role);
   const canSubmitContent = canWriteDecksAndRecordings(sessionProfile?.role);
@@ -105,7 +105,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
   );
   const [addUserId, setAddUserId] = useState(/** @type {number | ""} */ (""));
 
-  const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [noteEditing, setNoteEditing] = useState(false);
   const [noteEditorKey, setNoteEditorKey] = useState(0);
   const [noteInitialHtml, setNoteInitialHtml] = useState("<p></p>");
   const [noteSubmitting, setNoteSubmitting] = useState(false);
@@ -292,6 +292,11 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
   }, [active, sessionId, selectedHeroId, heroReload, loadHeroData]);
 
   useEffect(() => {
+    setNoteEditing(false);
+    setNoteError(null);
+  }, [sessionId, selectedHeroId]);
+
+  useEffect(() => {
     if (!isAdmin || !user || !sessionId || !isCurrent) return undefined;
     let cancelled = false;
     (async () => {
@@ -404,11 +409,17 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
     setHeroReload((n) => n + 1);
   };
 
-  const openNoteModal = () => {
+  const openNoteEditor = () => {
     setNoteInitialHtml(bodyToRichHtml(myNote?.body) || "<p></p>");
     setNoteEditorKey((k) => k + 1);
     setNoteError(null);
-    setNoteModalOpen(true);
+    setNoteEditing(true);
+  };
+
+  const closeNoteEditor = () => {
+    if (noteSubmitting) return;
+    setNoteEditing(false);
+    setNoteError(null);
   };
 
   const noteUploadPath = useCallback(
@@ -442,7 +453,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
         { method: "POST", headers, body: JSON.stringify({ body: html }) },
       );
       if (!res.ok) throw new Error(parseApiError(await res.text()));
-      setNoteModalOpen(false);
+      setNoteEditing(false);
       setHeroReload((n) => n + 1);
     } catch (e) {
       setNoteError(e instanceof Error ? e.message : "Failed to save note");
@@ -559,47 +570,30 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
     return (
       <div className={PANEL_TABS_BLEED} aria-label="Release team session">
         <div className={`${PANEL_TABS_HEADER_PAD} pb-4`}>
-          <div className="flex flex-wrap items-center gap-3">
-            <button type="button" className={`${btnBase} ${btnGhost}`} onClick={onCloseSession}>
-              ← Back
-            </button>
-            {session ? (
+          {sessionLoading && !session ? (
+            <p className={`text-[1rem] ${textMuted}`}>Loading session…</p>
+          ) : null}
+
+          {session ? (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
               <div className="min-w-0 flex-1">
-                <h2 className="m-0 truncate text-[1.15rem] font-semibold text-white">{session.title}</h2>
-                <p className={`m-0 text-[0.85rem] ${textMuted}`}>
+                <h2 className="m-0 truncate text-[1.55rem] font-semibold leading-tight text-white sm:text-[1.75rem]">
+                  {session.title}
+                </h2>
+                <p className={`mt-1.5 m-0 text-[0.95rem] sm:text-[1.05rem] ${textMuted}`}>
                   {cardFormatName(session.format)}
                   {session.set_name ? ` · ${session.set_name}` : ""}
                   {isPast ? " · Past (read-only)" : ""}
                 </p>
               </div>
-            ) : null}
-            {isAdmin && isCurrent ? (
-              <button type="button" className={`${btnBase} ${btnGhost}`} onClick={() => void closeSession()}>
-                Close session
-              </button>
-            ) : null}
-          </div>
-
-          {sessionError ? (
-            <p
-              className="mt-3 rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100"
-              role="alert"
-            >
-              {sessionError}
-            </p>
-          ) : null}
-
-          {sessionLoading && !session ? (
-            <p className={`mt-3 text-[0.9rem] ${textMuted}`}>Loading session…</p>
-          ) : session ? (
-            <label className={`mt-4 flex max-w-xs flex-col gap-1 text-[0.85rem] ${textMuted}`}>
-              Hero
               <select
-                className={inputCls}
+                aria-label="Hero"
+                className={`${inputCls} w-auto min-w-[14rem] max-w-full px-4 py-2.5 text-[1.05rem] sm:min-w-[16rem] sm:text-[1.1rem]`}
                 value={selectedHeroId ?? ""}
                 onChange={(e) => {
                   setSelectedHeroId(Number(e.target.value));
                   setHeroTab("team");
+                  setNoteEditing(false);
                 }}
               >
                 {(session.heroes || []).map((h) => (
@@ -609,11 +603,70 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                   </option>
                 ))}
               </select>
-            </label>
+              {isAdmin && isCurrent ? (
+                <button type="button" className={`${btnBase} ${btnGhost}`} onClick={() => void closeSession()}>
+                  Close session
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {sessionError ? (
+            <p
+              className="mt-3 rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-[0.85rem] text-red-100"
+              role="alert"
+            >
+              {sessionError}
+            </p>
           ) : null}
         </div>
 
-        {session ? (
+        {session && noteEditing ? (
+          <div className={PANEL_TABS_CONTENT_PAD} aria-label={myNote ? "Edit note" : "Add note"}>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h3 className="m-0 text-[1.25rem] font-semibold text-white sm:text-[1.35rem]">
+                {myNote ? "Edit note" : "Add note"}
+                {selectedHero ? (
+                  <span className={`ml-2 text-[0.95rem] font-medium ${textMuted}`}>
+                    · {selectedHero.name}
+                    {selectedHero.young ? " (Young)" : ""}
+                  </span>
+                ) : null}
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className={`${btnBase} ${btnGhost}`}
+                  disabled={noteSubmitting}
+                  onClick={closeNoteEditor}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={`${btnBase} ${btnTheme}`}
+                  disabled={noteSubmitting}
+                  onClick={() => void saveNote()}
+                >
+                  {noteSubmitting ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </div>
+            <RichTextEditor
+              key={noteEditorKey}
+              ref={noteEditorRef}
+              initialHtml={noteInitialHtml}
+              getIdToken={getIdToken}
+              isLight={isLight}
+              placeholder="Team notes for this hero… Add images via Image, paste, or drag & drop."
+              minHeightClass="min-h-[22rem]"
+              buildUploadPath={noteUploadPath}
+            />
+            {noteError ? <p className="mt-3 text-[0.85rem] text-red-200">{noteError}</p> : null}
+          </div>
+        ) : null}
+
+        {session && !noteEditing ? (
           <>
             <PanelTabList ariaLabel="Hero sections">
               {panelTabButton("team", heroTab === "team", "Team", () => setHeroTab("team"))}
@@ -641,10 +694,9 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
             {heroTab === "team" && selectedHero ? (
               <div className="grid gap-4 md:grid-cols-2">
                 <div className={`p-4 ${innerShell}`}>
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="m-0 text-[1rem] font-semibold text-white">Team</h3>
-                    {isCurrent && !isAdmin ? (
-                      iAmMember ? (
+                  {isCurrent && !isAdmin ? (
+                    <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
+                      {iAmMember ? (
                         <button type="button" className={`${btnBase} ${btnGhost}`} onClick={() => void leaveTeam()}>
                           Leave team
                         </button>
@@ -652,13 +704,14 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                         <button type="button" className={`${btnBase} ${btnTheme}`} onClick={() => void joinTeam()}>
                           Join team
                         </button>
-                      )
-                    ) : null}
-                  </div>
+                      )}
+                    </div>
+                  ) : null}
                   {isAdmin && isCurrent ? (
-                    <div className="mb-3 flex flex-wrap gap-2">
+                    <div className="mb-3 flex flex-wrap items-stretch gap-2">
                       <select
-                        className={`${inputCls} max-w-[16rem]`}
+                        aria-label="Add user"
+                        className={`${inputCls} min-w-[14rem] flex-1 px-4 py-2.5 text-[1.05rem] sm:min-w-[16rem] sm:text-[1.1rem]`}
                         value={addUserId}
                         onChange={(e) => setAddUserId(e.target.value === "" ? "" : Number(e.target.value))}
                       >
@@ -673,7 +726,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                       </select>
                       <button
                         type="button"
-                        className={`${btnBase} ${btnTheme}`}
+                        className={`${btnTheme} inline-flex items-center justify-center rounded-lg border px-5 py-2.5 text-[1.05rem] font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 sm:px-6 sm:text-[1.1rem]`}
                         disabled={addUserId === ""}
                         onClick={() => void adminAddMember()}
                       >
@@ -813,7 +866,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                         <button
                           type="button"
                           className={`${btnAction} ${btnTheme}`}
-                          onClick={openNoteModal}
+                          onClick={openNoteEditor}
                         >
                           Add Notes
                         </button>
@@ -833,7 +886,7 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (canEditMine) openNoteModal();
+                                  if (canEditMine) openNoteEditor();
                                   else setExpandedNoteId(row.id);
                                 }}
                                 className="flex w-full flex-col gap-1 px-5 py-4 text-left hover:bg-white/[0.03]"
@@ -929,60 +982,6 @@ export function ReleaseTeams({ isLight, active, sessionId, onOpenSession, onClos
             </div>
           </>
         ) : null}
-
-        {noteModalOpen
-          ? createPortal(
-              <div
-                className="fixed inset-0 z-[80] flex items-center justify-center bg-black/65 p-4"
-                role="presentation"
-                onClick={(e) => {
-                  if (e.target === e.currentTarget && !noteSubmitting) setNoteModalOpen(false);
-                }}
-              >
-                <div
-                  role="dialog"
-                  aria-modal="true"
-                  className={`flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl p-5 ${cardShell}`}
-                >
-                  <h3 className="m-0 shrink-0 text-[1.05rem] font-semibold text-white">
-                    {myNote ? "Update note" : "Add note"}
-                  </h3>
-                  <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
-                    <RichTextEditor
-                      key={noteEditorKey}
-                      ref={noteEditorRef}
-                      initialHtml={noteInitialHtml}
-                      getIdToken={getIdToken}
-                      isLight={isLight}
-                      placeholder="Team notes for this hero… Add images via Image, paste, or drag & drop."
-                      minHeightClass="min-h-[12rem]"
-                      buildUploadPath={noteUploadPath}
-                    />
-                  </div>
-                  {noteError ? <p className="mt-2 shrink-0 text-[0.85rem] text-red-200">{noteError}</p> : null}
-                  <div className="mt-4 flex shrink-0 justify-end gap-2">
-                    <button
-                      type="button"
-                      className={`${btnBase} ${btnGhost}`}
-                      disabled={noteSubmitting}
-                      onClick={() => setNoteModalOpen(false)}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      className={`${btnBase} ${btnTheme}`}
-                      disabled={noteSubmitting}
-                      onClick={() => void saveNote()}
-                    >
-                      {noteSubmitting ? "Saving…" : "Save"}
-                    </button>
-                  </div>
-                </div>
-              </div>,
-              document.body,
-            )
-          : null}
 
         {deckImportOpen
           ? createPortal(

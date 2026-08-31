@@ -2200,26 +2200,6 @@ export default function Dashboard({ onNavigate }) {
     );
   }, []);
 
-  const closeReleaseTeamSession = useCallback(() => {
-    setResourcesCardRaterId(null);
-    replaceDashboardUrl(
-      TEAM_TAB_ID,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      null,
-      "release-teams",
-    );
-  }, []);
-
   return (
     <div className={isLight ? shellLight : shellDark}>
       <Tabs.Root
@@ -2811,7 +2791,6 @@ export default function Dashboard({ onNavigate }) {
                     active={activeTab === TEAM_TAB_ID && teamChild === "release-teams"}
                     sessionId={resourcesCardRaterId}
                     onOpenSession={openReleaseTeamSession}
-                    onCloseSession={closeReleaseTeamSession}
                   />
                 ) : (
                   <div
