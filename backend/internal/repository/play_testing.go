@@ -2,13 +2,27 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 const (
 	PlayTestingHeroSideWith    int16 = 0
 	PlayTestingHeroSideAgainst int16 = 1
+
+	PlayTestingSessionStatusOpen   int16 = 0
+	PlayTestingSessionStatusClosed int16 = 1
+
+	// PlayTestingOpenEndedDuration is how long "now"/open-ended sessions stay current.
+	PlayTestingOpenEndedDuration = 24 * time.Hour
+)
+
+var (
+	ErrPlayTestingSessionNotFound = errors.New("repository: play testing session not found")
+	ErrPlayTestingSessionClosed   = errors.New("repository: play testing session is closed")
 )
 
 // PlayTestingHeroMeta is a hero option for play-testing pickers.
@@ -41,14 +55,16 @@ type PlayTestingSessionTimeframe struct {
 
 // PlayTestingSession is a play-testing session with nested heroes and timeframes.
 type PlayTestingSession struct {
-	ID                int
-	UserID            int
-	Format            int16
-	CreatedAt         time.Time
-	OwnerFirstName    *string
-	OwnerUsername     *string
-	Heroes            []PlayTestingSessionHero
-	Timeframes        []PlayTestingSessionTimeframe
+	ID             int
+	UserID         int
+	Format         int16
+	Status         int16
+	CreatedAt      time.Time
+	ClosedAt       *time.Time
+	OwnerFirstName *string
+	OwnerUsername  *string
+	Heroes         []PlayTestingSessionHero
+	Timeframes     []PlayTestingSessionTimeframe
 }
 
 // CreatePlayTestingSessionInput creates a session and its children.
@@ -65,6 +81,62 @@ type CreatePlayTestingTimeframeInput struct {
 	StartsAt  time.Time
 	EndsAt    *time.Time
 	SortOrder int
+}
+
+// PlayTestingSessionBucket is the list filter for Looking For Games.
+type PlayTestingSessionBucket string
+
+const (
+	PlayTestingBucketCurrent  PlayTestingSessionBucket = "current"
+	PlayTestingBucketUpcoming PlayTestingSessionBucket = "upcoming"
+	PlayTestingBucketPast     PlayTestingSessionBucket = "past"
+)
+
+// ClassifyPlayTestingSession returns current, upcoming, or past for a session at now.
+// Closed sessions are always past. Sessions with no timeframes are current for 24h after
+// creation, then past. Open-ended timeframes (null ends_at) last 24h from starts_at.
+func ClassifyPlayTestingSession(s *PlayTestingSession, now time.Time) PlayTestingSessionBucket {
+	if s == nil {
+		return PlayTestingBucketPast
+	}
+	if s.Status == PlayTestingSessionStatusClosed {
+		return PlayTestingBucketPast
+	}
+
+	type window struct{ start, end time.Time }
+	windows := make([]window, 0, len(s.Timeframes)+1)
+	if len(s.Timeframes) == 0 {
+		windows = append(windows, window{
+			start: s.CreatedAt,
+			end:   s.CreatedAt.Add(PlayTestingOpenEndedDuration),
+		})
+	} else {
+		for _, tf := range s.Timeframes {
+			end := tf.StartsAt.Add(PlayTestingOpenEndedDuration)
+			if tf.EndsAt != nil {
+				end = *tf.EndsAt
+			}
+			windows = append(windows, window{start: tf.StartsAt, end: end})
+		}
+	}
+
+	hasCurrent := false
+	hasUpcoming := false
+	for _, w := range windows {
+		if !w.start.After(now) && !w.end.Before(now) {
+			hasCurrent = true
+		}
+		if w.start.After(now) {
+			hasUpcoming = true
+		}
+	}
+	if hasCurrent {
+		return PlayTestingBucketCurrent
+	}
+	if hasUpcoming {
+		return PlayTestingBucketUpcoming
+	}
+	return PlayTestingBucketPast
 }
 
 // ListPlayTestingHeroes returns heroes with format legality and image URLs for pickers.
@@ -99,12 +171,13 @@ ORDER BY h.name ASC, h.id ASC`
 }
 
 // ListPlayTestingSessions returns sessions newest-first with heroes and timeframes.
-func (r *Repository) ListPlayTestingSessions(ctx context.Context) ([]PlayTestingSession, error) {
+// When bucket is non-empty, only sessions in that lifecycle bucket are returned.
+func (r *Repository) ListPlayTestingSessions(ctx context.Context, bucket PlayTestingSessionBucket) ([]PlayTestingSession, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-SELECT s.id, s.user_id, s.format, s.created_at, u.first_name, u.username
+SELECT s.id, s.user_id, s.format, s.status, s.created_at, s.closed_at, u.first_name, u.username
 FROM play_testing_sessions s
 INNER JOIN users u ON u.id = s.user_id
 ORDER BY s.created_at DESC, s.id DESC`
@@ -120,7 +193,7 @@ ORDER BY s.created_at DESC, s.id DESC`
 	for rows.Next() {
 		var s PlayTestingSession
 		if err := rows.Scan(
-			&s.ID, &s.UserID, &s.Format, &s.CreatedAt, &s.OwnerFirstName, &s.OwnerUsername,
+			&s.ID, &s.UserID, &s.Format, &s.Status, &s.CreatedAt, &s.ClosedAt, &s.OwnerFirstName, &s.OwnerUsername,
 		); err != nil {
 			return nil, fmt.Errorf("repository: scan play testing session: %w", err)
 		}
@@ -144,6 +217,8 @@ ORDER BY s.created_at DESC, s.id DESC`
 	if err != nil {
 		return nil, err
 	}
+	now := time.Now().UTC()
+	filtered := make([]PlayTestingSession, 0, len(sessions))
 	for i := range sessions {
 		if hs, ok := heroesBySession[sessions[i].ID]; ok {
 			sessions[i].Heroes = hs
@@ -151,8 +226,11 @@ ORDER BY s.created_at DESC, s.id DESC`
 		if ts, ok := timeframesBySession[sessions[i].ID]; ok {
 			sessions[i].Timeframes = ts
 		}
+		if bucket == "" || ClassifyPlayTestingSession(&sessions[i], now) == bucket {
+			filtered = append(filtered, sessions[i])
+		}
 	}
-	return sessions, nil
+	return filtered, nil
 }
 
 func (r *Repository) listPlayTestingSessionHeroes(ctx context.Context, sessionIDs []int) (map[int][]PlayTestingSessionHero, error) {
@@ -212,16 +290,77 @@ ORDER BY sort_order ASC, id ASC`
 	return out, nil
 }
 
+// GetPlayTestingSessionByID returns one session with nested children.
+func (r *Repository) GetPlayTestingSessionByID(ctx context.Context, sessionID int) (*PlayTestingSession, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	if sessionID <= 0 {
+		return nil, fmt.Errorf("repository: invalid session id")
+	}
+	const q = `
+SELECT s.id, s.user_id, s.format, s.status, s.created_at, s.closed_at, u.first_name, u.username
+FROM play_testing_sessions s
+INNER JOIN users u ON u.id = s.user_id
+WHERE s.id = $1`
+	var s PlayTestingSession
+	err := r.pool.QueryRow(ctx, q, sessionID).Scan(
+		&s.ID, &s.UserID, &s.Format, &s.Status, &s.CreatedAt, &s.ClosedAt, &s.OwnerFirstName, &s.OwnerUsername,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrPlayTestingSessionNotFound
+		}
+		return nil, fmt.Errorf("repository: get play testing session: %w", err)
+	}
+	s.Heroes = []PlayTestingSessionHero{}
+	s.Timeframes = []PlayTestingSessionTimeframe{}
+	heroesBySession, err := r.listPlayTestingSessionHeroes(ctx, []int{s.ID})
+	if err != nil {
+		return nil, err
+	}
+	timeframesBySession, err := r.listPlayTestingSessionTimeframes(ctx, []int{s.ID})
+	if err != nil {
+		return nil, err
+	}
+	if hs, ok := heroesBySession[s.ID]; ok {
+		s.Heroes = hs
+	}
+	if ts, ok := timeframesBySession[s.ID]; ok {
+		s.Timeframes = ts
+	}
+	return &s, nil
+}
+
+// ClosePlayTestingSession marks a session closed (past). Idempotent if already closed.
+func (r *Repository) ClosePlayTestingSession(ctx context.Context, sessionID int) (*PlayTestingSession, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	if sessionID <= 0 {
+		return nil, fmt.Errorf("repository: invalid session id")
+	}
+	tag, err := r.pool.Exec(ctx, `
+UPDATE play_testing_sessions
+SET status = $2, closed_at = COALESCE(closed_at, now())
+WHERE id = $1`, sessionID, PlayTestingSessionStatusClosed)
+	if err != nil {
+		return nil, fmt.Errorf("repository: close play testing session: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, ErrPlayTestingSessionNotFound
+	}
+	return r.GetPlayTestingSessionByID(ctx, sessionID)
+}
+
 // CreatePlayTestingSession inserts a session and children in one transaction.
+// Timeframes may be empty (treated as "now" for 24 hours via classification).
 func (r *Repository) CreatePlayTestingSession(ctx context.Context, in CreatePlayTestingSessionInput) (*PlayTestingSession, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	if in.UserID <= 0 {
 		return nil, fmt.Errorf("repository: invalid user id")
-	}
-	if len(in.Timeframes) == 0 {
-		return nil, fmt.Errorf("repository: at least one timeframe required")
 	}
 
 	tx, err := r.pool.Begin(ctx)
@@ -231,13 +370,13 @@ func (r *Repository) CreatePlayTestingSession(ctx context.Context, in CreatePlay
 	defer tx.Rollback(ctx)
 
 	const insertSession = `
-INSERT INTO play_testing_sessions (user_id, format)
-VALUES ($1, $2)
-RETURNING id, user_id, format, created_at`
+INSERT INTO play_testing_sessions (user_id, format, status)
+VALUES ($1, $2, $3)
+RETURNING id, user_id, format, status, created_at, closed_at`
 
 	var s PlayTestingSession
-	if err := tx.QueryRow(ctx, insertSession, in.UserID, in.Format).Scan(
-		&s.ID, &s.UserID, &s.Format, &s.CreatedAt,
+	if err := tx.QueryRow(ctx, insertSession, in.UserID, in.Format, PlayTestingSessionStatusOpen).Scan(
+		&s.ID, &s.UserID, &s.Format, &s.Status, &s.CreatedAt, &s.ClosedAt,
 	); err != nil {
 		return nil, fmt.Errorf("repository: insert play testing session: %w", err)
 	}

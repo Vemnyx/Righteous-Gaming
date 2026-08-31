@@ -20,9 +20,11 @@ import {
 
 /** @typedef {{ id?: number, starts_at: string, ends_at?: string | null, sort_order: number }} SessionTimeframe */
 
-/** @typedef {{ id: number, user_id: number, format: number, created_at: string, owner_first_name?: string | null, owner_username?: string | null, heroes_with: SessionHero[], heroes_against: SessionHero[], timeframes: SessionTimeframe[] }} PlayTestingSession */
+/** @typedef {{ id: number, user_id: number, format: number, status?: number, bucket?: string, created_at: string, closed_at?: string | null, owner_first_name?: string | null, owner_username?: string | null, heroes_with: SessionHero[], heroes_against: SessionHero[], timeframes: SessionTimeframe[] }} PlayTestingSession */
 
 /** @typedef {{ key: string, mode: "now_open" | "range", startsLocal: string, endsLocal: string }} DraftTimeframe */
+
+/** @typedef {"current" | "upcoming" | "past"} SessionListTab */
 
 /**
  * @param {string | undefined | null} errText
@@ -75,7 +77,7 @@ function formatTimeframeLabel(startsAt, endsAt) {
     minute: "2-digit",
   });
   if (endsAt == null || endsAt === "") {
-    return `${startLabel} → open`;
+    return `${startLabel} → 24h`;
   }
   const end = new Date(endsAt);
   if (Number.isNaN(end.getTime())) return `${startLabel} → open`;
@@ -202,19 +204,21 @@ function HeroAvatarRow({ heroes, emptyLabel, size = "sm" }) {
  * @param {{ isLight: boolean, active: boolean }} props
  */
 export function PlayTesting({ isLight, active }) {
-  const { user } = useAuth();
-  const [viewTab, setViewTab] = useState(/** @type {"looking-for-games" | "notes"} */ ("looking-for-games"));
+  const { user, sessionProfile } = useAuth();
+  const myUserId = typeof sessionProfile?.id === "number" ? sessionProfile.id : null;
+  const [listTab, setListTab] = useState(/** @type {SessionListTab} */ ("current"));
   const [sessions, setSessions] = useState(/** @type {PlayTestingSession[]} */ ([]));
   const [heroes, setHeroes] = useState(/** @type {PlayTestingHero[]} */ ([]));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(/** @type {string | null} */ (null));
   const [reloadSeq, setReloadSeq] = useState(0);
+  const [closingId, setClosingId] = useState(/** @type {number | null} */ (null));
 
   const [modalOpen, setModalOpen] = useState(false);
   const [formatId, setFormatId] = useState(/** @type {number | ""} */ (""));
   const [withIds, setWithIds] = useState(/** @type {number[]} */ ([]));
   const [againstIds, setAgainstIds] = useState(/** @type {number[]} */ ([]));
-  const [timeframes, setTimeframes] = useState(/** @type {DraftTimeframe[]} */ (() => [newDraftTimeframe("now_open")]));
+  const [timeframes, setTimeframes] = useState(/** @type {DraftTimeframe[]} */ ([]));
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState(/** @type {string | null} */ (null));
 
@@ -226,7 +230,7 @@ export function PlayTesting({ isLight, active }) {
       const token = await user.getIdToken();
       const headers = { Authorization: `Bearer ${token}` };
       const [resSessions, resMeta] = await Promise.all([
-        fetch("/api/play-testing/sessions", { headers }),
+        fetch(`/api/play-testing/sessions?status=${listTab}`, { headers }),
         fetch("/api/play-testing/meta", { headers }),
       ]);
       if (!resSessions.ok) throw new Error(parseApiError(await resSessions.text()));
@@ -254,12 +258,12 @@ export function PlayTesting({ isLight, active }) {
         nextHeroes.filter((h) => h && typeof h.id === "number" && typeof h.name === "string"),
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load play testing");
+      setError(e instanceof Error ? e.message : "Failed to load Looking for Games");
       setSessions([]);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, listTab]);
 
   useEffect(() => {
     if (!active || !user) return undefined;
@@ -276,7 +280,7 @@ export function PlayTesting({ isLight, active }) {
     setFormatId("");
     setWithIds([]);
     setAgainstIds([]);
-    setTimeframes([newDraftTimeframe("now_open")]);
+    setTimeframes([]);
     setModalError(null);
     setModalOpen(true);
   };
@@ -291,14 +295,30 @@ export function PlayTesting({ isLight, active }) {
     setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   };
 
+  const closeSession = async (sessionId) => {
+    if (!user || closingId != null) return;
+    if (!window.confirm("Close this session? It will move to Past.")) return;
+    setClosingId(sessionId);
+    setError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/play-testing/sessions/${sessionId}/close`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(parseApiError(await res.text()));
+      setReloadSeq((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to close session");
+    } finally {
+      setClosingId(null);
+    }
+  };
+
   const submit = async () => {
     if (!user) return;
     if (formatId === "" || !isValidCardFormatId(formatId)) {
       setModalError("Select a format.");
-      return;
-    }
-    if (timeframes.length === 0) {
-      setModalError("Add at least one timeframe.");
       return;
     }
 
@@ -349,6 +369,7 @@ export function PlayTesting({ isLight, active }) {
       });
       if (!res.ok) throw new Error(parseApiError(await res.text()));
       setModalOpen(false);
+      setListTab("current");
       setReloadSeq((n) => n + 1);
     } catch (e) {
       setModalError(e instanceof Error ? e.message : "Failed to create session");
@@ -365,104 +386,134 @@ export function PlayTesting({ isLight, active }) {
   const btnPrimary =
     "rounded-lg border border-emerald-400/45 bg-emerald-950/45 px-3 py-1.5 text-[0.8125rem] font-semibold text-emerald-100 transition-colors hover:border-emerald-300/55 hover:bg-emerald-900/45 disabled:cursor-not-allowed disabled:opacity-45";
 
-  /**
-   * @param {"looking-for-games" | "notes"} id
-   * @param {string} label
-   */
-  const viewTabBtn = (id, label) => panelTabButton(id, viewTab === id, label, () => setViewTab(id));
+  const emptyCopy =
+    listTab === "current"
+      ? "No current Looking for Games sessions."
+      : listTab === "upcoming"
+        ? "No upcoming sessions."
+        : "No past sessions.";
 
   return (
-    <div className={PANEL_TABS_BLEED} aria-label="Play Testing">
-      <PanelTabList ariaLabel="Play Testing sections">
-        {viewTabBtn("looking-for-games", "Looking For Games")}
-        {viewTabBtn("notes", "Notes")}
+    <div className={PANEL_TABS_BLEED} aria-label="Looking for Games">
+      <PanelTabList ariaLabel="Session status">
+        {panelTabButton("current", listTab === "current", "Current", () => setListTab("current"))}
+        {panelTabButton("upcoming", listTab === "upcoming", "Upcoming", () => setListTab("upcoming"))}
+        {panelTabButton("past", listTab === "past", "Past", () => setListTab("past"))}
       </PanelTabList>
 
       <div className={PANEL_TABS_CONTENT_PAD} role="tabpanel">
-      {viewTab === "looking-for-games" ? (
-        <>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <p className="m-0 max-w-2xl text-[0.85rem] leading-snug text-[#f4f0fa]/70">
-              Schedule sessions with heroes to test and opponents to face.
-            </p>
-            <button type="button" className={btnPrimary} onClick={openModal}>
-              New session
-            </button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <p className="m-0 max-w-2xl text-[0.85rem] leading-snug text-[#f4f0fa]/70">
+            Post when you want games. Leave timing blank for “now” (stays current for 24 hours), or add a time window.
+            Close a session anytime to move it to Past.
+          </p>
+          <button type="button" className={btnPrimary} onClick={openModal}>
+            New session
+          </button>
+        </div>
+
+        {error ? (
+          <div
+            className="mt-3 rounded-xl border border-red-400/35 bg-red-950/40 px-4 py-3 text-left text-[0.875rem] text-red-100/95"
+            role="alert"
+          >
+            {error}
           </div>
+        ) : null}
 
-          {error ? (
-            <div
-              className="rounded-xl border border-red-400/35 bg-red-950/40 px-4 py-3 text-left text-[0.875rem] text-red-100/95"
-              role="alert"
-            >
-              {error}
-            </div>
-          ) : null}
-
+        <div className="mt-4">
           {loading && sessions.length === 0 ? (
             <p className="m-0 text-[0.9rem] text-[#f4f0fa]/65">Loading sessions…</p>
           ) : sessions.length === 0 ? (
             <div className="flex min-h-[12rem] flex-1 items-center justify-center rounded-xl border border-dashed border-white/15 bg-black/20 px-4 text-center">
-              <p className="m-0 text-[0.9rem] text-[#f4f0fa]/55">No play testing sessions yet.</p>
+              <p className="m-0 text-[0.9rem] text-[#f4f0fa]/55">{emptyCopy}</p>
             </div>
           ) : (
             <ul className="m-0 grid list-none grid-cols-1 gap-4 p-0 sm:grid-cols-2">
               {sessions.map((session) => {
                 const ownerLabel = sessionOwnerLabel(session);
+                const canClose =
+                  listTab !== "past" &&
+                  myUserId != null &&
+                  session.user_id === myUserId &&
+                  session.status !== 1;
+                const whenLabel =
+                  (session.timeframes || []).length === 0
+                    ? "Now (24 hours)"
+                    : null;
                 return (
-                <li
-                  key={session.id}
-                  className="rounded-xl border border-white/[0.14] bg-black/30 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:p-6"
-                >
-                  <div className="mb-4 flex items-start justify-between gap-3">
-                    <span className="rounded-md border border-white/15 bg-white/[0.06] px-2.5 py-1 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]">
-                      {cardFormatName(session.format) ?? `Format ${session.format}`}
-                    </span>
-                    {ownerLabel ? (
-                      <span className="max-w-[55%] text-right text-[0.875rem] font-medium leading-snug text-[#f4f0fa]">
-                        {ownerLabel}
+                  <li
+                    key={session.id}
+                    className="rounded-xl border border-white/[0.14] bg-black/30 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:p-6"
+                  >
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                      <span className="rounded-md border border-white/15 bg-white/[0.06] px-2.5 py-1 text-[0.875rem] font-semibold tracking-wide text-[#f4f0fa]">
+                        {cardFormatName(session.format) ?? `Format ${session.format}`}
                       </span>
-                    ) : null}
-                  </div>
-
-                  <div className="grid gap-4">
-                    <div>
-                      <p className="mb-2 mt-0 text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/90">
-                        Test with
-                      </p>
-                      <HeroAvatarRow heroes={session.heroes_with || []} emptyLabel="Any / unspecified" size="lg" />
-                    </div>
-                    <div>
-                      <p className="mb-2 mt-0 text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/90">
-                        Requesting
-                      </p>
-                      <HeroAvatarRow heroes={session.heroes_against || []} emptyLabel="Any / unspecified" size="lg" />
-                    </div>
-                    <div>
-                      <p className="mb-2 mt-0 text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/90">
-                        When
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {(session.timeframes || []).map((tf, idx) => (
-                          <span
-                            key={tf.id ?? idx}
-                            className="rounded-md border border-white/12 bg-black/35 px-2.5 py-1.5 text-[0.875rem] text-[#f4f0fa]"
-                          >
-                            {formatTimeframeLabel(tf.starts_at, tf.ends_at)}
+                      <div className="flex max-w-[60%] flex-col items-end gap-1.5">
+                        {ownerLabel ? (
+                          <span className="text-right text-[0.875rem] font-medium leading-snug text-[#f4f0fa]">
+                            {ownerLabel}
                           </span>
-                        ))}
+                        ) : null}
+                        {canClose ? (
+                          <button
+                            type="button"
+                            className={`${btnBase} ${btnTheme}`}
+                            disabled={closingId === session.id}
+                            onClick={() => void closeSession(session.id)}
+                          >
+                            {closingId === session.id ? "Closing…" : "Close session"}
+                          </button>
+                        ) : null}
                       </div>
                     </div>
-                  </div>
-                </li>
+
+                    <div className="grid gap-4">
+                      <div>
+                        <p className="mb-2 mt-0 text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/90">
+                          Test with
+                        </p>
+                        <HeroAvatarRow heroes={session.heroes_with || []} emptyLabel="Any / unspecified" size="lg" />
+                      </div>
+                      <div>
+                        <p className="mb-2 mt-0 text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/90">
+                          Requesting
+                        </p>
+                        <HeroAvatarRow
+                          heroes={session.heroes_against || []}
+                          emptyLabel="Any / unspecified"
+                          size="lg"
+                        />
+                      </div>
+                      <div>
+                        <p className="mb-2 mt-0 text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/90">
+                          When
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {whenLabel ? (
+                            <span className="rounded-md border border-white/12 bg-black/35 px-2.5 py-1.5 text-[0.875rem] text-[#f4f0fa]">
+                              {whenLabel}
+                            </span>
+                          ) : (
+                            (session.timeframes || []).map((tf, idx) => (
+                              <span
+                                key={tf.id ?? idx}
+                                className="rounded-md border border-white/12 bg-black/35 px-2.5 py-1.5 text-[0.875rem] text-[#f4f0fa]"
+                              >
+                                {formatTimeframeLabel(tf.starts_at, tf.ends_at)}
+                              </span>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </li>
                 );
               })}
             </ul>
           )}
-        </>
-      ) : null}
-
-      {viewTab === "notes" ? <div className="min-h-0 flex-1" aria-label="Notes" /> : null}
+        </div>
       </div>
 
       {modalOpen && typeof document !== "undefined"
@@ -477,11 +528,11 @@ export function PlayTesting({ isLight, active }) {
               <div
                 role="dialog"
                 aria-modal="true"
-                aria-label="New play testing session"
+                aria-label="New Looking for Games session"
                 className="max-h-[min(92vh,52rem)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/20 bg-[#160d22] p-4 shadow-2xl sm:p-5"
               >
                 <div className="mb-4 flex items-start justify-between gap-3">
-                  <h3 className="m-0 text-base font-semibold text-[#f4f0fa]">New play testing session</h3>
+                  <h3 className="m-0 text-base font-semibold text-[#f4f0fa]">New Looking for Games session</h3>
                   <button type="button" className={`${btnBase} ${btnTheme}`} onClick={closeModal} disabled={submitting}>
                     Close
                   </button>
@@ -577,7 +628,10 @@ export function PlayTesting({ isLight, active }) {
 
                   <section className="grid gap-2">
                     <div className="flex items-center justify-between gap-2">
-                      <h4 className="m-0 text-[0.85rem] font-semibold text-[#f4f0fa]/9">Timeframes</h4>
+                      <h4 className="m-0 text-[0.85rem] font-semibold text-[#f4f0fa]/9">
+                        Timeframes{" "}
+                        <span className="font-normal text-[#f4f0fa]/45">(optional — blank means now for 24h)</span>
+                      </h4>
                       <button
                         type="button"
                         className={`${btnBase} ${btnTheme}`}
@@ -586,38 +640,42 @@ export function PlayTesting({ isLight, active }) {
                         Add timeframe
                       </button>
                     </div>
-                    <div className="grid gap-2">
-                      {timeframes.map((tf) => (
-                        <div
-                          key={tf.key}
-                          className="grid gap-2 rounded-xl border border-white/12 bg-black/25 p-3"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                className={`${btnBase} ${tf.mode === "now_open" ? "border-emerald-400/40 bg-emerald-950/40 text-emerald-100" : btnTheme}`}
-                                onClick={() =>
-                                  setTimeframes((prev) =>
-                                    prev.map((row) => (row.key === tf.key ? { ...row, mode: "now_open" } : row)),
-                                  )
-                                }
-                              >
-                                Now → open
-                              </button>
-                              <button
-                                type="button"
-                                className={`${btnBase} ${tf.mode === "range" ? "border-emerald-400/40 bg-emerald-950/40 text-emerald-100" : btnTheme}`}
-                                onClick={() =>
-                                  setTimeframes((prev) =>
-                                    prev.map((row) => (row.key === tf.key ? { ...row, mode: "range" } : row)),
-                                  )
-                                }
-                              >
-                                Calendar range
-                              </button>
-                            </div>
-                            {timeframes.length > 1 ? (
+                    {timeframes.length === 0 ? (
+                      <p className="m-0 rounded-xl border border-dashed border-white/12 bg-black/20 px-3 py-3 text-[0.8rem] text-[#f4f0fa]/55">
+                        No timeframe added — this session stays Current for 24 hours (or until you close it).
+                      </p>
+                    ) : (
+                      <div className="grid gap-2">
+                        {timeframes.map((tf) => (
+                          <div
+                            key={tf.key}
+                            className="grid gap-2 rounded-xl border border-white/12 bg-black/25 p-3"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  className={`${btnBase} ${tf.mode === "now_open" ? "border-emerald-400/40 bg-emerald-950/40 text-emerald-100" : btnTheme}`}
+                                  onClick={() =>
+                                    setTimeframes((prev) =>
+                                      prev.map((row) => (row.key === tf.key ? { ...row, mode: "now_open" } : row)),
+                                    )
+                                  }
+                                >
+                                  Now → 24h
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`${btnBase} ${tf.mode === "range" ? "border-emerald-400/40 bg-emerald-950/40 text-emerald-100" : btnTheme}`}
+                                  onClick={() =>
+                                    setTimeframes((prev) =>
+                                      prev.map((row) => (row.key === tf.key ? { ...row, mode: "range" } : row)),
+                                    )
+                                  }
+                                >
+                                  Calendar range
+                                </button>
+                              </div>
                               <button
                                 type="button"
                                 className={`${btnBase} ${btnTheme}`}
@@ -625,49 +683,49 @@ export function PlayTesting({ isLight, active }) {
                               >
                                 Remove
                               </button>
-                            ) : null}
-                          </div>
-                          {tf.mode === "range" ? (
-                            <div className="grid gap-2 sm:grid-cols-2">
-                              <label className="grid gap-1 text-[0.78rem] text-[#f4f0fa]/75">
-                                From
-                                <input
-                                  type="datetime-local"
-                                  className="rounded-lg border border-white/20 bg-black/40 px-2 py-1.5 text-[#f4f0fa]"
-                                  value={tf.startsLocal}
-                                  onChange={(e) =>
-                                    setTimeframes((prev) =>
-                                      prev.map((row) =>
-                                        row.key === tf.key ? { ...row, startsLocal: e.target.value } : row,
-                                      ),
-                                    )
-                                  }
-                                />
-                              </label>
-                              <label className="grid gap-1 text-[0.78rem] text-[#f4f0fa]/75">
-                                To <span className="text-[#f4f0fa]/45">(optional / open-ended)</span>
-                                <input
-                                  type="datetime-local"
-                                  className="rounded-lg border border-white/20 bg-black/40 px-2 py-1.5 text-[#f4f0fa]"
-                                  value={tf.endsLocal}
-                                  onChange={(e) =>
-                                    setTimeframes((prev) =>
-                                      prev.map((row) =>
-                                        row.key === tf.key ? { ...row, endsLocal: e.target.value } : row,
-                                      ),
-                                    )
-                                  }
-                                />
-                              </label>
                             </div>
-                          ) : (
-                            <p className="m-0 text-[0.78rem] text-[#f4f0fa]/55">
-                              Starts now with no end time (open-ended).
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                            {tf.mode === "range" ? (
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                <label className="grid gap-1 text-[0.78rem] text-[#f4f0fa]/75">
+                                  From
+                                  <input
+                                    type="datetime-local"
+                                    className="rounded-lg border border-white/20 bg-black/40 px-2 py-1.5 text-[#f4f0fa]"
+                                    value={tf.startsLocal}
+                                    onChange={(e) =>
+                                      setTimeframes((prev) =>
+                                        prev.map((row) =>
+                                          row.key === tf.key ? { ...row, startsLocal: e.target.value } : row,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                </label>
+                                <label className="grid gap-1 text-[0.78rem] text-[#f4f0fa]/75">
+                                  To <span className="text-[#f4f0fa]/45">(optional — blank = 24h from start)</span>
+                                  <input
+                                    type="datetime-local"
+                                    className="rounded-lg border border-white/20 bg-black/40 px-2 py-1.5 text-[#f4f0fa]"
+                                    value={tf.endsLocal}
+                                    onChange={(e) =>
+                                      setTimeframes((prev) =>
+                                        prev.map((row) =>
+                                          row.key === tf.key ? { ...row, endsLocal: e.target.value } : row,
+                                        ),
+                                      )
+                                    }
+                                  />
+                                </label>
+                              </div>
+                            ) : (
+                              <p className="m-0 text-[0.78rem] text-[#f4f0fa]/55">
+                                Starts now and stays Current for 24 hours (or until closed).
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </section>
 
                   {modalError ? (

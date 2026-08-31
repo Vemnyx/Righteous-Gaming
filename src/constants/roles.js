@@ -48,16 +48,11 @@ export function canAccessData(role) {
   return n === ROLE_ADMIN || n === ROLE_MEMBER || n === ROLE_PLAY_TESTER;
 }
 
-/** Temporary allowlist while Play Testing is owner-only. */
-export const PLAY_TESTING_ALLOWED_EMAILS = Object.freeze(["programmerjake95@gmail.com"]);
-
-/** Play Testing resource — temporarily limited to an allowlisted account. */
-/** @param {number | null | undefined} _role */
-/** @param {{ email?: string | null } | null | undefined} [profile] */
-export function canAccessPlayTesting(_role, profile) {
-  const email = profile?.email != null ? String(profile.email).trim().toLowerCase() : "";
-  if (!email) return false;
-  return PLAY_TESTING_ALLOWED_EMAILS.includes(email);
+/** Play Testing / Looking For Games: same audience as Meetings & Release Teams. */
+/** @param {number | null | undefined} role */
+/** @param {{ email?: string | null } | null | undefined} [_profile] */
+export function canAccessPlayTesting(role, _profile) {
+  return canAccessMeetings(role);
 }
 
 /** Meetings resource: everyone except Guests. */

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,13 +44,17 @@ func (h *playTestingHTTP) requirePlayTestingAccess(w http.ResponseWriter, r *htt
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return nil, false
 	}
-	// Temporary owner-only gate while Play Testing is in early access.
-	email := strings.ToLower(strings.TrimSpace(u.Email))
-	if email != "programmerjake95@gmail.com" {
+	if u.Role == nil {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return nil, false
 	}
-	return u, true
+	switch *u.Role {
+	case domain.RoleAdmin, domain.RoleMember, domain.RolePlayTester:
+		return u, true
+	default:
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return nil, false
+	}
 }
 
 type playTestingHeroJSON struct {
@@ -78,15 +83,18 @@ type playTestingTimeframeJSON struct {
 }
 
 type playTestingSessionJSON struct {
-	ID            int                          `json:"id"`
-	UserID        int                          `json:"user_id"`
-	Format        int16                        `json:"format"`
-	CreatedAt     time.Time                    `json:"created_at"`
-	OwnerFirstName *string                     `json:"owner_first_name,omitempty"`
-	OwnerUsername  *string                     `json:"owner_username,omitempty"`
-	HeroesWith    []playTestingSessionHeroJSON `json:"heroes_with"`
-	HeroesAgainst []playTestingSessionHeroJSON `json:"heroes_against"`
-	Timeframes    []playTestingTimeframeJSON   `json:"timeframes"`
+	ID              int                          `json:"id"`
+	UserID          int                          `json:"user_id"`
+	Format          int16                        `json:"format"`
+	Status          int16                        `json:"status"`
+	Bucket          string                       `json:"bucket"`
+	CreatedAt       time.Time                    `json:"created_at"`
+	ClosedAt        *time.Time                   `json:"closed_at,omitempty"`
+	OwnerFirstName  *string                      `json:"owner_first_name,omitempty"`
+	OwnerUsername   *string                      `json:"owner_username,omitempty"`
+	HeroesWith      []playTestingSessionHeroJSON `json:"heroes_with"`
+	HeroesAgainst   []playTestingSessionHeroJSON `json:"heroes_against"`
+	Timeframes      []playTestingTimeframeJSON   `json:"timeframes"`
 }
 
 type createPlayTestingTimeframeBody struct {
@@ -96,18 +104,22 @@ type createPlayTestingTimeframeBody struct {
 }
 
 type createPlayTestingSessionBody struct {
-	Format        int16                          `json:"format"`
-	HeroesWith    []int                          `json:"heroes_with"`
-	HeroesAgainst []int                          `json:"heroes_against"`
+	Format        int16                            `json:"format"`
+	HeroesWith    []int                            `json:"heroes_with"`
+	HeroesAgainst []int                            `json:"heroes_against"`
 	Timeframes    []createPlayTestingTimeframeBody `json:"timeframes"`
 }
 
 func sessionToJSON(s *repository.PlayTestingSession) playTestingSessionJSON {
+	bucket := repository.ClassifyPlayTestingSession(s, time.Now().UTC())
 	out := playTestingSessionJSON{
 		ID:             s.ID,
 		UserID:         s.UserID,
 		Format:         s.Format,
+		Status:         s.Status,
+		Bucket:         string(bucket),
 		CreatedAt:      s.CreatedAt,
+		ClosedAt:       s.ClosedAt,
 		OwnerFirstName: s.OwnerFirstName,
 		OwnerUsername:  s.OwnerUsername,
 		HeroesWith:     []playTestingSessionHeroJSON{},
@@ -174,7 +186,7 @@ func (h *playTestingHTTP) getMeta(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"heroes": out})
 }
 
-// GET /api/play-testing/sessions
+// GET /api/play-testing/sessions?status=current|upcoming|past
 func (h *playTestingHTTP) listSessions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -183,7 +195,20 @@ func (h *playTestingHTTP) listSessions(w http.ResponseWriter, r *http.Request) {
 	if _, ok := h.requirePlayTestingAccess(w, r); !ok {
 		return
 	}
-	sessions, err := h.app.Repo.ListPlayTestingSessions(r.Context())
+	raw := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status")))
+	var bucket repository.PlayTestingSessionBucket
+	switch raw {
+	case "", "current":
+		bucket = repository.PlayTestingBucketCurrent
+	case "upcoming":
+		bucket = repository.PlayTestingBucketUpcoming
+	case "past":
+		bucket = repository.PlayTestingBucketPast
+	default:
+		writeFieldError(w, http.StatusBadRequest, "status", "must be current, upcoming, or past")
+		return
+	}
+	sessions, err := h.app.Repo.ListPlayTestingSessions(r.Context(), bucket)
 	if err != nil {
 		log.Error("play testing list sessions", "error", err)
 		writeMessageError(w, http.StatusInternalServerError, "internal server error")
@@ -194,7 +219,51 @@ func (h *playTestingHTTP) listSessions(w http.ResponseWriter, r *http.Request) {
 		out = append(out, sessionToJSON(&sessions[i]))
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"sessions": out})
+	_ = json.NewEncoder(w).Encode(map[string]any{"sessions": out, "status": string(bucket)})
+}
+
+// POST /api/play-testing/sessions/{id}/close
+func (h *playTestingHTTP) closeSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	u, ok := h.requirePlayTestingAccess(w, r)
+	if !ok {
+		return
+	}
+	sessionID, err := strconv.Atoi(strings.TrimSpace(r.PathValue("id")))
+	if err != nil || sessionID <= 0 {
+		writeMessageError(w, http.StatusBadRequest, "invalid session id")
+		return
+	}
+	existing, err := h.app.Repo.GetPlayTestingSessionByID(r.Context(), sessionID)
+	if err != nil {
+		if errors.Is(err, repository.ErrPlayTestingSessionNotFound) {
+			writeMessageError(w, http.StatusNotFound, "session not found")
+			return
+		}
+		log.Error("play testing get session for close", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	isAdmin := u.Role != nil && *u.Role == domain.RoleAdmin
+	if existing.UserID != u.ID && !isAdmin {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+	closed, err := h.app.Repo.ClosePlayTestingSession(r.Context(), sessionID)
+	if err != nil {
+		if errors.Is(err, repository.ErrPlayTestingSessionNotFound) {
+			writeMessageError(w, http.StatusNotFound, "session not found")
+			return
+		}
+		log.Error("play testing close session", "error", err)
+		writeMessageError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"session": sessionToJSON(closed)})
 }
 
 // POST /api/play-testing/sessions
@@ -219,10 +288,6 @@ func (h *playTestingHTTP) createSession(w http.ResponseWriter, r *http.Request) 
 	format := domain.CardFormat(body.Format)
 	if !format.Valid() {
 		writeFieldError(w, http.StatusBadRequest, "format", "invalid format")
-		return
-	}
-	if len(body.Timeframes) == 0 {
-		writeFieldError(w, http.StatusBadRequest, "timeframes", "at least one timeframe is required")
 		return
 	}
 	if len(body.Timeframes) > 20 {
