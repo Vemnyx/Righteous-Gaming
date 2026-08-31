@@ -14,6 +14,20 @@ import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
+import {
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  Bold,
+  FileText,
+  Heading2,
+  Image as ImageIcon,
+  Italic,
+  Link as LinkIcon,
+  List,
+  ListOrdered,
+  Underline as UnderlineIcon,
+} from "lucide-react";
 import { uploadPublicAsset, extFromFilename, uploadSizeError } from "../utils/uploadPublicAsset";
 import { docxFileToRichHtml } from "../utils/docxToRichHtml";
 import { isEmptyRichHtml } from "../utils/richTextDomPurify";
@@ -117,8 +131,11 @@ const RichTextImage = BaseImage.extend({
   },
 });
 
-const btn =
-  "rounded-md border px-2 py-1 text-[0.75rem] font-semibold transition-colors disabled:opacity-40";
+const iconBtnBase =
+  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition-colors disabled:cursor-not-allowed disabled:opacity-40";
+
+const labelBtnBase =
+  "inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border px-2.5 text-[0.78rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40";
 
 function toolbarSurface(isLight) {
   return isLight
@@ -126,12 +143,44 @@ function toolbarSurface(isLight) {
     : "border-white/[0.22] bg-black/30 text-[#f4f0fa]";
 }
 
-function toolbarBtnClass(active, isLight, idleTone) {
-  if (!active) return `${btn} ${idleTone}`;
+function toolbarBtnClass(active, isLight, idleTone, withLabel = false) {
+  const base = withLabel ? labelBtnBase : iconBtnBase;
+  if (!active) return `${base} ${idleTone}`;
   if (isLight) {
-    return `${btn} border-[rgba(152,117,207,0.9)] bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] text-white shadow-[0_2px_10px_rgb(103_61_154/0.38)]`;
+    return `${base} border-[rgba(152,117,207,0.9)] bg-gradient-to-b from-[#7b4cb8] to-[#5a2f8f] text-white shadow-[0_2px_10px_rgb(103_61_154/0.38)]`;
   }
-  return `${btn} border-[rgba(142,90,200,0.8)] bg-gradient-to-br from-[rgba(80,40,120,0.65)] to-[rgba(40,20,70,0.72)] text-white shadow-[0_2px_10px_rgba(90,40,140,0.25)]`;
+  return `${base} border-[rgba(142,90,200,0.8)] bg-gradient-to-br from-[rgba(80,40,120,0.65)] to-[rgba(40,20,70,0.72)] text-white shadow-[0_2px_10px_rgba(90,40,140,0.25)]`;
+}
+
+function ToolbarDivider() {
+  return <span className="mx-0.5 hidden h-6 w-px shrink-0 bg-white/20 sm:block" aria-hidden />;
+}
+
+/**
+ * @param {{
+ *   active: boolean,
+ *   isLight: boolean,
+ *   idleTone: string,
+ *   title: string,
+ *   onClick: () => void,
+ *   disabled?: boolean,
+ *   children: import("react").ReactNode,
+ * }} props
+ */
+function ToolbarIconButton({ active, isLight, idleTone, title, onClick, disabled, children }) {
+  return (
+    <button
+      type="button"
+      className={toolbarBtnClass(active, isLight, idleTone)}
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active}
+      title={title}
+      aria-label={title}
+    >
+      {children}
+    </button>
+  );
 }
 
 /**
@@ -227,6 +276,8 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
     extensions: [
       StarterKit.configure({
         heading: { levels: [2, 3] },
+        bulletList: { keepMarks: true, keepAttributes: false },
+        orderedList: { keepMarks: true, keepAttributes: false },
       }),
       TextAlign.configure({
         types: ["paragraph", "heading", "image"],
@@ -386,6 +437,7 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
   );
 
   const ts = toolbarSurface(isLight);
+  const iconCls = "h-[1.15rem] w-[1.15rem] shrink-0";
 
   /** @param {import("@tiptap/react").Editor} ed */
   const currentTextAlign = (ed) => {
@@ -418,83 +470,101 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
           aria-label="Formatting"
         >
           <div className="flex min-w-0 flex-wrap items-center gap-1">
-            <button
-              type="button"
-              className={toolbarBtnClass(editor.isActive("bold"), isLight, ts)}
-              onClick={() => editor.chain().focus().toggleBold().run()}
-              aria-pressed={editor.isActive("bold")}
+            <ToolbarIconButton
+              active={editor.isActive("bold")}
+              isLight={isLight}
+              idleTone={ts}
               title="Bold"
+              onClick={() => editor.chain().focus().toggleBold().run()}
             >
-              Bold
-            </button>
-            <button
-              type="button"
-              className={toolbarBtnClass(editor.isActive("italic"), isLight, ts)}
-              onClick={() => editor.chain().focus().toggleItalic().run()}
-              aria-pressed={editor.isActive("italic")}
+              <Bold className={iconCls} strokeWidth={2.25} />
+            </ToolbarIconButton>
+            <ToolbarIconButton
+              active={editor.isActive("italic")}
+              isLight={isLight}
+              idleTone={ts}
               title="Italic"
+              onClick={() => editor.chain().focus().toggleItalic().run()}
             >
-              Italic
-            </button>
-            <button
-              type="button"
-              className={toolbarBtnClass(editor.isActive("underline"), isLight, ts)}
-              onClick={() => editor.chain().focus().toggleUnderline().run()}
-              aria-pressed={editor.isActive("underline")}
+              <Italic className={iconCls} strokeWidth={2.25} />
+            </ToolbarIconButton>
+            <ToolbarIconButton
+              active={editor.isActive("underline")}
+              isLight={isLight}
+              idleTone={ts}
               title="Underline"
+              onClick={() => editor.chain().focus().toggleUnderline().run()}
             >
-              Underline
-            </button>
-            <button
-              type="button"
-              className={toolbarBtnClass(editor.isActive("bulletList"), isLight, ts)}
-              onClick={() => editor.chain().focus().toggleBulletList().run()}
-              aria-pressed={editor.isActive("bulletList")}
-              title="Bullet list"
-            >
-              List
-            </button>
-            <button
-              type="button"
-              className={toolbarBtnClass(editor.isActive("heading", { level: 2 }), isLight, ts)}
-              onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-              aria-pressed={editor.isActive("heading", { level: 2 })}
+              <UnderlineIcon className={iconCls} strokeWidth={2.25} />
+            </ToolbarIconButton>
+
+            <ToolbarDivider />
+
+            <ToolbarIconButton
+              active={editor.isActive("heading", { level: 2 })}
+              isLight={isLight}
+              idleTone={ts}
               title="Heading"
+              onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
             >
-              H2
-            </button>
-            <button
-              type="button"
-              className={toolbarBtnClass(editor.isActive("link"), isLight, ts)}
-              onClick={openLinkModal}
-              aria-pressed={editor.isActive("link")}
+              <Heading2 className={iconCls} strokeWidth={2.25} />
+            </ToolbarIconButton>
+            <ToolbarIconButton
+              active={editor.isActive("bulletList")}
+              isLight={isLight}
+              idleTone={ts}
+              title="Bullet list"
+              onClick={() => editor.chain().focus().toggleBulletList().run()}
+            >
+              <List className={iconCls} strokeWidth={2.25} />
+            </ToolbarIconButton>
+            <ToolbarIconButton
+              active={editor.isActive("orderedList")}
+              isLight={isLight}
+              idleTone={ts}
+              title="Numbered list"
+              onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            >
+              <ListOrdered className={iconCls} strokeWidth={2.25} />
+            </ToolbarIconButton>
+            <ToolbarIconButton
+              active={editor.isActive("link")}
+              isLight={isLight}
+              idleTone={ts}
               title="Link"
+              onClick={openLinkModal}
             >
-              Link
-            </button>
-            <button
-              type="button"
-              className={toolbarBtnClass(false, isLight, ts)}
+              <LinkIcon className={iconCls} strokeWidth={2.25} />
+            </ToolbarIconButton>
+
+            <ToolbarDivider />
+
+            <ToolbarIconButton
+              active={false}
+              isLight={isLight}
+              idleTone={ts}
+              title="Insert image"
+              disabled={uploading || importingDocx}
               onClick={() => {
                 setUploadError(null);
                 fileInputRef.current?.click();
               }}
-              disabled={uploading || importingDocx}
-              title="Insert image"
             >
-              Image
-            </button>
+              <ImageIcon className={iconCls} strokeWidth={2.25} />
+            </ToolbarIconButton>
             <button
               type="button"
-              className={toolbarBtnClass(false, isLight, ts)}
+              className={toolbarBtnClass(false, isLight, ts, true)}
               onClick={() => {
                 setUploadError(null);
                 docxInputRef.current?.click();
               }}
               disabled={uploading || importingDocx}
               title="Import Word (.docx) into the editor"
+              aria-label="Import Word document"
             >
-              {importingDocx ? "Importing…" : "Import Word"}
+              <FileText className={iconCls} strokeWidth={2.25} />
+              <span className="hidden sm:inline">{importingDocx ? "Importing…" : "Word"}</span>
             </button>
             <input
               ref={fileInputRef}
@@ -513,38 +583,38 @@ export const RichTextEditor = forwardRef(function RichTextEditor(
             />
           </div>
           <div className="ml-auto flex shrink-0 flex-wrap items-center gap-1" role="group" aria-label="Text alignment">
-            <button
-              type="button"
-              className={toolbarBtnClass(currentTextAlign(editor) === "left", isLight, ts)}
-              onClick={() => editor.chain().focus().setTextAlign("left").run()}
-              aria-pressed={currentTextAlign(editor) === "left"}
+            <ToolbarIconButton
+              active={currentTextAlign(editor) === "left"}
+              isLight={isLight}
+              idleTone={ts}
               title="Align left"
+              onClick={() => editor.chain().focus().setTextAlign("left").run()}
             >
-              Left
-            </button>
-            <button
-              type="button"
-              className={toolbarBtnClass(currentTextAlign(editor) === "center", isLight, ts)}
-              onClick={() => editor.chain().focus().setTextAlign("center").run()}
-              aria-pressed={currentTextAlign(editor) === "center"}
+              <AlignLeft className={iconCls} strokeWidth={2.25} />
+            </ToolbarIconButton>
+            <ToolbarIconButton
+              active={currentTextAlign(editor) === "center"}
+              isLight={isLight}
+              idleTone={ts}
               title="Align center"
+              onClick={() => editor.chain().focus().setTextAlign("center").run()}
             >
-              Center
-            </button>
-            <button
-              type="button"
-              className={toolbarBtnClass(currentTextAlign(editor) === "right", isLight, ts)}
-              onClick={() => editor.chain().focus().setTextAlign("right").run()}
-              aria-pressed={currentTextAlign(editor) === "right"}
+              <AlignCenter className={iconCls} strokeWidth={2.25} />
+            </ToolbarIconButton>
+            <ToolbarIconButton
+              active={currentTextAlign(editor) === "right"}
+              isLight={isLight}
+              idleTone={ts}
               title="Align right"
+              onClick={() => editor.chain().focus().setTextAlign("right").run()}
             >
-              Right
-            </button>
+              <AlignRight className={iconCls} strokeWidth={2.25} />
+            </ToolbarIconButton>
           </div>
         </div>
 
         <div
-          className={`relative rounded-lg border bg-black/25 transition-colors [&_.ProseMirror_img]:max-h-[min(560px,75vh)] [&_.ProseMirror_img]:max-w-full [&_.ProseMirror_img]:object-contain [&_.ProseMirror_img[data-text-align=center]]:mx-auto [&_.ProseMirror_img[data-text-align=right]]:ml-auto [&_.ProseMirror_img[data-text-align=right]]:mr-0 [&_[data-resize-handle]]:z-10 [&_[data-resize-handle]]:m-[-6px] [&_[data-resize-handle]]:size-[14px] [&_[data-resize-handle]]:rounded-sm [&_[data-resize-handle]]:border-2 [&_[data-resize-handle]]:border-[rgba(180,140,228,0.95)] [&_[data-resize-handle]]:bg-[rgba(22,12,38,0.92)] [&_[data-resize-handle]]:shadow-[0_2px_8px_rgba(0,0,0,0.35)] ${
+          className={`relative rounded-lg border bg-black/25 transition-colors [&_.ProseMirror]:outline-none [&_.ProseMirror_h2]:mt-3 [&_.ProseMirror_h2]:mb-1 [&_.ProseMirror_h2]:text-xl [&_.ProseMirror_h2]:font-semibold [&_.ProseMirror_li]:my-0.5 [&_.ProseMirror_li_p]:my-0 [&_.ProseMirror_ol]:my-2 [&_.ProseMirror_ol]:list-decimal [&_.ProseMirror_ol]:pl-6 [&_.ProseMirror_p]:my-1.5 [&_.ProseMirror_ul]:my-2 [&_.ProseMirror_ul]:list-disc [&_.ProseMirror_ul]:pl-6 [&_.ProseMirror_img]:max-h-[min(560px,75vh)] [&_.ProseMirror_img]:max-w-full [&_.ProseMirror_img]:object-contain [&_.ProseMirror_img[data-text-align=center]]:mx-auto [&_.ProseMirror_img[data-text-align=right]]:ml-auto [&_.ProseMirror_img[data-text-align=right]]:mr-0 [&_[data-resize-handle]]:z-10 [&_[data-resize-handle]]:m-[-6px] [&_[data-resize-handle]]:size-[14px] [&_[data-resize-handle]]:rounded-sm [&_[data-resize-handle]]:border-2 [&_[data-resize-handle]]:border-[rgba(180,140,228,0.95)] [&_[data-resize-handle]]:bg-[rgba(22,12,38,0.92)] [&_[data-resize-handle]]:shadow-[0_2px_8px_rgba(0,0,0,0.35)] ${
             dragOver ? "border-emerald-300/70 ring-2 ring-emerald-400/35" : "border-white/[0.18]"
           } ${isLight ? "ring-1 ring-white/[0.06]" : ""}`}
           onDragEnter={(e) => {
