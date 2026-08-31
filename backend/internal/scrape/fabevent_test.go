@@ -10,6 +10,32 @@ import (
 	"righteous-gaming/backend/internal/scrape"
 )
 
+func TestNameMatches(t *testing.T) {
+	cases := []struct {
+		first, last, player string
+		want                bool
+	}{
+		{"Tim", "Hickman", "Tim Hickman", true},
+		{"Tim", "Hickman", "Hickman, Tim", true},
+		{"Timothy", "Hickman", "Timothy Hickman III", true},
+		{"Timothy", "Hickman", "Hickman III, Timothy", true},
+		{"Tim", "Hickman", "Timothy Hickman III", false},
+		{"Tim", "Hickman", "Timothy Hickman", false},
+		{"John", "Smith", "Johnny Smith", false},
+		{"Mary Ann", "Smith", "Mary Ann Smith", true},
+		{"Mary Ann", "Smith", "Mary Smith", false},
+		{"", "Hickman", "Tim Hickman", false},
+		{"Tim", "", "Tim Hickman", false},
+		{"Tim", "Hickman", "", false},
+	}
+	for _, tc := range cases {
+		got := scrape.NameMatches(tc.first, tc.last, tc.player)
+		if got != tc.want {
+			t.Fatalf("NameMatches(%q, %q, %q) = %v, want %v", tc.first, tc.last, tc.player, got, tc.want)
+		}
+	}
+}
+
 func TestCleanHeroNameStripsMarkupNoise(t *testing.T) {
 	cases := map[string]string{
 		">Fai, Rising Rebellion": "Fai, Rising Rebellion",

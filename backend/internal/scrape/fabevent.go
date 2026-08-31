@@ -542,6 +542,56 @@ func NormalizeName(s string) string {
 	return reWhitespace.ReplaceAllString(s, " ")
 }
 
+// Generational / honorific suffixes ignored when matching player names.
+var nameSuffixTokens = map[string]struct{}{
+	"jr": {}, "jr.": {}, "sr": {}, "sr.": {},
+	"ii": {}, "iii": {}, "iv": {}, "v": {},
+	"2nd": {}, "3rd": {}, "4th": {}, "5th": {},
+}
+
+// nameTokens lowercases, splits on whitespace/commas, and drops generational suffixes.
+func nameTokens(s string) []string {
+	s = NormalizeName(strings.ReplaceAll(s, ",", " "))
+	if s == "" {
+		return nil
+	}
+	parts := strings.Fields(s)
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.Trim(p, ".")
+		if p == "" {
+			continue
+		}
+		if _, skip := nameSuffixTokens[p]; skip {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// containsTokenSequence reports whether needle appears as consecutive tokens in haystack.
+func containsTokenSequence(haystack, needle []string) bool {
+	if len(needle) == 0 || len(needle) > len(haystack) {
+		return false
+	}
+	for i := 0; i <= len(haystack)-len(needle); i++ {
+		ok := true
+		for j := range needle {
+			if haystack[i+j] != needle[j] {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
+}
+
+// NameMatches reports whether a user's first/last name refers to the same person as player
+// (FabTCG coverage label). Matching uses whole name tokens so "Tim" does not match "Timothy".
 func NameMatches(first, last, player string) bool {
 	playerN := NormalizeName(player)
 	if playerN == "" {
@@ -557,10 +607,16 @@ func NameMatches(first, last, player string) bool {
 	}
 	firstN := NormalizeName(first)
 	lastN := NormalizeName(last)
-	if firstN != "" && lastN != "" && strings.Contains(playerN, firstN) && strings.Contains(playerN, lastN) {
-		return true
+	if firstN == "" || lastN == "" {
+		return false
 	}
-	return false
+	playerTokens := nameTokens(playerN)
+	firstTokens := nameTokens(firstN)
+	lastTokens := nameTokens(lastN)
+	if len(playerTokens) == 0 || len(firstTokens) == 0 || len(lastTokens) == 0 {
+		return false
+	}
+	return containsTokenSequence(playerTokens, firstTokens) && containsTokenSequence(playerTokens, lastTokens)
 }
 
 func parsePlayerTextBlock(raw string) (player, hero string) {
