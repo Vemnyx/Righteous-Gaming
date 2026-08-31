@@ -135,6 +135,8 @@ func (h *playTestingHTTP) writeDetailRepoErr(w http.ResponseWriter, err error, a
 		writeMessageError(w, http.StatusNotFound, "note not found")
 	case errors.Is(err, repository.ErrPlayTestingInterestNotFound):
 		writeMessageError(w, http.StatusNotFound, "interest not found")
+	case errors.Is(err, repository.ErrPlayTestingRecordingNotFound):
+		writeMessageError(w, http.StatusNotFound, "recording not found")
 	case errors.Is(err, repository.ErrPlayTestingNotSessionOwner):
 		http.Error(w, "Forbidden", http.StatusForbidden)
 	case errors.Is(err, repository.ErrPlayTestingOwnerInterest):
@@ -146,7 +148,13 @@ func (h *playTestingHTTP) writeDetailRepoErr(w http.ResponseWriter, err error, a
 	case errors.Is(err, repository.ErrPlayTestingInterestNoteLen):
 		writeFieldError(w, http.StatusBadRequest, "note", "note must be 280 characters or fewer")
 	case strings.Contains(err.Error(), "not legal") || strings.Contains(err.Error(), "invalid hero"):
-		writeFieldError(w, http.StatusBadRequest, "hero_ids", err.Error())
+		writeFieldError(w, http.StatusBadRequest, "heroes", err.Error())
+	case strings.Contains(err.Error(), "heroes must be different"):
+		writeFieldError(w, http.StatusBadRequest, "second_hero_id", "choose two different heroes")
+	case strings.Contains(err.Error(), "both heroes are required"):
+		writeFieldError(w, http.StatusBadRequest, "heroes", "select both heroes")
+	case strings.Contains(err.Error(), "recording url required"):
+		writeFieldError(w, http.StatusBadRequest, "url", "required")
 	case strings.Contains(err.Error(), "note body required"):
 		writeFieldError(w, http.StatusBadRequest, "body", "required")
 	case strings.Contains(err.Error(), "forbidden"):
@@ -372,6 +380,138 @@ func (h *playTestingHTTP) deleteInterestByUser(w http.ResponseWriter, r *http.Re
 	}
 	if err := h.app.Repo.DeletePlayTestingSessionInterest(r.Context(), sessionID, interestUserID, u.ID, isOwnerOrAdmin); err != nil {
 		h.writeDetailRepoErr(w, err, "play testing delete interest")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type playTestingRecordingJSON struct {
+	ID                    int       `json:"id"`
+	SessionID             int       `json:"session_id"`
+	UserID                int       `json:"user_id"`
+	RecordingID           int       `json:"recording_id"`
+	CreatedAt             time.Time `json:"created_at"`
+	URL                   string    `json:"url"`
+	Label                 *string   `json:"label,omitempty"`
+	Format                int16     `json:"format"`
+	FirstHeroName         *string   `json:"first_hero_name,omitempty"`
+	FirstHeroArtImageURL  *string   `json:"first_hero_art_image_url,omitempty"`
+	SecondHeroName        *string   `json:"second_hero_name,omitempty"`
+	SecondHeroArtImageURL *string   `json:"second_hero_art_image_url,omitempty"`
+	FirstName             *string   `json:"first_name,omitempty"`
+	Username              *string   `json:"username,omitempty"`
+}
+
+func playTestingRecordingToJSON(row *repository.PlayTestingSessionRecording) playTestingRecordingJSON {
+	return playTestingRecordingJSON{
+		ID:                    row.ID,
+		SessionID:             row.SessionID,
+		UserID:                row.UserID,
+		RecordingID:           row.RecordingID,
+		CreatedAt:             row.CreatedAt,
+		URL:                   row.URL,
+		Label:                 row.Label,
+		Format:                row.Format,
+		FirstHeroName:         row.FirstHeroName,
+		FirstHeroArtImageURL:  row.FirstHeroArtImageURL,
+		SecondHeroName:        row.SecondHeroName,
+		SecondHeroArtImageURL: row.SecondHeroArtImageURL,
+		FirstName:             row.FirstName,
+		Username:              row.Username,
+	}
+}
+
+type createPlayTestingRecordingBody struct {
+	URL          string  `json:"url"`
+	Label        *string `json:"label"`
+	FirstHeroID  int     `json:"first_hero_id"`
+	SecondHeroID int     `json:"second_hero_id"`
+}
+
+// GET /api/play-testing/sessions/{id}/recordings
+func (h *playTestingHTTP) listRecordings(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.requirePlayTestingAccess(w, r); !ok {
+		return
+	}
+	sessionID, ok := h.parseSessionID(w, r)
+	if !ok {
+		return
+	}
+	if _, err := h.app.Repo.GetPlayTestingSessionByID(r.Context(), sessionID); err != nil {
+		h.writeDetailRepoErr(w, err, "play testing get session for recordings")
+		return
+	}
+	rows, err := h.app.Repo.ListPlayTestingSessionRecordings(r.Context(), sessionID)
+	if err != nil {
+		h.writeDetailRepoErr(w, err, "play testing list recordings")
+		return
+	}
+	out := make([]playTestingRecordingJSON, 0, len(rows))
+	for i := range rows {
+		out = append(out, playTestingRecordingToJSON(&rows[i]))
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"recordings": out})
+}
+
+// POST /api/play-testing/sessions/{id}/recordings
+func (h *playTestingHTTP) createRecording(w http.ResponseWriter, r *http.Request) {
+	u, ok := h.requirePlayTestingAccess(w, r)
+	if !ok {
+		return
+	}
+	sessionID, ok := h.parseSessionID(w, r)
+	if !ok {
+		return
+	}
+	var body createPlayTestingRecordingBody
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&body); err != nil {
+		writeMessageError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if strings.TrimSpace(body.URL) == "" {
+		writeFieldError(w, http.StatusBadRequest, "url", "required")
+		return
+	}
+	if body.FirstHeroID <= 0 {
+		writeFieldError(w, http.StatusBadRequest, "first_hero_id", "required")
+		return
+	}
+	if body.SecondHeroID <= 0 {
+		writeFieldError(w, http.StatusBadRequest, "second_hero_id", "required")
+		return
+	}
+	row, err := h.app.Repo.CreatePlayTestingSessionRecording(
+		r.Context(), sessionID, u.ID, body.URL, body.Label, body.FirstHeroID, body.SecondHeroID,
+	)
+	if err != nil {
+		h.writeDetailRepoErr(w, err, "play testing create recording")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]any{"recording": playTestingRecordingToJSON(row)})
+}
+
+// DELETE /api/play-testing/sessions/{id}/recordings/{recordingLinkId}
+func (h *playTestingHTTP) deleteRecording(w http.ResponseWriter, r *http.Request) {
+	u, ok := h.requirePlayTestingAccess(w, r)
+	if !ok {
+		return
+	}
+	sessionID, ok := h.parseSessionID(w, r)
+	if !ok {
+		return
+	}
+	linkID, err := strconv.Atoi(strings.TrimSpace(r.PathValue("recordingLinkId")))
+	if err != nil || linkID <= 0 {
+		writeMessageError(w, http.StatusBadRequest, "invalid recording id")
+		return
+	}
+	if err := h.app.Repo.DeletePlayTestingSessionRecording(r.Context(), sessionID, linkID, u.ID, h.isAdmin(u)); err != nil {
+		h.writeDetailRepoErr(w, err, "play testing delete recording")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

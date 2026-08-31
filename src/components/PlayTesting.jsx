@@ -822,7 +822,7 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
 
   const emptyCopy =
     listTab === "current"
-      ? "No current Looking for Games sessions."
+      ? "No current Play Testing sessions."
       : listTab === "upcoming"
         ? "No upcoming sessions."
         : "No past sessions.";

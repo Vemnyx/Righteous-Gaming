@@ -397,3 +397,167 @@ WHERE session_id = $1 AND user_id = $2`, sessionID, interestUserID)
 	}
 	return nil
 }
+
+var ErrPlayTestingRecordingNotFound = errors.New("repository: play testing recording not found")
+
+// PlayTestingSessionRecording is a recording linked to a play-testing session.
+type PlayTestingSessionRecording struct {
+	ID                     int
+	SessionID              int
+	UserID                 int
+	RecordingID            int
+	CreatedAt              time.Time
+	URL                    string
+	Label                  *string
+	Format                 int16
+	FirstHeroName          *string
+	FirstHeroArtImageURL   *string
+	SecondHeroName         *string
+	SecondHeroArtImageURL  *string
+	FirstName              *string
+	Username               *string
+}
+
+// ListPlayTestingSessionRecordings returns recordings linked to a session, newest first.
+func (r *Repository) ListPlayTestingSessionRecordings(ctx context.Context, sessionID int) ([]PlayTestingSessionRecording, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	if sessionID <= 0 {
+		return nil, fmt.Errorf("repository: invalid session id")
+	}
+	const q = `
+SELECT pr.id, pr.session_id, pr.user_id, pr.recording_id, pr.created_at,
+       rec.url, rec.label, rec.format,
+       h1.name, h1.art_image_url, h2.name, h2.art_image_url,
+       u.first_name, u.username
+FROM play_testing_session_recordings pr
+INNER JOIN recordings rec ON rec.id = pr.recording_id
+INNER JOIN users u ON u.id = pr.user_id
+LEFT JOIN heroes h1 ON h1.id = rec.first_hero_id
+LEFT JOIN heroes h2 ON h2.id = rec.second_hero_id
+WHERE pr.session_id = $1
+ORDER BY pr.created_at DESC, pr.id DESC`
+	rows, err := r.pool.Query(ctx, q, sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("repository: list play testing session recordings: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]PlayTestingSessionRecording, 0, 8)
+	for rows.Next() {
+		var row PlayTestingSessionRecording
+		if err := rows.Scan(
+			&row.ID, &row.SessionID, &row.UserID, &row.RecordingID, &row.CreatedAt,
+			&row.URL, &row.Label, &row.Format,
+			&row.FirstHeroName, &row.FirstHeroArtImageURL, &row.SecondHeroName, &row.SecondHeroArtImageURL,
+			&row.FirstName, &row.Username,
+		); err != nil {
+			return nil, fmt.Errorf("repository: scan play testing session recording: %w", err)
+		}
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("repository: list play testing session recordings rows: %w", err)
+	}
+	return out, nil
+}
+
+// CreatePlayTestingSessionRecording creates a recording and links it to the session.
+// Only the session owner may create recordings for the session.
+func (r *Repository) CreatePlayTestingSessionRecording(
+	ctx context.Context,
+	sessionID, userID int,
+	url string,
+	label *string,
+	firstHeroID, secondHeroID int,
+) (*PlayTestingSessionRecording, error) {
+	if r.pool == nil {
+		return nil, fmt.Errorf("repository: pool is closed")
+	}
+	session, err := r.GetPlayTestingSessionByID(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if session.UserID != userID {
+		return nil, ErrPlayTestingNotSessionOwner
+	}
+	url = strings.TrimSpace(url)
+	if url == "" {
+		return nil, fmt.Errorf("repository: recording url required")
+	}
+	if firstHeroID <= 0 || secondHeroID <= 0 {
+		return nil, fmt.Errorf("repository: both heroes are required")
+	}
+	if firstHeroID == secondHeroID {
+		return nil, fmt.Errorf("repository: heroes must be different")
+	}
+	if err := r.HeroesExistAndLegalInFormat(ctx, []int{firstHeroID, secondHeroID}, session.Format); err != nil {
+		return nil, err
+	}
+
+	var labelPtr *string
+	if label != nil {
+		trimmed := strings.TrimSpace(*label)
+		if trimmed != "" {
+			labelPtr = &trimmed
+		}
+	}
+
+	rec, err := r.CreateRecording(ctx, CreateRecordingInput{
+		UserID:       userID,
+		URL:          url,
+		Label:        labelPtr,
+		FirstHeroID:  firstHeroID,
+		SecondHeroID: secondHeroID,
+		Format:       session.Format,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var linkID int
+	err = r.pool.QueryRow(ctx, `
+INSERT INTO play_testing_session_recordings (session_id, recording_id, user_id)
+VALUES ($1, $2, $3)
+RETURNING id`, sessionID, rec.ID, userID).Scan(&linkID)
+	if err != nil {
+		return nil, fmt.Errorf("repository: link play testing session recording: %w", err)
+	}
+
+	list, err := r.ListPlayTestingSessionRecordings(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		if list[i].ID == linkID {
+			return &list[i], nil
+		}
+	}
+	return nil, ErrPlayTestingRecordingNotFound
+}
+
+// DeletePlayTestingSessionRecording unlinks a recording from a session.
+// Only the session owner (or admin via caller flag) may delete.
+func (r *Repository) DeletePlayTestingSessionRecording(ctx context.Context, sessionID, linkID, callerUserID int, isAdmin bool) error {
+	if r.pool == nil {
+		return fmt.Errorf("repository: pool is closed")
+	}
+	session, err := r.GetPlayTestingSessionByID(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if session.UserID != callerUserID && !isAdmin {
+		return ErrPlayTestingNotSessionOwner
+	}
+	tag, err := r.pool.Exec(ctx, `
+DELETE FROM play_testing_session_recordings
+WHERE id = $1 AND session_id = $2`, linkID, sessionID)
+	if err != nil {
+		return fmt.Errorf("repository: delete play testing session recording: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrPlayTestingRecordingNotFound
+	}
+	return nil
+}

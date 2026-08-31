@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../auth/AuthContext";
 import {
   CARD_FORMAT_NAMES,
@@ -6,6 +7,12 @@ import {
   isValidCardFormatId,
 } from "../constants/cardFormat";
 import { bodyToRichHtml, isEmptyRichHtml } from "../utils/richTextDomPurify";
+import {
+  MAX_UPLOAD_SIZE_LABEL,
+  uploadPublicAsset,
+  extFromFilename,
+  uploadSizeError,
+} from "../utils/uploadPublicAsset";
 import { PANEL_TABS_BLEED, PANEL_TABS_CONTENT_PAD } from "./PanelTabs";
 import { RichTextEditor } from "./RichTextEditor";
 import { RichTextHtml } from "./RichTextHtml";
@@ -46,6 +53,23 @@ import {
  */
 
 const INTEREST_NOTE_MAX = 280;
+const REC_MEDIA_UPLOAD = "upload";
+const REC_MEDIA_EMBED = "embed";
+
+/**
+ * @typedef {{
+ *   id: number,
+ *   recording_id: number,
+ *   url: string,
+ *   label?: string | null,
+ *   format?: number,
+ *   created_at: string,
+ *   first_hero_name?: string | null,
+ *   first_hero_art_image_url?: string | null,
+ *   second_hero_name?: string | null,
+ *   second_hero_art_image_url?: string | null,
+ * }} SessionRecording
+ */
 
 /**
  * @param {{ isLight: boolean, active: boolean, sessionId: string, onBack?: () => void }} props
@@ -79,6 +103,19 @@ export function PlayTestingDetail({ isLight, active, sessionId, onBack }) {
   const [interestSubmitting, setInterestSubmitting] = useState(false);
   const [interestError, setInterestError] = useState(/** @type {string | null} */ (null));
 
+  const [recordings, setRecordings] = useState(/** @type {SessionRecording[]} */ ([]));
+  const [recordingModalOpen, setRecordingModalOpen] = useState(false);
+  const [recMediaMode, setRecMediaMode] = useState(/** @type {"upload" | "embed"} */ (REC_MEDIA_UPLOAD));
+  const [recUrl, setRecUrl] = useState("");
+  const [recLabel, setRecLabel] = useState("");
+  const [recVideoFile, setRecVideoFile] = useState(/** @type {File | null} */ (null));
+  const [recFirstHeroId, setRecFirstHeroId] = useState(/** @type {number | ""} */ (""));
+  const [recSecondHeroId, setRecSecondHeroId] = useState(/** @type {number | ""} */ (""));
+  const [recSubmitting, setRecSubmitting] = useState(false);
+  const [recUploading, setRecUploading] = useState(false);
+  const [recError, setRecError] = useState(/** @type {string | null} */ (null));
+  const [recDeletingId, setRecDeletingId] = useState(/** @type {number | null} */ (null));
+
   const btnBase =
     "rounded-lg border px-3 py-1.5 text-[0.8125rem] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40";
   const btnTheme = isLight
@@ -104,22 +141,25 @@ export function PlayTestingDetail({ isLight, active, sessionId, onBack }) {
     try {
       const token = await user.getIdToken();
       const headers = { Authorization: `Bearer ${token}` };
-      const [resSession, resMeta, resNotes, resInterests] = await Promise.all([
+      const [resSession, resMeta, resNotes, resInterests, resRecordings] = await Promise.all([
         fetch(`/api/play-testing/sessions/${sessionId}`, { headers }),
         fetch("/api/play-testing/meta", { headers }),
         fetch(`/api/play-testing/sessions/${sessionId}/notes`, { headers }),
         fetch(`/api/play-testing/sessions/${sessionId}/interests`, { headers }),
+        fetch(`/api/play-testing/sessions/${sessionId}/recordings`, { headers }),
       ]);
       if (!resSession.ok) throw new Error(parseApiError(await resSession.text()));
       if (!resMeta.ok) throw new Error(parseApiError(await resMeta.text()));
       if (!resNotes.ok) throw new Error(parseApiError(await resNotes.text()));
       if (!resInterests.ok) throw new Error(parseApiError(await resInterests.text()));
+      if (!resRecordings.ok) throw new Error(parseApiError(await resRecordings.text()));
 
-      const [sessionData, metaData, notesData, interestsData] = await Promise.all([
+      const [sessionData, metaData, notesData, interestsData, recordingsData] = await Promise.all([
         resSession.json(),
         resMeta.json(),
         resNotes.json(),
         resInterests.json(),
+        resRecordings.json(),
       ]);
 
       const nextSession = sessionData.session && typeof sessionData.session === "object" ? sessionData.session : null;
@@ -155,6 +195,7 @@ export function PlayTestingDetail({ isLight, active, sessionId, onBack }) {
         setInterestHeroIds([]);
         setInterestNote("");
       }
+      setRecordings(Array.isArray(recordingsData.recordings) ? recordingsData.recordings : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load session");
       setSession(null);
@@ -334,6 +375,126 @@ export function PlayTestingDetail({ isLight, active, sessionId, onBack }) {
       setInterestError(e instanceof Error ? e.message : "Failed to remove interest");
     } finally {
       setInterestSubmitting(false);
+    }
+  };
+
+  const resetRecordingModal = () => {
+    setRecMediaMode(REC_MEDIA_UPLOAD);
+    setRecUrl("");
+    setRecLabel("");
+    setRecVideoFile(null);
+    setRecFirstHeroId("");
+    setRecSecondHeroId("");
+    setRecError(null);
+    setRecUploading(false);
+  };
+
+  const openRecordingModal = () => {
+    resetRecordingModal();
+    const withHeroes = session?.heroes_with || [];
+    const againstHeroes = session?.heroes_against || [];
+    if (withHeroes.length > 0 && typeof withHeroes[0].hero_id === "number") {
+      setRecFirstHeroId(withHeroes[0].hero_id);
+    }
+    if (againstHeroes.length > 0 && typeof againstHeroes[0].hero_id === "number") {
+      setRecSecondHeroId(againstHeroes[0].hero_id);
+    }
+    setRecordingModalOpen(true);
+  };
+
+  const closeRecordingModal = () => {
+    if (recSubmitting) return;
+    setRecordingModalOpen(false);
+    resetRecordingModal();
+  };
+
+  const submitRecording = async () => {
+    if (!user || !sessionId || !isOwner) return;
+    if (recFirstHeroId === "" || recSecondHeroId === "") {
+      setRecError("Select both heroes.");
+      return;
+    }
+    if (recFirstHeroId === recSecondHeroId) {
+      setRecError("Choose two different heroes.");
+      return;
+    }
+
+    setRecSubmitting(true);
+    setRecError(null);
+    try {
+      let url = "";
+      if (recMediaMode === REC_MEDIA_UPLOAD) {
+        if (!recVideoFile) {
+          setRecError("Choose a video file to upload.");
+          setRecSubmitting(false);
+          return;
+        }
+        const fileSizeErr = uploadSizeError(recVideoFile.size);
+        if (fileSizeErr) {
+          setRecError(fileSizeErr);
+          setRecSubmitting(false);
+          return;
+        }
+        if (!myUserId) throw new Error("Could not resolve your user id.");
+        const ext = extFromFilename(recVideoFile.name);
+        const objectPath = `recordings/${myUserId}/${crypto.randomUUID()}.${ext}`;
+        setRecUploading(true);
+        try {
+          url = await uploadPublicAsset(() => user.getIdToken(), objectPath, recVideoFile, {
+            cacheBust: false,
+          });
+        } finally {
+          setRecUploading(false);
+        }
+      } else {
+        url = recUrl.trim();
+        if (!url) {
+          setRecError("Enter a recording URL.");
+          setRecSubmitting(false);
+          return;
+        }
+      }
+
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/play-testing/sessions/${sessionId}/recordings`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url,
+          label: recLabel.trim() || null,
+          first_hero_id: recFirstHeroId,
+          second_hero_id: recSecondHeroId,
+        }),
+      });
+      if (!res.ok) throw new Error(parseApiError(await res.text()));
+      setRecordingModalOpen(false);
+      resetRecordingModal();
+      await loadAll();
+    } catch (e) {
+      setRecError(e instanceof Error ? e.message : "Failed to add recording");
+    } finally {
+      setRecSubmitting(false);
+      setRecUploading(false);
+    }
+  };
+
+  const deleteRecording = async (linkId) => {
+    if (!user || !sessionId || !isOwner) return;
+    if (!window.confirm("Remove this recording from the session?")) return;
+    setRecDeletingId(linkId);
+    setRecError(null);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/play-testing/sessions/${sessionId}/recordings/${linkId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok && res.status !== 204) throw new Error(parseApiError(await res.text()));
+      await loadAll();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to remove recording");
+    } finally {
+      setRecDeletingId(null);
     }
   };
 
@@ -667,9 +828,255 @@ export function PlayTestingDetail({ isLight, active, sessionId, onBack }) {
                 <p className="m-0 text-[0.9rem] text-[#f4f0fa]/55">No published notes yet.</p>
               )}
             </section>
+
+            <section className={shell}>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="m-0 text-[1.05rem] font-semibold text-[#f4f0fa]">Recordings</h3>
+                {isOwner && recordings.length > 0 ? (
+                  <button type="button" className={btnPrimary} onClick={openRecordingModal}>
+                    Add recording
+                  </button>
+                ) : null}
+              </div>
+
+              {recordings.length === 0 ? (
+                isOwner ? (
+                  <div className="flex min-h-[10rem] flex-col items-center justify-center gap-3 px-4 py-8 text-center">
+                    <button
+                      type="button"
+                      onClick={openRecordingModal}
+                      className="rounded-xl border border-emerald-400/50 bg-emerald-950/50 px-8 py-3.5 text-[1.1rem] font-semibold text-emerald-100 shadow-[0_4px_16px_rgba(16,80,50,0.25)] transition hover:border-emerald-300/60 hover:bg-emerald-900/55 sm:px-10 sm:py-4 sm:text-[1.2rem]"
+                    >
+                      Add recording
+                    </button>
+                  </div>
+                ) : (
+                  <p className="m-0 text-[0.9rem] text-[#f4f0fa]/55">No recordings yet.</p>
+                )
+              ) : (
+                <ul className="m-0 grid list-none gap-3 p-0">
+                  {recordings.map((rec) => {
+                    const title =
+                      rec.label != null && String(rec.label).trim() !== ""
+                        ? String(rec.label).trim()
+                        : `Recording #${rec.recording_id}`;
+                    const formatName =
+                      CARD_FORMAT_NAMES[typeof rec.format === "number" ? rec.format : session.format] ??
+                      `Format ${rec.format ?? session.format}`;
+                    return (
+                      <li
+                        key={rec.id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 p-3 sm:p-4"
+                      >
+                        <a
+                          href={`/resources/recordings/${rec.recording_id}`}
+                          className="min-w-0 flex-1 no-underline"
+                        >
+                          <p className="m-0 truncate text-[0.95rem] font-semibold text-[#f4f0fa] hover:text-emerald-100">
+                            {title}
+                          </p>
+                          <p className="mb-0 mt-1 text-[0.8rem] text-[#f4f0fa]/65">
+                            {formatName}
+                            {rec.first_hero_name || rec.second_hero_name
+                              ? ` · ${[rec.first_hero_name, rec.second_hero_name].filter(Boolean).join(" vs ")}`
+                              : ""}
+                          </p>
+                        </a>
+                        {isOwner ? (
+                          <button
+                            type="button"
+                            className={`${btnBase} ${btnTheme}`}
+                            disabled={recDeletingId === rec.id}
+                            onClick={() => void deleteRecording(rec.id)}
+                          >
+                            {recDeletingId === rec.id ? "Removing…" : "Remove"}
+                          </button>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
           </div>
         ) : null}
       </div>
+
+      {recordingModalOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[200] flex items-end justify-center bg-black/55 p-3 backdrop-blur-[2px] sm:items-center sm:p-4"
+              role="presentation"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) closeRecordingModal();
+              }}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Add recording"
+                className="max-h-[min(92vh,40rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/20 bg-[#160d22] p-4 shadow-2xl sm:p-5"
+              >
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <h3 className="m-0 text-base font-semibold text-[#f4f0fa]">Add recording</h3>
+                  <button
+                    type="button"
+                    className={`${btnBase} ${btnTheme}`}
+                    onClick={closeRecordingModal}
+                    disabled={recSubmitting}
+                  >
+                    Close
+                  </button>
+                </div>
+                <p className="m-0 text-[0.85rem] text-[#f4f0fa]/65">
+                  Format is set to {cardFormatName(session?.format) ?? "this session"}.
+                </p>
+
+                <fieldset className="mt-4 border-0 p-0">
+                  <legend className="text-[0.85rem] font-medium text-[#f4f0fa]/75">Video source</legend>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className={`${btnBase} ${recMediaMode === REC_MEDIA_UPLOAD ? "border-emerald-400/40 bg-emerald-950/40 text-emerald-100" : btnTheme}`}
+                      disabled={recSubmitting}
+                      onClick={() => {
+                        setRecMediaMode(REC_MEDIA_UPLOAD);
+                        setRecError(null);
+                      }}
+                    >
+                      Upload file
+                    </button>
+                    <button
+                      type="button"
+                      className={`${btnBase} ${recMediaMode === REC_MEDIA_EMBED ? "border-emerald-400/40 bg-emerald-950/40 text-emerald-100" : btnTheme}`}
+                      disabled={recSubmitting}
+                      onClick={() => {
+                        setRecMediaMode(REC_MEDIA_EMBED);
+                        setRecError(null);
+                      }}
+                    >
+                      Embed link
+                    </button>
+                  </div>
+                </fieldset>
+
+                {recMediaMode === REC_MEDIA_EMBED ? (
+                  <label className="mt-3 grid gap-1.5 text-[0.85rem] text-[#f4f0fa]/85">
+                    <span className="font-medium">URL</span>
+                    <input
+                      type="url"
+                      className="rounded-lg border border-white/20 bg-black/35 px-3 py-2 text-[#f4f0fa]"
+                      value={recUrl}
+                      onChange={(e) => setRecUrl(e.target.value)}
+                      placeholder="YouTube or embed URL"
+                      disabled={recSubmitting}
+                      autoComplete="off"
+                    />
+                  </label>
+                ) : (
+                  <label className="mt-3 grid gap-1.5 text-[0.85rem] text-[#f4f0fa]/85">
+                    <span className="font-medium">Video file</span>
+                    <input
+                      type="file"
+                      accept="video/*"
+                      className="rounded-lg border border-white/20 bg-black/35 px-3 py-2 text-[#f4f0fa] file:mr-3 file:rounded-md file:border-0 file:bg-emerald-800/80 file:px-3 file:py-1.5 file:text-[0.78rem] file:font-semibold file:text-white"
+                      disabled={recSubmitting}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] ?? null;
+                        setRecVideoFile(file);
+                        setRecError(file ? uploadSizeError(file.size) : null);
+                      }}
+                    />
+                    <span className="text-[0.75rem] text-[#f4f0fa]/45">
+                      Max upload size is {MAX_UPLOAD_SIZE_LABEL}.
+                      {recVideoFile ? ` Selected: ${recVideoFile.name}` : ""}
+                    </span>
+                  </label>
+                )}
+
+                <label className="mt-3 grid gap-1.5 text-[0.85rem] text-[#f4f0fa]/85">
+                  <span className="font-medium">
+                    Label <span className="font-normal text-[#f4f0fa]/45">(optional)</span>
+                  </span>
+                  <input
+                    className="rounded-lg border border-white/20 bg-black/35 px-3 py-2 text-[#f4f0fa]"
+                    value={recLabel}
+                    onChange={(e) => setRecLabel(e.target.value)}
+                    disabled={recSubmitting}
+                    placeholder="Match title"
+                  />
+                </label>
+
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <label className="grid gap-1.5 text-[0.85rem] text-[#f4f0fa]/85">
+                    <span className="font-medium">First hero</span>
+                    <select
+                      className="rounded-lg border border-white/20 bg-black/35 px-3 py-2 text-[#f4f0fa]"
+                      value={recFirstHeroId === "" ? "" : String(recFirstHeroId)}
+                      onChange={(e) =>
+                        setRecFirstHeroId(e.target.value === "" ? "" : Number(e.target.value))
+                      }
+                      disabled={recSubmitting}
+                    >
+                      <option value="">Select…</option>
+                      {legalHeroes.map((h) => (
+                        <option key={`first-${h.id}`} value={h.id}>
+                          {h.name}
+                          {h.young ? " (Young)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-1.5 text-[0.85rem] text-[#f4f0fa]/85">
+                    <span className="font-medium">Second hero</span>
+                    <select
+                      className="rounded-lg border border-white/20 bg-black/35 px-3 py-2 text-[#f4f0fa]"
+                      value={recSecondHeroId === "" ? "" : String(recSecondHeroId)}
+                      onChange={(e) =>
+                        setRecSecondHeroId(e.target.value === "" ? "" : Number(e.target.value))
+                      }
+                      disabled={recSubmitting}
+                    >
+                      <option value="">Select…</option>
+                      {legalHeroes.map((h) => (
+                        <option key={`second-${h.id}`} value={h.id}>
+                          {h.name}
+                          {h.young ? " (Young)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                {recError ? (
+                  <p className="mt-3 mb-0 text-[0.85rem] text-red-200" role="alert">
+                    {recError}
+                  </p>
+                ) : null}
+
+                <div className="mt-4 flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    className={`${btnBase} ${btnTheme}`}
+                    disabled={recSubmitting}
+                    onClick={closeRecordingModal}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className={btnPrimary}
+                    disabled={recSubmitting}
+                    onClick={() => void submitRecording()}
+                  >
+                    {recUploading ? "Uploading…" : recSubmitting ? "Saving…" : "Add recording"}
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

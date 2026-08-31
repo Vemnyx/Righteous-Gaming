@@ -130,6 +130,9 @@ func NewRouter(application *app.App, userSvc *service.UserService, scrapeClient 
 	mux.HandleFunc("PUT /api/play-testing/sessions/{id}/interests", pth.upsertInterest)
 	mux.HandleFunc("DELETE /api/play-testing/sessions/{id}/interests", pth.deleteMyInterest)
 	mux.HandleFunc("DELETE /api/play-testing/sessions/{id}/interests/{userId}", pth.deleteInterestByUser)
+	mux.HandleFunc("GET /api/play-testing/sessions/{id}/recordings", pth.listRecordings)
+	mux.HandleFunc("POST /api/play-testing/sessions/{id}/recordings", pth.createRecording)
+	mux.HandleFunc("DELETE /api/play-testing/sessions/{id}/recordings/{recordingLinkId}", pth.deleteRecording)
 
 	mh := &meetingsHTTP{app: application, svc: userSvc}
 	mux.HandleFunc("GET /api/meetings", mh.listMeetings)
