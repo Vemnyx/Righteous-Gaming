@@ -3,6 +3,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import CreateUser from "./pages/CreateUser";
 import ChangePassword from "./pages/ChangePassword";
+import { CompleteProfileModal } from "./components/CompleteProfileModal";
 import { useCallback, useEffect, useState } from "react";
 
 function splitPath(searchPath) {
@@ -64,7 +65,12 @@ function AppGate() {
     return <CreateUser onNavigate={navigate} />;
   }
 
-  return <Dashboard onNavigate={navigate} />;
+  return (
+    <>
+      <Dashboard onNavigate={navigate} />
+      <CompleteProfileModal />
+    </>
+  );
 }
 
 export default function App() {

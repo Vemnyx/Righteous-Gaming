@@ -39,6 +39,19 @@ export function sessionProfileDisplayName(profile) {
 }
 
 /**
+ * True when the signed-in user still needs first name, last name, or Discord username.
+ * @param {SessionProfile | null | undefined} profile
+ * @returns {boolean}
+ */
+export function profileNeedsCompletion(profile) {
+  if (!profile) return false;
+  const first = profile.first_name != null ? String(profile.first_name).trim() : "";
+  const last = profile.last_name != null ? String(profile.last_name).trim() : "";
+  const username = profile.username != null ? String(profile.username).trim() : "";
+  return first === "" || last === "" || username === "";
+}
+
+/**
  * Loads cached profile only if `uid` matches the signed-in Firebase user.
  * @param {string} expectedUid
  * @returns {SessionProfile | null}
