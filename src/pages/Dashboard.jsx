@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthContext";
 import { EventsAdmin } from "../components/EventsAdmin";
 import { EventsList } from "../components/EventsList";
 import { EventDetailPage } from "../components/EventDetailPage";
+import { LatestTeamSnapshotPage } from "../components/LatestTeamSnapshotPage";
 import { UsersAdminTable } from "../components/UsersAdminTable";
 import { CardsCatalog } from "../components/CardsCatalog";
 import { CardRanker } from "../components/CardRanker";
@@ -37,6 +38,7 @@ const DATA_TAB_ID = "data";
 const ADMIN_TAB_ID = "admin";
 const SETTINGS_TAB_ID = "settings";
 const PROFILE_TAB_ID = "profile";
+const TEAM_TAB_ID = "team";
 
 /** Default Data sub-path when opening the Data tab from the UI. */
 const DEFAULT_DATA_SEGMENT = "card-ratings";
@@ -111,6 +113,7 @@ function buildDashboardPathname(
 ) {
   if (tabId === SETTINGS_TAB_ID) return "/settings";
   if (tabId === PROFILE_TAB_ID) return "/profile";
+  if (tabId === TEAM_TAB_ID) return "/team";
   if (tabId === DATA_TAB_ID) {
     const seg =
       dataChild === "card-ratings" || dataChild === "runaways-drafts"
@@ -660,6 +663,18 @@ function parseDashboardPathname(pathname) {
     };
   }
 
+  if (a === "team" && b === undefined && c === undefined && rest.length === 0) {
+    return {
+      kind: "ok",
+      tabId: TEAM_TAB_ID,
+      resourcesChild: null,
+      resourcesCardIdentifier: null,
+      resourcesCardRaterId: null,
+      adminChild: null,
+      adminAnnouncementForm: null,
+    };
+  }
+
   /** Legacy dashboard URL before Admin submenu (`/users` → `/admin/users`). */
   if (a === "users" && b === undefined && c === undefined && rest.length === 0) {
     return {
@@ -872,6 +887,19 @@ function resolveDashboardLocation(pathname, search, tabsAllowed) {
   if (tabId === PROFILE_TAB_ID) {
     return {
       tabId: PROFILE_TAB_ID,
+      resourcesChild: null,
+      resourcesCardIdentifier: null,
+      resourcesCardRaterId: null,
+      adminChild: null,
+      adminAnnouncementForm: null,
+      dataChild: null,
+      dataCardRaterId: null,
+    };
+  }
+
+  if (tabId === TEAM_TAB_ID) {
+    return {
+      tabId: TEAM_TAB_ID,
       resourcesChild: null,
       resourcesCardIdentifier: null,
       resourcesCardRaterId: null,
@@ -2319,6 +2347,17 @@ export default function Dashboard({ onNavigate }) {
           }`}
         >
           <UserProfile isLight={isLight} active={activeTab === PROFILE_TAB_ID} />
+        </Tabs.Content>
+
+        <Tabs.Content
+          value={TEAM_TAB_ID}
+          className={`relative z-0 flex min-h-[min(52vh,28rem)] flex-1 flex-col rounded-2xl border p-8 outline-none focus-visible:ring-2 focus-visible:ring-purple-500/50 sm:p-10 ${
+            isLight
+              ? "border-white/[0.12] bg-gradient-to-b from-[#434054] via-[#353145] to-[#292433] shadow-[0_20px_50px_rgba(0,0,0,0.35)]"
+              : "border-white/[0.26] bg-[rgba(16,8,28,0.65)] shadow-[0_20px_50px_rgba(0,0,0,0.35)] ring-1 ring-white/[0.06]"
+          }`}
+        >
+          <LatestTeamSnapshotPage isLight={isLight} active={activeTab === TEAM_TAB_ID} />
         </Tabs.Content>
       </Tabs.Root>
     </div>
