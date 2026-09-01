@@ -15,6 +15,13 @@ Environment=PORT=8080
 Environment=DATABASE_URL_SECRET=projects/project-28f6d1d8-e4cd-4908-9d7/secrets/database_url/versions/latest
 Environment=FIREBASE_PROJECT_ID=project-28f6d1d8-e4cd-4908-9d7
 
+# Public site origin used in Discord / email-style deep links.
+Environment=PUBLIC_APP_URL=https://righteousgaming.team
+
+# Per-format Discord webhooks for Looking for Games (JSON map in Secret Manager).
+# Keys: limited, silver_age, classic_constructed, living_legend_golden_age
+Environment=DISCORD_PLAY_TESTING_WEBHOOKS_SECRET=projects/project-28f6d1d8-e4cd-4908-9d7/secrets/discord_play_testing_webhooks/versions/latest
+
 # DataImpulse residential proxy for FabTCG scraping (password in Secret Manager).
 Environment=FABTCG_PROXY_HOST=gw.dataimpulse.com
 Environment=FABTCG_PROXY_PORT=823

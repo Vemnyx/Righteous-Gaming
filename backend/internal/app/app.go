@@ -17,9 +17,10 @@ import (
 
 // App holds shared runtime services for the HTTP server and workers.
 type App struct {
-	Repo     *repository.Repository
-	Firebase *client.Firebase
-	GCS      *client.GCS
+	Repo                  *repository.Repository
+	Firebase              *client.Firebase
+	GCS                   *client.GCS
+	DiscordPlayTesting    *client.PlayTestingDiscord
 
 	closeLog func()
 }
@@ -82,12 +83,25 @@ func New(ctx context.Context) (*App, error) {
 		closeInfo()
 		return nil, fmt.Errorf("app: gcs: %w", err)
 	}
+	discordWH, err := client.NewDiscordPlayTestingWebhook(ctx)
+	if err != nil {
+		repo.Close()
+		closeInfo()
+		_ = gcs.Close()
+		return nil, fmt.Errorf("app: discord play testing webhook: %w", err)
+	}
 
 	a := &App{
-		Repo:     repo,
-		Firebase: fb,
-		GCS:      gcs,
-		closeLog: closeInfo,
+		Repo:               repo,
+		Firebase:           fb,
+		GCS:                gcs,
+		DiscordPlayTesting: discordWH,
+		closeLog:           closeInfo,
+	}
+	if discordWH.Enabled() {
+		log.Info("discord play testing webhooks enabled", "channels", discordWH.ConfiguredChannels())
+	} else {
+		log.Info("discord play testing webhooks not configured")
 	}
 	log.Info("database connection established")
 	return a, nil

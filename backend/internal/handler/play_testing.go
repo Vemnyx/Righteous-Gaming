@@ -369,6 +369,8 @@ func (h *playTestingHTTP) createSession(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	h.notifyPlayTestingSessionCreated(created)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{"session": sessionToJSON(created)})
