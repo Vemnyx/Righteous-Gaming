@@ -16,9 +16,9 @@ import (
 	"righteous-gaming/backend/log"
 )
 
-const maxUploadFileBytes = 1 << 30
+const maxUploadFileBytes = 1536 * 1024 * 1024 // 1.5 GB
 const maxUploadMultipartBytes = maxUploadFileBytes + (1 << 20) // room for multipart boundaries/fields
-const maxUploadFileError = "exceeds maximum size of 1 GB"
+const maxUploadFileError = "exceeds maximum size of 1.5 GB"
 const maxUploadPathFieldBytes = 2048
 const uploadRequestTimeout = 2 * time.Hour
 
