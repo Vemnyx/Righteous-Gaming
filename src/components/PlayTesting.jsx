@@ -81,7 +81,7 @@ export function formatTimeframeLabel(startsAt, endsAt) {
     minute: "2-digit",
   });
   if (endsAt == null || endsAt === "") {
-    return `${startLabel} → 24h`;
+    return startLabel;
   }
   const end = new Date(endsAt);
   if (Number.isNaN(end.getTime())) return `${startLabel} → open`;
@@ -109,6 +109,24 @@ export function sessionOwnerLabel(session) {
 
 const OPEN_ENDED_MS = 24 * 60 * 60 * 1000;
 const CALENDAR_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const CALENDAR_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+const CALENDAR_YEARS = Array.from({ length: 10 }, (_, i) => new Date().getFullYear() - 2 + i);
+const CALENDAR_HOURS = Array.from({ length: 12 }, (_, i) => String(i + 1));
+const CALENDAR_MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
+const CALENDAR_PERIODS = /** @type {const} */ (["AM", "PM"]);
 
 /** Stable per-owner palette for calendar chips / day accents (dark UI). */
 const OWNER_CALENDAR_COLORS = Object.freeze([
@@ -381,6 +399,143 @@ function localInputToISO(localValue) {
   return d.toISOString();
 }
 
+/** @param {Date} date */
+function toDateInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** @param {string} value */
+function dateFromInputValue(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  }
+  return new Date(year, month - 1, day);
+}
+
+/** @param {string} value */
+function formatSelectedDate(value) {
+  if (!value) return "No date selected";
+  return dateFromInputValue(value).toLocaleDateString(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+/**
+ * @param {string} hour
+ * @param {string} minute
+ * @param {"AM" | "PM"} period
+ */
+function formatClock(hour, minute, period) {
+  return `${hour}:${minute} ${period}`;
+}
+
+/**
+ * @param {string} date
+ * @param {string} hour
+ * @param {string} minute
+ * @param {"AM" | "PM"} period
+ */
+function formatSelectedDateTime(date, hour, minute, period) {
+  if (!date) return "Select a start";
+  return `${formatSelectedDate(date)} at ${formatClock(hour, minute, period)}`;
+}
+
+/**
+ * @param {string} startDate
+ * @param {string} startHour
+ * @param {string} startMinute
+ * @param {"AM" | "PM"} startPeriod
+ * @param {string} endDate
+ * @param {string} endHour
+ * @param {string} endMinute
+ * @param {"AM" | "PM"} endPeriod
+ */
+function formatSelectedRange(
+  startDate,
+  startHour,
+  startMinute,
+  startPeriod,
+  endDate,
+  endHour,
+  endMinute,
+  endPeriod,
+) {
+  const startLabel = formatSelectedDateTime(startDate, startHour, startMinute, startPeriod);
+  if (!endDate) return startLabel;
+  return `${startLabel} – ${formatSelectedDateTime(endDate, endHour, endMinute, endPeriod)}`;
+}
+
+/**
+ * @param {string} date YYYY-MM-DD
+ * @param {string} hour
+ * @param {string} minute
+ * @param {"AM" | "PM"} period
+ * @returns {string | null} datetime-local value
+ */
+function combineLocalDateTime(date, hour, minute, period) {
+  const [year, month, day] = date.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const baseHour = Number(hour) % 12;
+  const hour24 = period === "PM" ? baseHour + 12 : baseHour;
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${year}-${pad(month)}-${pad(day)}T${pad(hour24)}:${pad(Number(minute))}`;
+}
+
+/**
+ * @param {string | undefined | null} localValue
+ * @returns {{ date: string, hour: string, minute: string, period: "AM" | "PM" } | null}
+ */
+function parseLocalParts(localValue) {
+  const raw = (localValue ?? "").trim();
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return null;
+  const hours = d.getHours();
+  return {
+    date: toDateInputValue(d),
+    hour: String(hours % 12 || 12),
+    minute: String(d.getMinutes()).padStart(2, "0"),
+    period: hours >= 12 ? "PM" : "AM",
+  };
+}
+
+/** @returns {{ date: string, hour: string, minute: string, period: "AM" | "PM" }} */
+function partsFromNow() {
+  const now = new Date();
+  const hours = now.getHours();
+  return {
+    date: toDateInputValue(now),
+    hour: String(hours % 12 || 12),
+    minute: String(now.getMinutes()).padStart(2, "0"),
+    period: hours >= 12 ? "PM" : "AM",
+  };
+}
+
+/** @param {string} startsLocal @param {string} endsLocal */
+function formatDraftRangeLabel(startsLocal, endsLocal) {
+  const start = parseLocalParts(startsLocal);
+  if (!start) return "Select a date range";
+  const end = endsLocal.trim() ? parseLocalParts(endsLocal) : null;
+  if (!end) return formatSelectedDateTime(start.date, start.hour, start.minute, start.period);
+  return formatSelectedRange(
+    start.date,
+    start.hour,
+    start.minute,
+    start.period,
+    end.date,
+    end.hour,
+    end.minute,
+    end.period,
+  );
+}
+
 let timeframeKeySeq = 0;
 function newDraftTimeframe(mode = "now_open") {
   timeframeKeySeq += 1;
@@ -541,6 +696,20 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
   const [timeframes, setTimeframes] = useState(/** @type {DraftTimeframe[]} */ ([]));
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState(/** @type {string | null} */ (null));
+
+  const [rangePickerKey, setRangePickerKey] = useState(/** @type {string | null} */ (null));
+  const [rangePickerMonth, setRangePickerMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+  const [rangeStartDate, setRangeStartDate] = useState("");
+  const [rangeEndDate, setRangeEndDate] = useState("");
+  const [rangeStartHour, setRangeStartHour] = useState("7");
+  const [rangeStartMinute, setRangeStartMinute] = useState("00");
+  const [rangeStartPeriod, setRangeStartPeriod] = useState(/** @type {"AM" | "PM"} */ ("PM"));
+  const [rangeEndHour, setRangeEndHour] = useState("9");
+  const [rangeEndMinute, setRangeEndMinute] = useState("00");
+  const [rangeEndPeriod, setRangeEndPeriod] = useState(/** @type {"AM" | "PM"} */ ("PM"));
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -716,6 +885,7 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
     setAgainstIds([]);
     setTimeframes([]);
     setModalError(null);
+    setRangePickerKey(null);
     setModalOpen(true);
   };
 
@@ -723,6 +893,80 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
     if (submitting) return;
     setModalOpen(false);
     setModalError(null);
+    setRangePickerKey(null);
+  };
+
+  /**
+   * @param {DraftTimeframe} tf
+   */
+  const openRangePicker = (tf) => {
+    const start = parseLocalParts(tf.startsLocal) || partsFromNow();
+    const end = tf.endsLocal.trim() ? parseLocalParts(tf.endsLocal) : null;
+    setRangePickerKey(tf.key);
+    setRangePickerMonth(new Date(dateFromInputValue(start.date).getFullYear(), dateFromInputValue(start.date).getMonth(), 1));
+    setRangeStartDate(start.date);
+    setRangeEndDate(end?.date ?? "");
+    setRangeStartHour(start.hour);
+    setRangeStartMinute(start.minute);
+    setRangeStartPeriod(start.period);
+    setRangeEndHour(end?.hour ?? "9");
+    setRangeEndMinute(end?.minute ?? "00");
+    setRangeEndPeriod(end?.period ?? "PM");
+  };
+
+  const closeRangePicker = () => {
+    setRangePickerKey(null);
+  };
+
+  const rangePickerDays = useMemo(() => {
+    const year = rangePickerMonth.getFullYear();
+    const month = rangePickerMonth.getMonth();
+    const firstWeekday = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    /** @type {Array<number | null>} */
+    const days = [];
+    for (let i = 0; i < firstWeekday; i += 1) days.push(null);
+    for (let day = 1; day <= daysInMonth; day += 1) days.push(day);
+    while (days.length % 7 !== 0) days.push(null);
+    return days;
+  }, [rangePickerMonth]);
+
+  /**
+   * @param {number} day
+   */
+  const selectRangePickerDay = (day) => {
+    const value = toDateInputValue(new Date(rangePickerMonth.getFullYear(), rangePickerMonth.getMonth(), day));
+    if (!rangeStartDate || (rangeStartDate && rangeEndDate)) {
+      setRangeStartDate(value);
+      setRangeEndDate("");
+      return;
+    }
+    if (value < rangeStartDate) {
+      setRangeEndDate(rangeStartDate);
+      setRangeStartDate(value);
+      return;
+    }
+    setRangeEndDate(value);
+  };
+
+  const applyRangePicker = () => {
+    if (rangePickerKey == null) return;
+    if (!rangeStartDate) return;
+    const startsLocal = combineLocalDateTime(rangeStartDate, rangeStartHour, rangeStartMinute, rangeStartPeriod);
+    if (!startsLocal) return;
+    const endsLocal =
+      rangeEndDate.trim() !== ""
+        ? combineLocalDateTime(rangeEndDate, rangeEndHour, rangeEndMinute, rangeEndPeriod)
+        : "";
+    if (rangeEndDate.trim() !== "" && !endsLocal) return;
+    setTimeframes((prev) =>
+      prev.map((row) =>
+        row.key === rangePickerKey
+          ? { ...row, mode: "range", startsLocal, endsLocal: endsLocal || "" }
+          : row,
+      ),
+    );
+    setRangePickerKey(null);
   };
 
   const toggleId = (list, setList, id) => {
@@ -819,6 +1063,10 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
     : "border-white/[0.28] bg-black/20 text-[#f4f0fa] hover:border-white/40 hover:bg-black/30";
   const btnPrimary =
     "rounded-lg border border-emerald-400/45 bg-emerald-950/45 px-3 py-1.5 text-[0.8125rem] font-semibold text-emerald-100 transition-colors hover:border-emerald-300/55 hover:bg-emerald-900/45 disabled:cursor-not-allowed disabled:opacity-45";
+  const btnModalAction =
+    "rounded-xl border px-5 py-3 text-[1rem] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:px-6 sm:py-3.5 sm:text-[1.05rem]";
+  const btnModalPrimary =
+    "rounded-xl border border-emerald-400/50 bg-emerald-950/50 px-5 py-3 text-[1rem] font-semibold text-emerald-50 shadow-[0_8px_24px_rgba(16,185,129,0.18)] transition-colors hover:border-emerald-300/60 hover:bg-emerald-900/55 disabled:cursor-not-allowed disabled:opacity-45 sm:px-6 sm:py-3.5 sm:text-[1.05rem]";
 
   const emptyCopy =
     listTab === "current"
@@ -1202,19 +1450,23 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
                     <div className="flex items-center justify-between gap-2">
                       <h4 className="m-0 text-[0.85rem] font-semibold text-[#f4f0fa]/9">
                         Timeframes{" "}
-                        <span className="font-normal text-[#f4f0fa]/45">(optional — blank means now for 24h)</span>
+                        <span className="font-normal text-[#f4f0fa]/45">(optional — blank means now)</span>
                       </h4>
                       <button
                         type="button"
                         className={`${btnBase} ${btnTheme}`}
-                        onClick={() => setTimeframes((prev) => [...prev, newDraftTimeframe("range")])}
+                        onClick={() => {
+                          const next = newDraftTimeframe("range");
+                          setTimeframes((prev) => [...prev, next]);
+                          openRangePicker(next);
+                        }}
                       >
                         Add timeframe
                       </button>
                     </div>
                     {timeframes.length === 0 ? (
                       <p className="m-0 rounded-xl border border-dashed border-white/12 bg-black/20 px-3 py-3 text-[0.8rem] text-[#f4f0fa]/55">
-                        No timeframe added — this session stays Current for 24 hours (or until you close it).
+                        No timeframe added — this session is treated as now (or until you close it).
                       </p>
                     ) : (
                       <div className="grid gap-2">
@@ -1234,16 +1486,18 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
                                     )
                                   }
                                 >
-                                  Now → 24h
+                                  Now
                                 </button>
                                 <button
                                   type="button"
                                   className={`${btnBase} ${tf.mode === "range" ? "border-emerald-400/40 bg-emerald-950/40 text-emerald-100" : btnTheme}`}
-                                  onClick={() =>
+                                  onClick={() => {
+                                    const next = { ...tf, mode: "range" };
                                     setTimeframes((prev) =>
-                                      prev.map((row) => (row.key === tf.key ? { ...row, mode: "range" } : row)),
-                                    )
-                                  }
+                                      prev.map((row) => (row.key === tf.key ? next : row)),
+                                    );
+                                    openRangePicker(next);
+                                  }}
                                 >
                                   Calendar range
                                 </button>
@@ -1257,41 +1511,16 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
                               </button>
                             </div>
                             {tf.mode === "range" ? (
-                              <div className="grid gap-2 sm:grid-cols-2">
-                                <label className="grid gap-1 text-[0.78rem] text-[#f4f0fa]/75">
-                                  From
-                                  <input
-                                    type="datetime-local"
-                                    className="rounded-lg border border-white/20 bg-black/40 px-2 py-1.5 text-[#f4f0fa]"
-                                    value={tf.startsLocal}
-                                    onChange={(e) =>
-                                      setTimeframes((prev) =>
-                                        prev.map((row) =>
-                                          row.key === tf.key ? { ...row, startsLocal: e.target.value } : row,
-                                        ),
-                                      )
-                                    }
-                                  />
-                                </label>
-                                <label className="grid gap-1 text-[0.78rem] text-[#f4f0fa]/75">
-                                  To <span className="text-[#f4f0fa]/45">(optional — blank = 24h from start)</span>
-                                  <input
-                                    type="datetime-local"
-                                    className="rounded-lg border border-white/20 bg-black/40 px-2 py-1.5 text-[#f4f0fa]"
-                                    value={tf.endsLocal}
-                                    onChange={(e) =>
-                                      setTimeframes((prev) =>
-                                        prev.map((row) =>
-                                          row.key === tf.key ? { ...row, endsLocal: e.target.value } : row,
-                                        ),
-                                      )
-                                    }
-                                  />
-                                </label>
-                              </div>
+                              <button
+                                type="button"
+                                className="rounded-lg border border-white/20 bg-black/35 px-3 py-2.5 text-left text-[0.85rem] text-[#f4f0fa] transition-colors hover:border-white/35 hover:bg-black/45"
+                                onClick={() => openRangePicker(tf)}
+                              >
+                                {formatDraftRangeLabel(tf.startsLocal, tf.endsLocal)}
+                              </button>
                             ) : (
                               <p className="m-0 text-[0.78rem] text-[#f4f0fa]/55">
-                                Starts now and stays Current for 24 hours (or until closed).
+                                Starts now (or until closed).
                               </p>
                             )}
                           </div>
@@ -1306,15 +1535,266 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
                     </p>
                   ) : null}
 
-                  <div className="flex flex-wrap justify-end gap-2">
-                    <button type="button" className={`${btnBase} ${btnTheme}`} onClick={closeModal} disabled={submitting}>
+                  <div className="flex flex-wrap justify-end gap-3">
+                    <button
+                      type="button"
+                      className={`${btnModalAction} ${btnTheme}`}
+                      onClick={closeModal}
+                      disabled={submitting}
+                    >
                       Cancel
                     </button>
-                    <button type="button" className={btnPrimary} onClick={() => void submit()} disabled={submitting}>
+                    <button
+                      type="button"
+                      className={btnModalPrimary}
+                      onClick={() => void submit()}
+                      disabled={submitting}
+                    >
                       {submitting ? "Creating…" : "Create session"}
                     </button>
                   </div>
                 </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+
+      {rangePickerKey != null && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[220] flex items-end justify-center bg-black/60 p-3 backdrop-blur-[2px] sm:items-center sm:p-4"
+              role="presentation"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) closeRangePicker();
+              }}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Select date range"
+                className="max-h-[min(92vh,44rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-white/20 bg-[#160d22] p-4 shadow-2xl sm:p-5"
+              >
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <h3 className="m-0 text-base font-semibold text-[#f4f0fa]">Select date range</h3>
+                  <button type="button" className={`${btnBase} ${btnTheme}`} onClick={closeRangePicker}>
+                    Close
+                  </button>
+                </div>
+
+                <div className="mb-3 grid grid-cols-2 gap-2">
+                  <label className="grid gap-1 text-[0.8rem] text-[#f4f0fa]/75">
+                    <span>Month</span>
+                    <select
+                      className="rounded-lg border border-white/20 bg-black/35 px-2 py-2 text-[#f4f0fa]"
+                      value={rangePickerMonth.getMonth()}
+                      onChange={(e) => {
+                        const month = Number(e.target.value);
+                        setRangePickerMonth((current) => new Date(current.getFullYear(), month, 1));
+                      }}
+                    >
+                      {CALENDAR_MONTHS.map((label, index) => (
+                        <option key={label} value={index}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-[0.8rem] text-[#f4f0fa]/75">
+                    <span>Year</span>
+                    <select
+                      className="rounded-lg border border-white/20 bg-black/35 px-2 py-2 text-[#f4f0fa]"
+                      value={rangePickerMonth.getFullYear()}
+                      onChange={(e) => {
+                        const year = Number(e.target.value);
+                        setRangePickerMonth((current) => new Date(year, current.getMonth(), 1));
+                      }}
+                    >
+                      {CALENDAR_YEARS.map((year) => (
+                        <option key={year} value={year}>
+                          {year}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="mb-3">
+                  <p className="mb-1.5 mt-0 text-[0.8rem] font-medium text-[#f4f0fa]/8">Start time</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="grid gap-1 text-[0.8rem] text-[#f4f0fa]/75">
+                      <span>Hour</span>
+                      <select
+                        className="rounded-lg border border-white/20 bg-black/35 px-2 py-2 text-[#f4f0fa]"
+                        value={rangeStartHour}
+                        onChange={(e) => setRangeStartHour(e.target.value)}
+                      >
+                        {CALENDAR_HOURS.map((hour) => (
+                          <option key={`start-h-${hour}`} value={hour}>
+                            {hour}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1 text-[0.8rem] text-[#f4f0fa]/75">
+                      <span>Minute</span>
+                      <select
+                        className="rounded-lg border border-white/20 bg-black/35 px-2 py-2 text-[#f4f0fa]"
+                        value={rangeStartMinute}
+                        onChange={(e) => setRangeStartMinute(e.target.value)}
+                      >
+                        {CALENDAR_MINUTES.map((minute) => (
+                          <option key={`start-m-${minute}`} value={minute}>
+                            {minute}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1 text-[0.8rem] text-[#f4f0fa]/75">
+                      <span>AM/PM</span>
+                      <select
+                        className="rounded-lg border border-white/20 bg-black/35 px-2 py-2 text-[#f4f0fa]"
+                        value={rangeStartPeriod}
+                        onChange={(e) => setRangeStartPeriod(/** @type {"AM" | "PM"} */ (e.target.value))}
+                      >
+                        {CALENDAR_PERIODS.map((period) => (
+                          <option key={`start-p-${period}`} value={period}>
+                            {period}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="mb-3">
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <p className="m-0 text-[0.8rem] font-medium text-[#f4f0fa]/8">
+                      End time <span className="font-normal text-[#f4f0fa]/45">(optional)</span>
+                    </p>
+                    {rangeEndDate ? (
+                      <button
+                        type="button"
+                        className={`${btnBase} ${btnTheme}`}
+                        onClick={() => setRangeEndDate("")}
+                      >
+                        Clear end
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="grid gap-1 text-[0.8rem] text-[#f4f0fa]/75">
+                      <span>Hour</span>
+                      <select
+                        className="rounded-lg border border-white/20 bg-black/35 px-2 py-2 text-[#f4f0fa] disabled:opacity-40"
+                        value={rangeEndHour}
+                        onChange={(e) => setRangeEndHour(e.target.value)}
+                        disabled={!rangeEndDate}
+                      >
+                        {CALENDAR_HOURS.map((hour) => (
+                          <option key={`end-h-${hour}`} value={hour}>
+                            {hour}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1 text-[0.8rem] text-[#f4f0fa]/75">
+                      <span>Minute</span>
+                      <select
+                        className="rounded-lg border border-white/20 bg-black/35 px-2 py-2 text-[#f4f0fa] disabled:opacity-40"
+                        value={rangeEndMinute}
+                        onChange={(e) => setRangeEndMinute(e.target.value)}
+                        disabled={!rangeEndDate}
+                      >
+                        {CALENDAR_MINUTES.map((minute) => (
+                          <option key={`end-m-${minute}`} value={minute}>
+                            {minute}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-1 text-[0.8rem] text-[#f4f0fa]/75">
+                      <span>AM/PM</span>
+                      <select
+                        className="rounded-lg border border-white/20 bg-black/35 px-2 py-2 text-[#f4f0fa] disabled:opacity-40"
+                        value={rangeEndPeriod}
+                        onChange={(e) => setRangeEndPeriod(/** @type {"AM" | "PM"} */ (e.target.value))}
+                        disabled={!rangeEndDate}
+                      >
+                        {CALENDAR_PERIODS.map((period) => (
+                          <option key={`end-p-${period}`} value={period}>
+                            {period}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                </div>
+
+                <p className="mb-2 mt-0 text-[0.75rem] text-[#f4f0fa]/5">
+                  Tap a start day, then an end day. End is optional.
+                </p>
+
+                <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[0.72rem] font-medium uppercase tracking-wide text-[#f4f0fa]/45">
+                  {CALENDAR_WEEKDAYS.map((day) => (
+                    <span key={day}>{day}</span>
+                  ))}
+                </div>
+                <div className="mb-4 grid grid-cols-7 gap-1">
+                  {rangePickerDays.map((day, index) => {
+                    if (day == null) {
+                      return <span key={`empty-${index}`} className="aspect-square" />;
+                    }
+                    const value = toDateInputValue(
+                      new Date(rangePickerMonth.getFullYear(), rangePickerMonth.getMonth(), day),
+                    );
+                    const isStart = rangeStartDate === value;
+                    const isEnd = rangeEndDate === value;
+                    const inMiddle =
+                      Boolean(rangeStartDate) &&
+                      Boolean(rangeEndDate) &&
+                      value > rangeStartDate &&
+                      value < rangeEndDate;
+                    const selected = isStart || isEnd;
+                    return (
+                      <button
+                        key={`range-day-${day}`}
+                        type="button"
+                        className={`aspect-square rounded-lg border text-[0.85rem] font-medium transition-colors ${
+                          selected
+                            ? "border-emerald-400/55 bg-emerald-950/55 text-emerald-50"
+                            : inMiddle
+                              ? "border-emerald-400/25 bg-emerald-950/30 text-emerald-100"
+                              : "border-white/15 bg-black/25 text-[#f4f0fa] hover:border-white/30 hover:bg-black/40"
+                        }`}
+                        onClick={() => selectRangePickerDay(day)}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <p className="mb-3 m-0 text-center text-[0.85rem] text-[#f4f0fa]/70">
+                  {formatSelectedRange(
+                    rangeStartDate,
+                    rangeStartHour,
+                    rangeStartMinute,
+                    rangeStartPeriod,
+                    rangeEndDate,
+                    rangeEndHour,
+                    rangeEndMinute,
+                    rangeEndPeriod,
+                  )}
+                </p>
+                <button
+                  type="button"
+                  className={`${btnPrimary} w-full`}
+                  onClick={applyRangePicker}
+                  disabled={!rangeStartDate}
+                >
+                  Done
+                </button>
               </div>
             </div>,
             document.body,

@@ -16,6 +16,7 @@ import {
 import { PANEL_TABS_BLEED, PANEL_TABS_CONTENT_PAD } from "./PanelTabs";
 import { RichTextEditor } from "./RichTextEditor";
 import { RichTextHtml } from "./RichTextHtml";
+import { PlayTestingCalendarButton } from "./PlayTestingCalendarButton";
 import {
   HeroAvatar,
   HeroAvatarRow,
@@ -509,11 +510,21 @@ export function PlayTestingDetail({ isLight, active, sessionId, onBack }) {
           <button type="button" className={`${btnBase} ${btnTheme}`} onClick={() => onBack?.()}>
             ← Back
           </button>
-          {isOwner && session && session.status !== 1 ? (
-            <button type="button" className={`${btnBase} ${btnTheme}`} disabled={closing} onClick={() => void closeSession()}>
-              {closing ? "Closing…" : "Close session"}
-            </button>
-          ) : null}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {session ? (
+              <PlayTestingCalendarButton session={session} btnBase={btnBase} btnTheme={btnTheme} />
+            ) : null}
+            {isOwner && session && session.status !== 1 ? (
+              <button
+                type="button"
+                className={`${btnBase} ${btnTheme}`}
+                disabled={closing}
+                onClick={() => void closeSession()}
+              >
+                {closing ? "Closing…" : "Close session"}
+              </button>
+            ) : null}
+          </div>
         </div>
 
         {error ? (
