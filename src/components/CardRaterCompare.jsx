@@ -209,7 +209,7 @@ export function CardRaterCompare({ isLight, active, raterId, baselineRaterId, on
         <div>
           <button
             type="button"
-            className="mb-2 text-[0.8125rem] font-semibold text-violet-300/90 underline-offset-2 hover:underline"
+            className="mb-2 text-[0.875rem] font-bold text-[#f4f0fa]/85 underline underline-offset-2 transition-colors hover:text-[#f4f0fa]"
             onClick={onBack}
           >
             ← Back to results

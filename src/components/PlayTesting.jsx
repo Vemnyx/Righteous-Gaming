@@ -24,7 +24,9 @@ const PlayTestingDetailLazy = lazy(() =>
 
 /** @typedef {{ id?: number, starts_at: string, ends_at?: string | null, sort_order: number }} SessionTimeframe */
 
-/** @typedef {{ id: number, user_id: number, format: number, status?: number, bucket?: string, created_at: string, closed_at?: string | null, owner_first_name?: string | null, owner_username?: string | null, heroes_with: SessionHero[], heroes_against: SessionHero[], timeframes: SessionTimeframe[] }} PlayTestingSession */
+/** @typedef {{ id: number, session_id?: number, user_id: number, note?: string, first_name?: string | null, username?: string | null, heroes?: Array<{ hero_id: number, name: string, young?: boolean, card_image_url?: string | null, art_image_url?: string | null }> }} SessionInterestSummary */
+
+/** @typedef {{ id: number, user_id: number, format: number, status?: number, bucket?: string, created_at: string, closed_at?: string | null, owner_first_name?: string | null, owner_username?: string | null, heroes_with: SessionHero[], heroes_against: SessionHero[], timeframes: SessionTimeframe[], interests?: SessionInterestSummary[] }} PlayTestingSession */
 
 /** @typedef {{ key: string, mode: "now_open" | "range", startsLocal: string, endsLocal: string }} DraftTimeframe */
 
@@ -105,6 +107,19 @@ export function sessionOwnerLabel(session) {
   if (first) return first;
   if (discord) return discord;
   return "";
+}
+
+/**
+ * @param {{ first_name?: string | null, username?: string | null, user_id?: number }} row
+ */
+export function interestPlayerLabel(row) {
+  const first = row?.first_name != null ? String(row.first_name).trim() : "";
+  const user = row?.username != null ? String(row.username).trim() : "";
+  if (first && user) return `${first} · ${user}`;
+  if (first) return first;
+  if (user) return user;
+  if (typeof row?.user_id === "number") return `User ${row.user_id}`;
+  return "Player";
 }
 
 const OPEN_ENDED_MS = 24 * 60 * 60 * 1000;
@@ -298,6 +313,7 @@ function normalizePlayTestingSessions(raw) {
 export function SessionCard({ session, canClose, whenEmptyLabel, closingId, onClose, onOpen, btnBase, btnTheme }) {
   const ownerLabel = sessionOwnerLabel(session);
   const hasTimeframes = (session.timeframes || []).length > 0;
+  const interests = Array.isArray(session.interests) ? session.interests : [];
   const open = () => {
     if (typeof onOpen === "function") onOpen(session.id);
   };
@@ -360,6 +376,21 @@ export function SessionCard({ session, canClose, whenEmptyLabel, closingId, onCl
           ) : null}
         </div>
       </div>
+
+      {interests.length > 0 ? (
+        <div className="mb-4 max-w-md text-left">
+          <p className="mb-2 mt-0 text-[0.9rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/90">
+            Interested
+          </p>
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+            {interests.map((row) => (
+              <li key={row.id ?? row.user_id} className="text-[0.9rem] text-[#f4f0fa]/85">
+                {interestPlayerLabel(row)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
         <div className="min-w-0 flex-1">
@@ -516,6 +547,24 @@ function partsFromNow() {
     minute: String(now.getMinutes()).padStart(2, "0"),
     period: hours >= 12 ? "PM" : "AM",
   };
+}
+
+/** @param {string} date YYYY-MM-DD */
+function isCalendarDateBeforeToday(date) {
+  if (!date) return false;
+  return date < toDateInputValue(new Date());
+}
+
+/**
+ * @param {string | undefined | null} localOrIso
+ * @returns {boolean}
+ */
+function isDateTimeInPast(localOrIso) {
+  const raw = (localOrIso ?? "").trim();
+  if (!raw) return false;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return false;
+  return d.getTime() < Date.now();
 }
 
 /** @param {string} startsLocal @param {string} endsLocal */
@@ -710,6 +759,7 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
   const [rangeEndHour, setRangeEndHour] = useState("9");
   const [rangeEndMinute, setRangeEndMinute] = useState("00");
   const [rangeEndPeriod, setRangeEndPeriod] = useState(/** @type {"AM" | "PM"} */ ("PM"));
+  const [rangePickerError, setRangePickerError] = useState(/** @type {string | null} */ (null));
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -894,15 +944,23 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
     setModalOpen(false);
     setModalError(null);
     setRangePickerKey(null);
+    setRangePickerError(null);
   };
 
   /**
    * @param {DraftTimeframe} tf
    */
   const openRangePicker = (tf) => {
-    const start = parseLocalParts(tf.startsLocal) || partsFromNow();
-    const end = tf.endsLocal.trim() ? parseLocalParts(tf.endsLocal) : null;
+    let start = parseLocalParts(tf.startsLocal) || partsFromNow();
+    if (isDateTimeInPast(combineLocalDateTime(start.date, start.hour, start.minute, start.period) || "")) {
+      start = partsFromNow();
+    }
+    let end = tf.endsLocal.trim() ? parseLocalParts(tf.endsLocal) : null;
+    if (end && isDateTimeInPast(combineLocalDateTime(end.date, end.hour, end.minute, end.period) || "")) {
+      end = null;
+    }
     setRangePickerKey(tf.key);
+    setRangePickerError(null);
     setRangePickerMonth(new Date(dateFromInputValue(start.date).getFullYear(), dateFromInputValue(start.date).getMonth(), 1));
     setRangeStartDate(start.date);
     setRangeEndDate(end?.date ?? "");
@@ -916,6 +974,7 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
 
   const closeRangePicker = () => {
     setRangePickerKey(null);
+    setRangePickerError(null);
   };
 
   const rangePickerDays = useMemo(() => {
@@ -936,6 +995,11 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
    */
   const selectRangePickerDay = (day) => {
     const value = toDateInputValue(new Date(rangePickerMonth.getFullYear(), rangePickerMonth.getMonth(), day));
+    if (isCalendarDateBeforeToday(value)) {
+      setRangePickerError("Pick a day that isn’t in the past.");
+      return;
+    }
+    setRangePickerError(null);
     if (!rangeStartDate || (rangeStartDate && rangeEndDate)) {
       setRangeStartDate(value);
       setRangeEndDate("");
@@ -952,13 +1016,33 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
   const applyRangePicker = () => {
     if (rangePickerKey == null) return;
     if (!rangeStartDate) return;
+    if (isCalendarDateBeforeToday(rangeStartDate)) {
+      setRangePickerError("Start day can’t be in the past.");
+      return;
+    }
+    if (rangeEndDate && isCalendarDateBeforeToday(rangeEndDate)) {
+      setRangePickerError("End day can’t be in the past.");
+      return;
+    }
     const startsLocal = combineLocalDateTime(rangeStartDate, rangeStartHour, rangeStartMinute, rangeStartPeriod);
     if (!startsLocal) return;
+    if (isDateTimeInPast(startsLocal)) {
+      setRangePickerError("Start time can’t be in the past.");
+      return;
+    }
     const endsLocal =
       rangeEndDate.trim() !== ""
         ? combineLocalDateTime(rangeEndDate, rangeEndHour, rangeEndMinute, rangeEndPeriod)
         : "";
     if (rangeEndDate.trim() !== "" && !endsLocal) return;
+    if (endsLocal && isDateTimeInPast(endsLocal)) {
+      setRangePickerError("End time can’t be in the past.");
+      return;
+    }
+    if (endsLocal && new Date(endsLocal).getTime() < new Date(startsLocal).getTime()) {
+      setRangePickerError("End time must be on or after start time.");
+      return;
+    }
     setTimeframes((prev) =>
       prev.map((row) =>
         row.key === rangePickerKey
@@ -967,6 +1051,7 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
       ),
     );
     setRangePickerKey(null);
+    setRangePickerError(null);
   };
 
   const toggleId = (list, setList, id) => {
@@ -1019,6 +1104,14 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
       }
       if (endsISO && new Date(endsISO).getTime() < new Date(startsISO).getTime()) {
         setModalError("End time must be on or after start time.");
+        return;
+      }
+      if (isDateTimeInPast(startsISO)) {
+        setModalError("Timeframes can’t start in the past.");
+        return;
+      }
+      if (endsISO && isDateTimeInPast(endsISO)) {
+        setModalError("Timeframes can’t end in the past.");
         return;
       }
       payloadTimeframes.push({
@@ -1349,7 +1442,7 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
                 role="dialog"
                 aria-modal="true"
                 aria-label="New Looking for Games session"
-                className="max-h-[min(92vh,52rem)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/20 bg-[#160d22] p-4 shadow-2xl sm:p-5"
+                className="max-h-[min(94vh,64rem)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/20 bg-[#160d22] p-4 shadow-2xl sm:max-w-4xl sm:p-6 lg:max-w-5xl lg:p-7"
               >
                 <div className="mb-4 flex items-start justify-between gap-3">
                   <h3 className="m-0 text-base font-semibold text-[#f4f0fa]">New Looking for Games session</h3>
@@ -1389,7 +1482,7 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
                         {legalHeroes.length === 0 ? (
                           <p className="m-0 text-[0.8rem] text-[#f4f0fa]/5">No legal heroes for this format.</p>
                         ) : (
-                          <div className="grid max-h-48 grid-cols-1 gap-1.5 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-2 sm:grid-cols-2">
+                          <div className="grid max-h-48 grid-cols-1 gap-1.5 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-2 sm:max-h-64 sm:grid-cols-2 lg:max-h-72 lg:grid-cols-3">
                             {legalHeroes.map((hero) => {
                               const selected = withIds.includes(hero.id);
                               return (
@@ -1419,7 +1512,7 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
                         {legalHeroes.length === 0 ? (
                           <p className="m-0 text-[0.8rem] text-[#f4f0fa]/5">No legal heroes for this format.</p>
                         ) : (
-                          <div className="grid max-h-48 grid-cols-1 gap-1.5 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-2 sm:grid-cols-2">
+                          <div className="grid max-h-48 grid-cols-1 gap-1.5 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-2 sm:max-h-64 sm:grid-cols-2 lg:max-h-72 lg:grid-cols-3">
                             {legalHeroes.map((hero) => {
                               const selected = againstIds.includes(hero.id);
                               return (
@@ -1732,7 +1825,7 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
                 </div>
 
                 <p className="mb-2 mt-0 text-[0.75rem] text-[#f4f0fa]/5">
-                  Tap a start day, then an end day. End is optional.
+                  Tap a start day, then an end day. End is optional. Past days can’t be selected.
                 </p>
 
                 <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[0.72rem] font-medium uppercase tracking-wide text-[#f4f0fa]/45">
@@ -1748,6 +1841,7 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
                     const value = toDateInputValue(
                       new Date(rangePickerMonth.getFullYear(), rangePickerMonth.getMonth(), day),
                     );
+                    const isPast = isCalendarDateBeforeToday(value);
                     const isStart = rangeStartDate === value;
                     const isEnd = rangeEndDate === value;
                     const inMiddle =
@@ -1760,7 +1854,8 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
                       <button
                         key={`range-day-${day}`}
                         type="button"
-                        className={`aspect-square rounded-lg border text-[0.85rem] font-medium transition-colors ${
+                        disabled={isPast}
+                        className={`aspect-square rounded-lg border text-[0.85rem] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
                           selected
                             ? "border-emerald-400/55 bg-emerald-950/55 text-emerald-50"
                             : inMiddle
@@ -1787,6 +1882,11 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
                     rangeEndPeriod,
                   )}
                 </p>
+                {rangePickerError ? (
+                  <p className="mb-3 m-0 rounded-lg border border-red-400/35 bg-red-950/40 px-3 py-2 text-center text-[0.8rem] text-red-100" role="alert">
+                    {rangePickerError}
+                  </p>
+                ) : null}
                 <button
                   type="button"
                   className={`${btnPrimary} w-full`}

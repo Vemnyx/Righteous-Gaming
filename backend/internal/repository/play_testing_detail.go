@@ -199,26 +199,42 @@ WHERE session_id = $1 AND user_id = $2`, sessionID, userID)
 
 // ListPlayTestingSessionInterests returns interest signups with heroes for a session.
 func (r *Repository) ListPlayTestingSessionInterests(ctx context.Context, sessionID int) ([]PlayTestingSessionInterest, error) {
+	if sessionID <= 0 {
+		return nil, fmt.Errorf("repository: invalid session id")
+	}
+	bySession, err := r.listPlayTestingInterestsBySessionIDs(ctx, []int{sessionID})
+	if err != nil {
+		return nil, err
+	}
+	if rows, ok := bySession[sessionID]; ok {
+		return rows, nil
+	}
+	return []PlayTestingSessionInterest{}, nil
+}
+
+// listPlayTestingInterestsBySessionIDs returns interest signups keyed by session id.
+func (r *Repository) listPlayTestingInterestsBySessionIDs(ctx context.Context, sessionIDs []int) (map[int][]PlayTestingSessionInterest, error) {
 	if r.pool == nil {
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
-	if sessionID <= 0 {
-		return nil, fmt.Errorf("repository: invalid session id")
+	out := make(map[int][]PlayTestingSessionInterest, len(sessionIDs))
+	if len(sessionIDs) == 0 {
+		return out, nil
 	}
 	const q = `
 SELECT i.id, i.session_id, i.user_id, i.note, i.created_at, i.updated_at, u.first_name, u.username
 FROM play_testing_session_interests i
 INNER JOIN users u ON u.id = i.user_id
-WHERE i.session_id = $1
+WHERE i.session_id = ANY ($1)
 ORDER BY i.updated_at DESC, i.id DESC`
-	rows, err := r.pool.Query(ctx, q, sessionID)
+	rows, err := r.pool.Query(ctx, q, sessionIDs)
 	if err != nil {
 		return nil, fmt.Errorf("repository: list play testing interests: %w", err)
 	}
 	defer rows.Close()
 
-	out := make([]PlayTestingSessionInterest, 0, 16)
-	ids := make([]int, 0, 16)
+	all := make([]PlayTestingSessionInterest, 0, 32)
+	ids := make([]int, 0, 32)
 	for rows.Next() {
 		var row PlayTestingSessionInterest
 		if err := rows.Scan(
@@ -228,7 +244,7 @@ ORDER BY i.updated_at DESC, i.id DESC`
 			return nil, fmt.Errorf("repository: scan play testing interest: %w", err)
 		}
 		row.Heroes = []PlayTestingInterestHero{}
-		out = append(out, row)
+		all = append(all, row)
 		ids = append(ids, row.ID)
 	}
 	if err := rows.Err(); err != nil {
@@ -242,10 +258,12 @@ ORDER BY i.updated_at DESC, i.id DESC`
 	if err != nil {
 		return nil, err
 	}
-	for i := range out {
-		if hs, ok := heroesByInterest[out[i].ID]; ok {
-			out[i].Heroes = hs
+	for i := range all {
+		if hs, ok := heroesByInterest[all[i].ID]; ok {
+			all[i].Heroes = hs
 		}
+		sid := all[i].SessionID
+		out[sid] = append(out[sid], all[i])
 	}
 	return out, nil
 }

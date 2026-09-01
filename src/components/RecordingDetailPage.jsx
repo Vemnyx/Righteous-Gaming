@@ -337,7 +337,11 @@ export function RecordingDetailPage({ isLight, recordingId, active, onBack, onRe
       <header className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           {typeof onBack === "function" ? (
-            <button type="button" className={`mb-2 ${btnBase} ${btnTheme}`} onClick={onBack}>
+            <button
+              type="button"
+              className="mb-2 text-[0.875rem] font-bold text-[#f4f0fa]/85 underline underline-offset-2 transition-colors hover:text-[#f4f0fa]"
+              onClick={onBack}
+            >
               ← Back to recordings
             </button>
           ) : null}

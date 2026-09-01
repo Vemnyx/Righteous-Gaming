@@ -128,10 +128,10 @@ export default function CreateUser({ onNavigate }) {
         </p>
         <button
           type="button"
-          className="mt-8 w-full rounded-lg border border-white/20 bg-black/25 py-3 text-[0.9rem] font-semibold text-[#f4f0fa] hover:bg-black/35"
+          className="mt-8 text-[0.875rem] font-bold text-[#f4f0fa]/85 underline underline-offset-2 transition-colors hover:text-[#f4f0fa]"
           onClick={() => navigateBackToDashboard(onNavigate)}
         >
-          Back to dashboard
+          ← Back to dashboard
         </button>
       </AuthShell>
     );
@@ -141,7 +141,7 @@ export default function CreateUser({ onNavigate }) {
     <AuthShell variant={shellVariant} narrow>
       <button
         type="button"
-        className="mb-6 -ml-0.5 text-left text-[0.8125rem] font-semibold text-[#c4b8d6] underline-offset-2 hover:text-white hover:underline"
+        className="mb-6 -ml-0.5 text-left text-[0.875rem] font-bold text-[#f4f0fa]/85 underline underline-offset-2 transition-colors hover:text-[#f4f0fa]"
         onClick={() => navigateBackToDashboard(onNavigate)}
       >
         ← Back to dashboard

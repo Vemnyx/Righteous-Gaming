@@ -93,6 +93,7 @@ type playTestingSessionJSON struct {
 	HeroesWith      []playTestingSessionHeroJSON `json:"heroes_with"`
 	HeroesAgainst   []playTestingSessionHeroJSON `json:"heroes_against"`
 	Timeframes      []playTestingTimeframeJSON   `json:"timeframes"`
+	Interests       []playTestingInterestJSON    `json:"interests"`
 }
 
 type createPlayTestingTimeframeBody struct {
@@ -123,6 +124,7 @@ func sessionToJSON(s *repository.PlayTestingSession) playTestingSessionJSON {
 		HeroesWith:     []playTestingSessionHeroJSON{},
 		HeroesAgainst:  []playTestingSessionHeroJSON{},
 		Timeframes:     []playTestingTimeframeJSON{},
+		Interests:      []playTestingInterestJSON{},
 	}
 	for _, h := range s.Heroes {
 		item := playTestingSessionHeroJSON{
@@ -146,6 +148,9 @@ func sessionToJSON(s *repository.PlayTestingSession) playTestingSessionJSON {
 			EndsAt:    tf.EndsAt,
 			SortOrder: tf.SortOrder,
 		})
+	}
+	for i := range s.Interests {
+		out.Interests = append(out.Interests, interestToJSON(&s.Interests[i]))
 	}
 	return out
 }
@@ -323,11 +328,19 @@ func (h *playTestingHTTP) createSession(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 			starts := raw.StartsAt.UTC()
+			if starts.Before(now.Add(-2 * time.Minute)) {
+				writeFieldError(w, http.StatusBadRequest, "timeframes", "starts_at cannot be in the past")
+				return
+			}
 			var ends *time.Time
 			if raw.EndsAt != nil {
 				e := raw.EndsAt.UTC()
 				if e.Before(starts) {
 					writeFieldError(w, http.StatusBadRequest, "timeframes", "ends_at must be on or after starts_at")
+					return
+				}
+				if e.Before(now.Add(-2 * time.Minute)) {
+					writeFieldError(w, http.StatusBadRequest, "timeframes", "ends_at cannot be in the past")
 					return
 				}
 				ends = &e

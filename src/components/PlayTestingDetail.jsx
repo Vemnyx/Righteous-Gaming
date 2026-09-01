@@ -124,6 +124,10 @@ export function PlayTestingDetail({ isLight, active, sessionId, onBack }) {
     : "border-white/[0.28] bg-black/20 text-[#f4f0fa] hover:border-white/40 hover:bg-black/30";
   const btnPrimary =
     "rounded-lg border border-emerald-400/45 bg-emerald-950/45 px-3 py-1.5 text-[0.8125rem] font-semibold text-emerald-100 transition-colors hover:border-emerald-300/55 hover:bg-emerald-900/45 disabled:cursor-not-allowed disabled:opacity-45";
+  const btnHeaderAction =
+    "rounded-xl border px-5 py-3 text-[1rem] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 sm:px-6 sm:py-3.5 sm:text-[1.05rem]";
+  const btnHeaderPrimary =
+    "rounded-xl border border-emerald-400/50 bg-emerald-950/50 px-5 py-3 text-[1rem] font-semibold text-emerald-50 shadow-[0_8px_24px_rgba(16,185,129,0.18)] transition-colors hover:border-emerald-300/60 hover:bg-emerald-900/55 disabled:cursor-not-allowed disabled:opacity-45 sm:px-6 sm:py-3.5 sm:text-[1.05rem]";
   const shell = "rounded-xl border border-white/[0.14] bg-black/30 p-4 sm:p-5";
 
   const isOwner = session != null && myUserId != null && session.user_id === myUserId;
@@ -507,17 +511,21 @@ export function PlayTestingDetail({ isLight, active, sessionId, onBack }) {
     <div className={PANEL_TABS_BLEED} aria-label="Looking for Games session">
       <div className={`${PANEL_TABS_CONTENT_PAD} pt-4`}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <button type="button" className={`${btnBase} ${btnTheme}`} onClick={() => onBack?.()}>
+          <button
+            type="button"
+            className="text-[0.875rem] font-bold text-[#f4f0fa]/85 underline underline-offset-2 transition-colors hover:text-[#f4f0fa]"
+            onClick={() => onBack?.()}
+          >
             ← Back
           </button>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             {session ? (
-              <PlayTestingCalendarButton session={session} btnBase={btnBase} btnTheme={btnTheme} />
+              <PlayTestingCalendarButton session={session} btnBase={btnHeaderPrimary} btnTheme="" />
             ) : null}
             {isOwner && session && session.status !== 1 ? (
               <button
                 type="button"
-                className={`${btnBase} ${btnTheme}`}
+                className={`${btnHeaderAction} ${btnTheme}`}
                 disabled={closing}
                 onClick={() => void closeSession()}
               >
@@ -599,12 +607,15 @@ export function PlayTestingDetail({ isLight, active, sessionId, onBack }) {
               </section>
 
               <section className={shell}>
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="mb-3">
                   <h3 className="m-0 text-[1.05rem] font-semibold text-[#f4f0fa]">Interested players</h3>
-                  {!isOwner && !isClosed ? (
+                </div>
+
+                {!isOwner && !isClosed && !interestEditing ? (
+                  <div className="mb-5 flex justify-center">
                     <button
                       type="button"
-                      className={btnPrimary}
+                      className={btnHeaderPrimary}
                       onClick={() => {
                         setInterestEditing(true);
                         setInterestError(null);
@@ -616,10 +627,10 @@ export function PlayTestingDetail({ isLight, active, sessionId, onBack }) {
                         }
                       }}
                     >
-                      {myInterest ? "Edit my interest" : "I'm interested"}
+                      {myInterest ? "Edit signup" : "Sign Up"}
                     </button>
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
 
                 {interestEditing && !isOwner ? (
                   <div className="mb-5 rounded-lg border border-white/12 bg-black/25 p-3 sm:p-4">

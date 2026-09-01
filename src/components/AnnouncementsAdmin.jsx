@@ -340,7 +340,11 @@ export function AnnouncementsAdmin({
     return (
       <div className="flex min-h-0 w-full flex-col gap-5 text-left">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <button type="button" className={`${btnBase} ${btnTheme}`} onClick={cancelForm}>
+          <button
+            type="button"
+            className="text-[0.875rem] font-bold text-[#f4f0fa]/85 underline underline-offset-2 transition-colors hover:text-[#f4f0fa]"
+            onClick={cancelForm}
+          >
             ← Back
           </button>
           <h2 className="m-0 min-w-0 flex-1 text-lg font-semibold text-white">

@@ -65,6 +65,7 @@ type PlayTestingSession struct {
 	OwnerUsername  *string
 	Heroes         []PlayTestingSessionHero
 	Timeframes     []PlayTestingSessionTimeframe
+	Interests      []PlayTestingSessionInterest
 }
 
 // CreatePlayTestingSessionInput creates a session and its children.
@@ -199,6 +200,7 @@ ORDER BY s.created_at DESC, s.id DESC`
 		}
 		s.Heroes = []PlayTestingSessionHero{}
 		s.Timeframes = []PlayTestingSessionTimeframe{}
+		s.Interests = []PlayTestingSessionInterest{}
 		sessions = append(sessions, s)
 		ids = append(ids, s.ID)
 	}
@@ -217,6 +219,10 @@ ORDER BY s.created_at DESC, s.id DESC`
 	if err != nil {
 		return nil, err
 	}
+	interestsBySession, err := r.listPlayTestingInterestsBySessionIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	filtered := make([]PlayTestingSession, 0, len(sessions))
 	for i := range sessions {
@@ -225,6 +231,9 @@ ORDER BY s.created_at DESC, s.id DESC`
 		}
 		if ts, ok := timeframesBySession[sessions[i].ID]; ok {
 			sessions[i].Timeframes = ts
+		}
+		if is, ok := interestsBySession[sessions[i].ID]; ok {
+			sessions[i].Interests = is
 		}
 		if bucket == "" || ClassifyPlayTestingSession(&sessions[i], now) == bucket {
 			filtered = append(filtered, sessions[i])
@@ -315,6 +324,7 @@ WHERE s.id = $1`
 	}
 	s.Heroes = []PlayTestingSessionHero{}
 	s.Timeframes = []PlayTestingSessionTimeframe{}
+	s.Interests = []PlayTestingSessionInterest{}
 	heroesBySession, err := r.listPlayTestingSessionHeroes(ctx, []int{s.ID})
 	if err != nil {
 		return nil, err
@@ -323,11 +333,18 @@ WHERE s.id = $1`
 	if err != nil {
 		return nil, err
 	}
+	interestsBySession, err := r.listPlayTestingInterestsBySessionIDs(ctx, []int{s.ID})
+	if err != nil {
+		return nil, err
+	}
 	if hs, ok := heroesBySession[s.ID]; ok {
 		s.Heroes = hs
 	}
 	if ts, ok := timeframesBySession[s.ID]; ok {
 		s.Timeframes = ts
+	}
+	if is, ok := interestsBySession[s.ID]; ok {
+		s.Interests = is
 	}
 	return &s, nil
 }
