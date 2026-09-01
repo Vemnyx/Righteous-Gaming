@@ -39,7 +39,7 @@ func TestHeroNamesForSide(t *testing.T) {
 	if got != "Bravo, Ira" {
 		t.Fatalf("got %q", got)
 	}
-	if heroNamesForSide(heroes, 99) != "Any / unspecified" {
-		t.Fatal("expected any/unspecified for empty side")
+	if heroNamesForSide(heroes, 99) != "Any" {
+		t.Fatal("expected Any for empty side")
 	}
 }

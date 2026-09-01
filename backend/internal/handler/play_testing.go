@@ -86,6 +86,7 @@ type playTestingSessionJSON struct {
 	Format          int16                        `json:"format"`
 	Status          int16                        `json:"status"`
 	Bucket          string                       `json:"bucket"`
+	Note            string                       `json:"note,omitempty"`
 	CreatedAt       time.Time                    `json:"created_at"`
 	ClosedAt        *time.Time                   `json:"closed_at,omitempty"`
 	OwnerFirstName  *string                      `json:"owner_first_name,omitempty"`
@@ -104,6 +105,7 @@ type createPlayTestingTimeframeBody struct {
 
 type createPlayTestingSessionBody struct {
 	Format        int16                            `json:"format"`
+	Note          string                           `json:"note"`
 	HeroesWith    []int                            `json:"heroes_with"`
 	HeroesAgainst []int                            `json:"heroes_against"`
 	Timeframes    []createPlayTestingTimeframeBody `json:"timeframes"`
@@ -117,6 +119,7 @@ func sessionToJSON(s *repository.PlayTestingSession) playTestingSessionJSON {
 		Format:         s.Format,
 		Status:         s.Status,
 		Bucket:         string(bucket),
+		Note:           strings.TrimSpace(s.Note),
 		CreatedAt:      s.CreatedAt,
 		ClosedAt:       s.ClosedAt,
 		OwnerFirstName: s.OwnerFirstName,
@@ -293,6 +296,11 @@ func (h *playTestingHTTP) createSession(w http.ResponseWriter, r *http.Request) 
 		writeFieldError(w, http.StatusBadRequest, "format", "invalid format")
 		return
 	}
+	note := strings.TrimSpace(body.Note)
+	if len([]rune(note)) > 500 {
+		writeFieldError(w, http.StatusBadRequest, "note", "must be at most 500 characters")
+		return
+	}
 	if len(body.Timeframes) > 20 {
 		writeFieldError(w, http.StatusBadRequest, "timeframes", "too many timeframes")
 		return
@@ -359,6 +367,7 @@ func (h *playTestingHTTP) createSession(w http.ResponseWriter, r *http.Request) 
 	created, err := h.app.Repo.CreatePlayTestingSession(r.Context(), repository.CreatePlayTestingSessionInput{
 		UserID:        u.ID,
 		Format:        body.Format,
+		Note:          note,
 		HeroesWith:    body.HeroesWith,
 		HeroesAgainst: body.HeroesAgainst,
 		Timeframes:    tfs,

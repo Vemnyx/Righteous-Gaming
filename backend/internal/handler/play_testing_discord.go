@@ -49,7 +49,7 @@ func heroNamesForSide(heroes []repository.PlayTestingSessionHero, side int16) st
 		names = append(names, name)
 	}
 	if len(names) == 0 {
-		return "Any / unspecified"
+		return "Any"
 	}
 	return strings.Join(names, ", ")
 }
@@ -110,21 +110,33 @@ func (h *playTestingHTTP) notifyPlayTestingSessionCreated(session *repository.Pl
 
 		sessionURL := fmt.Sprintf("%s/team/play-testing/%d", client.PublicAppURL(), s.ID)
 		formatName := domain.CardFormat(s.Format).String()
+		fields := []client.DiscordEmbedField{
+			{Name: "Format", Value: formatName, Inline: true},
+			{Name: "When", Value: truncateDiscordField(formatSessionWhenForDiscord(&s), 1024), Inline: true},
+			{Name: "Playing", Value: truncateDiscordField(heroNamesForSide(s.Heroes, repository.PlayTestingHeroSideWith), 1024), Inline: false},
+			{Name: "Requesting", Value: truncateDiscordField(heroNamesForSide(s.Heroes, repository.PlayTestingHeroSideAgainst), 1024), Inline: false},
+		}
+		if note := strings.TrimSpace(s.Note); note != "" {
+			fields = append(fields, client.DiscordEmbedField{
+				Name:   "Note",
+				Value:  truncateDiscordField(note, 1024),
+				Inline: false,
+			})
+		}
+		fields = append(fields, client.DiscordEmbedField{Name: "Open session", Value: sessionURL, Inline: false})
 		embed := client.DiscordEmbed{
 			Title:       "New Looking for Games session",
 			Description: fmt.Sprintf("**%s** opened a play testing session.", ownerDisplayName(&s)),
 			URL:         sessionURL,
 			Color:       0x34d399, // emerald
 			Timestamp:   time.Now().UTC().Format(time.RFC3339),
-			Fields: []client.DiscordEmbedField{
-				{Name: "Format", Value: formatName, Inline: true},
-				{Name: "When", Value: truncateDiscordField(formatSessionWhenForDiscord(&s), 1024), Inline: true},
-				{Name: "Playing", Value: truncateDiscordField(heroNamesForSide(s.Heroes, repository.PlayTestingHeroSideWith), 1024), Inline: false},
-				{Name: "Requesting", Value: truncateDiscordField(heroNamesForSide(s.Heroes, repository.PlayTestingHeroSideAgainst), 1024), Inline: false},
-				{Name: "Open session", Value: sessionURL, Inline: false},
-			},
+			Fields:      fields,
 		}
-		if err := h.app.DiscordPlayTesting.SendToChannel(ctx, channelKey, "", embed); err != nil {
+		content := h.app.DiscordPlayTesting.LFGMention()
+		if content == "" {
+			content = "@LFG"
+		}
+		if err := h.app.DiscordPlayTesting.SendToChannel(ctx, channelKey, content, embed); err != nil {
 			log.Error("discord play testing webhook", "session_id", s.ID, "channel", channelKey, "error", err)
 		}
 	}(*session, channel)

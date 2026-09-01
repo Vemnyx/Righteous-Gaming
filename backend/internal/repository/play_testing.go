@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -59,6 +60,7 @@ type PlayTestingSession struct {
 	UserID         int
 	Format         int16
 	Status         int16
+	Note           string
 	CreatedAt      time.Time
 	ClosedAt       *time.Time
 	OwnerFirstName *string
@@ -72,6 +74,7 @@ type PlayTestingSession struct {
 type CreatePlayTestingSessionInput struct {
 	UserID        int
 	Format        int16
+	Note          string
 	HeroesWith    []int
 	HeroesAgainst []int
 	Timeframes    []CreatePlayTestingTimeframeInput
@@ -178,7 +181,7 @@ func (r *Repository) ListPlayTestingSessions(ctx context.Context, bucket PlayTes
 		return nil, fmt.Errorf("repository: pool is closed")
 	}
 	const q = `
-SELECT s.id, s.user_id, s.format, s.status, s.created_at, s.closed_at, u.first_name, u.username
+SELECT s.id, s.user_id, s.format, s.status, COALESCE(s.note, ''), s.created_at, s.closed_at, u.first_name, u.username
 FROM play_testing_sessions s
 INNER JOIN users u ON u.id = s.user_id
 ORDER BY s.created_at DESC, s.id DESC`
@@ -194,7 +197,7 @@ ORDER BY s.created_at DESC, s.id DESC`
 	for rows.Next() {
 		var s PlayTestingSession
 		if err := rows.Scan(
-			&s.ID, &s.UserID, &s.Format, &s.Status, &s.CreatedAt, &s.ClosedAt, &s.OwnerFirstName, &s.OwnerUsername,
+			&s.ID, &s.UserID, &s.Format, &s.Status, &s.Note, &s.CreatedAt, &s.ClosedAt, &s.OwnerFirstName, &s.OwnerUsername,
 		); err != nil {
 			return nil, fmt.Errorf("repository: scan play testing session: %w", err)
 		}
@@ -308,13 +311,13 @@ func (r *Repository) GetPlayTestingSessionByID(ctx context.Context, sessionID in
 		return nil, fmt.Errorf("repository: invalid session id")
 	}
 	const q = `
-SELECT s.id, s.user_id, s.format, s.status, s.created_at, s.closed_at, u.first_name, u.username
+SELECT s.id, s.user_id, s.format, s.status, COALESCE(s.note, ''), s.created_at, s.closed_at, u.first_name, u.username
 FROM play_testing_sessions s
 INNER JOIN users u ON u.id = s.user_id
 WHERE s.id = $1`
 	var s PlayTestingSession
 	err := r.pool.QueryRow(ctx, q, sessionID).Scan(
-		&s.ID, &s.UserID, &s.Format, &s.Status, &s.CreatedAt, &s.ClosedAt, &s.OwnerFirstName, &s.OwnerUsername,
+		&s.ID, &s.UserID, &s.Format, &s.Status, &s.Note, &s.CreatedAt, &s.ClosedAt, &s.OwnerFirstName, &s.OwnerUsername,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -379,6 +382,10 @@ func (r *Repository) CreatePlayTestingSession(ctx context.Context, in CreatePlay
 	if in.UserID <= 0 {
 		return nil, fmt.Errorf("repository: invalid user id")
 	}
+	note := strings.TrimSpace(in.Note)
+	if len([]rune(note)) > 500 {
+		return nil, fmt.Errorf("repository: session note too long")
+	}
 
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -387,13 +394,13 @@ func (r *Repository) CreatePlayTestingSession(ctx context.Context, in CreatePlay
 	defer tx.Rollback(ctx)
 
 	const insertSession = `
-INSERT INTO play_testing_sessions (user_id, format, status)
-VALUES ($1, $2, $3)
-RETURNING id, user_id, format, status, created_at, closed_at`
+INSERT INTO play_testing_sessions (user_id, format, status, note)
+VALUES ($1, $2, $3, $4)
+RETURNING id, user_id, format, status, note, created_at, closed_at`
 
 	var s PlayTestingSession
-	if err := tx.QueryRow(ctx, insertSession, in.UserID, in.Format, PlayTestingSessionStatusOpen).Scan(
-		&s.ID, &s.UserID, &s.Format, &s.Status, &s.CreatedAt, &s.ClosedAt,
+	if err := tx.QueryRow(ctx, insertSession, in.UserID, in.Format, PlayTestingSessionStatusOpen, note).Scan(
+		&s.ID, &s.UserID, &s.Format, &s.Status, &s.Note, &s.CreatedAt, &s.ClosedAt,
 	); err != nil {
 		return nil, fmt.Errorf("repository: insert play testing session: %w", err)
 	}

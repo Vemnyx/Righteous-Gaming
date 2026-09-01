@@ -26,7 +26,7 @@ const PlayTestingDetailLazy = lazy(() =>
 
 /** @typedef {{ id: number, session_id?: number, user_id: number, note?: string, first_name?: string | null, username?: string | null, heroes?: Array<{ hero_id: number, name: string, young?: boolean, card_image_url?: string | null, art_image_url?: string | null }> }} SessionInterestSummary */
 
-/** @typedef {{ id: number, user_id: number, format: number, status?: number, bucket?: string, created_at: string, closed_at?: string | null, owner_first_name?: string | null, owner_username?: string | null, heroes_with: SessionHero[], heroes_against: SessionHero[], timeframes: SessionTimeframe[], interests?: SessionInterestSummary[] }} PlayTestingSession */
+/** @typedef {{ id: number, user_id: number, format: number, status?: number, bucket?: string, note?: string, created_at: string, closed_at?: string | null, owner_first_name?: string | null, owner_username?: string | null, heroes_with: SessionHero[], heroes_against: SessionHero[], timeframes: SessionTimeframe[], interests?: SessionInterestSummary[] }} PlayTestingSession */
 
 /** @typedef {{ key: string, mode: "now_open" | "range", startsLocal: string, endsLocal: string }} DraftTimeframe */
 
@@ -377,6 +377,12 @@ export function SessionCard({ session, canClose, whenEmptyLabel, closingId, onCl
         </div>
       </div>
 
+      {typeof session.note === "string" && session.note.trim() !== "" ? (
+        <p className="mb-4 mt-0 whitespace-pre-wrap text-left text-[0.95rem] leading-snug text-[#f4f0fa]/85">
+          {session.note.trim()}
+        </p>
+      ) : null}
+
       {interests.length > 0 ? (
         <div className="mb-4 max-w-md text-left">
           <p className="mb-2 mt-0 text-[0.9rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/90">
@@ -405,7 +411,7 @@ export function SessionCard({ session, canClose, whenEmptyLabel, closingId, onCl
           </p>
           <HeroAvatarRow
             heroes={session.heroes_against || []}
-            emptyLabel="Any / unspecified"
+            emptyLabel="Any"
             size="xl"
             align="end"
           />
@@ -742,6 +748,7 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
   const [formatId, setFormatId] = useState(/** @type {number | ""} */ (""));
   const [withIds, setWithIds] = useState(/** @type {number[]} */ ([]));
   const [againstIds, setAgainstIds] = useState(/** @type {number[]} */ ([]));
+  const [sessionNote, setSessionNote] = useState("");
   const [timeframes, setTimeframes] = useState(/** @type {DraftTimeframe[]} */ ([]));
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState(/** @type {string | null} */ (null));
@@ -933,6 +940,7 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
     setFormatId("");
     setWithIds([]);
     setAgainstIds([]);
+    setSessionNote("");
     setTimeframes([]);
     setModalError(null);
     setRangePickerKey(null);
@@ -1084,6 +1092,11 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
       setModalError("Select a format.");
       return;
     }
+    const note = sessionNote.trim();
+    if ([...note].length > 500) {
+      setModalError("Session note must be at most 500 characters.");
+      return;
+    }
 
     /** @type {Array<{ mode: string, starts_at?: string, ends_at?: string }>} */
     const payloadTimeframes = [];
@@ -1133,6 +1146,7 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
         },
         body: JSON.stringify({
           format: formatId,
+          note,
           heroes_with: withIds,
           heroes_against: againstIds,
           timeframes: payloadTimeframes,
@@ -1473,6 +1487,21 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
                     </select>
                   </label>
 
+                  <label className="grid gap-1.5 text-left text-[0.85rem] text-[#f4f0fa]/85">
+                    <span className="font-medium">
+                      Note <span className="font-normal text-[#f4f0fa]/45">(optional)</span>
+                    </span>
+                    <textarea
+                      className="min-h-[4.5rem] resize-y rounded-lg border border-white/20 bg-black/35 px-3 py-2 text-[#f4f0fa]"
+                      value={sessionNote}
+                      maxLength={500}
+                      onChange={(e) => setSessionNote(e.target.value)}
+                      disabled={submitting}
+                      placeholder="Anything people should know about this session…"
+                    />
+                    <span className="text-[0.75rem] text-[#f4f0fa]/45">{[...sessionNote].length}/500</span>
+                  </label>
+
                   {formatId !== "" ? (
                     <>
                       <section className="grid gap-2">
@@ -1507,12 +1536,36 @@ function PlayTestingList({ isLight, active, onOpenSession }) {
 
                       <section className="grid gap-2">
                         <h4 className="m-0 text-[0.85rem] font-semibold text-[#f4f0fa]/9">
-                          Heroes to play against <span className="font-normal text-[#f4f0fa]/45">(optional)</span>
+                          Heroes to play against
                         </h4>
                         {legalHeroes.length === 0 ? (
                           <p className="m-0 text-[0.8rem] text-[#f4f0fa]/5">No legal heroes for this format.</p>
                         ) : (
                           <div className="grid max-h-48 grid-cols-1 gap-1.5 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-2 sm:max-h-64 sm:grid-cols-2 lg:max-h-72 lg:grid-cols-3">
+                            <button
+                              type="button"
+                              onClick={() => setAgainstIds([])}
+                              className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-left transition sm:col-span-2 lg:col-span-3 ${
+                                againstIds.length === 0
+                                  ? "border-rose-300/40 bg-rose-950/30"
+                                  : "border-transparent hover:border-white/15 hover:bg-white/[0.04]"
+                              }`}
+                              aria-pressed={againstIds.length === 0}
+                            >
+                              <span
+                                className={`flex size-9 shrink-0 items-center justify-center rounded-full text-[0.7rem] font-semibold ${
+                                  againstIds.length === 0
+                                    ? "bg-rose-900/50 text-rose-100 ring-2 ring-rose-300/70 ring-offset-2 ring-offset-[#120818]"
+                                    : "bg-black/40 text-[#f4f0fa]/75 ring-1 ring-white/20"
+                                }`}
+                                aria-hidden
+                              >
+                                Any
+                              </span>
+                              <span className="min-w-0 truncate text-[0.8rem] text-[#f4f0fa]/88">
+                                Any opponent
+                              </span>
+                            </button>
                             {legalHeroes.map((hero) => {
                               const selected = againstIds.includes(hero.id);
                               return (

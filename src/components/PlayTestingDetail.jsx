@@ -586,6 +586,12 @@ export function PlayTestingDetail({ isLight, active, sessionId, onBack }) {
                   </div>
                 </div>
 
+                {typeof session.note === "string" && session.note.trim() !== "" ? (
+                  <p className="mb-5 mt-0 whitespace-pre-wrap text-[0.95rem] leading-snug text-[#f4f0fa]/85">
+                    {session.note.trim()}
+                  </p>
+                ) : null}
+
                 <div className="grid gap-4">
                   <div>
                     <p className="mb-2.5 mt-0 text-[0.9rem] font-semibold uppercase tracking-[0.12em] text-[#f4f0fa]/90">
@@ -599,7 +605,7 @@ export function PlayTestingDetail({ isLight, active, sessionId, onBack }) {
                     </p>
                     <HeroAvatarRow
                       heroes={session.heroes_against || []}
-                      emptyLabel="Any / unspecified"
+                      emptyLabel="Any"
                       size="xl"
                     />
                   </div>

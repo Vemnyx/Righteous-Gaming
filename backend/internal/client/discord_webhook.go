@@ -19,10 +19,10 @@ const discordWebhookTimeout = 8 * time.Second
 
 // Play-testing Discord channel keys (match Secret Manager JSON / env vars).
 const (
-	PlayTestingDiscordLimited                = "limited"
-	PlayTestingDiscordSilverAge              = "silver_age"
-	PlayTestingDiscordClassicConstructed     = "classic_constructed"
-	PlayTestingDiscordLivingLegendGoldenAge  = "living_legend_golden_age"
+	PlayTestingDiscordLimited               = "limited"
+	PlayTestingDiscordSilverAge             = "silver_age"
+	PlayTestingDiscordClassicConstructed    = "classic_constructed"
+	PlayTestingDiscordLivingLegendGoldenAge = "living_legend_golden_age"
 )
 
 // DiscordWebhook posts messages to a Discord incoming webhook URL.
@@ -33,8 +33,9 @@ type DiscordWebhook struct {
 
 // PlayTestingDiscord routes Looking for Games notifications by format channel.
 type PlayTestingDiscord struct {
-	client *http.Client
-	urls   map[string]string
+	client    *http.Client
+	urls      map[string]string
+	lfgRoleID string
 }
 
 // DiscordEmbed is a Discord webhook embed payload.
@@ -54,9 +55,15 @@ type DiscordEmbedField struct {
 	Inline bool   `json:"inline,omitempty"`
 }
 
+type discordAllowedMentions struct {
+	Parse []string `json:"parse"`
+	Roles []string `json:"roles,omitempty"`
+}
+
 type discordWebhookBody struct {
-	Content string         `json:"content,omitempty"`
-	Embeds  []DiscordEmbed `json:"embeds,omitempty"`
+	Content         string                 `json:"content,omitempty"`
+	Embeds          []DiscordEmbed         `json:"embeds,omitempty"`
+	AllowedMentions *discordAllowedMentions `json:"allowed_mentions,omitempty"`
 }
 
 // PlayTestingDiscordChannelForFormat maps a card format to a webhook channel key.
@@ -75,46 +82,64 @@ func PlayTestingDiscordChannelForFormat(format domain.CardFormat) string {
 	}
 }
 
-// NewDiscordPlayTestingWebhook loads per-format webhook URLs.
-// Sources (first match wins):
-//  1. DISCORD_PLAY_TESTING_WEBHOOKS_JSON — JSON object of channel key → URL
+// NewDiscordPlayTestingWebhook loads per-format webhook URLs and optional LFG role id.
+// Sources (first match wins for URLs):
+//  1. DISCORD_PLAY_TESTING_WEBHOOKS_JSON — JSON object of channel key → URL (+ optional lfg_role_id)
 //  2. DISCORD_PLAY_TESTING_WEBHOOKS_SECRET — Secret Manager payload (same JSON)
 //  3. Per-channel env vars DISCORD_PLAY_TESTING_WEBHOOK_<CHANNEL>
-// Missing config returns an empty (disabled) router with nil error.
+// LFG role id also accepts DISCORD_LFG_ROLE_ID.
 func NewDiscordPlayTestingWebhook(ctx context.Context) (*PlayTestingDiscord, error) {
-	urls, err := resolvePlayTestingDiscordURLs(ctx)
+	cfg, err := resolvePlayTestingDiscordConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return &PlayTestingDiscord{
-		client: &http.Client{Timeout: discordWebhookTimeout},
-		urls:   urls,
+		client:    &http.Client{Timeout: discordWebhookTimeout},
+		urls:      cfg.URLs,
+		lfgRoleID: cfg.LFGRoleID,
 	}, nil
 }
 
-func resolvePlayTestingDiscordURLs(ctx context.Context) (map[string]string, error) {
+type playTestingDiscordConfig struct {
+	URLs      map[string]string
+	LFGRoleID string
+}
+
+func resolvePlayTestingDiscordConfig(ctx context.Context) (playTestingDiscordConfig, error) {
+	cfg := playTestingDiscordConfig{URLs: map[string]string{}}
+
 	if raw := strings.TrimSpace(os.Getenv("DISCORD_PLAY_TESTING_WEBHOOKS_JSON")); raw != "" {
-		return parsePlayTestingDiscordURLMap(raw)
-	}
-	if ref := strings.TrimSpace(os.Getenv("DISCORD_PLAY_TESTING_WEBHOOKS_SECRET")); ref != "" {
+		parsed, err := parsePlayTestingDiscordConfig(raw)
+		if err != nil {
+			return cfg, err
+		}
+		cfg = parsed
+	} else if ref := strings.TrimSpace(os.Getenv("DISCORD_PLAY_TESTING_WEBHOOKS_SECRET")); ref != "" {
 		if !secrets.IsGCPSecretVersionName(ref) {
-			return nil, fmt.Errorf("discord webhook: DISCORD_PLAY_TESTING_WEBHOOKS_SECRET must be a Secret Manager version name")
+			return cfg, fmt.Errorf("discord webhook: DISCORD_PLAY_TESTING_WEBHOOKS_SECRET must be a Secret Manager version name")
 		}
 		payload, err := secrets.AccessPayload(ctx, ref)
 		if err != nil {
-			return nil, err
+			return cfg, err
 		}
-		return parsePlayTestingDiscordURLMap(payload)
+		parsed, err := parsePlayTestingDiscordConfig(payload)
+		if err != nil {
+			return cfg, err
+		}
+		cfg = parsed
+	} else {
+		for _, key := range playTestingDiscordChannelKeys() {
+			envKey := "DISCORD_PLAY_TESTING_WEBHOOK_" + strings.ToUpper(key)
+			if u := strings.TrimSpace(os.Getenv(envKey)); u != "" {
+				cfg.URLs[key] = u
+			}
+		}
 	}
 
-	out := map[string]string{}
-	for _, key := range playTestingDiscordChannelKeys() {
-		envKey := "DISCORD_PLAY_TESTING_WEBHOOK_" + strings.ToUpper(key)
-		if u := strings.TrimSpace(os.Getenv(envKey)); u != "" {
-			out[key] = u
-		}
+	if role := strings.TrimSpace(os.Getenv("DISCORD_LFG_ROLE_ID")); role != "" {
+		cfg.LFGRoleID = role
 	}
-	return out, nil
+	return cfg, nil
 }
 
 func playTestingDiscordChannelKeys() []string {
@@ -126,21 +151,31 @@ func playTestingDiscordChannelKeys() []string {
 	}
 }
 
-func parsePlayTestingDiscordURLMap(raw string) (map[string]string, error) {
+func parsePlayTestingDiscordConfig(raw string) (playTestingDiscordConfig, error) {
+	cfg := playTestingDiscordConfig{URLs: map[string]string{}}
 	var parsed map[string]string
 	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		return nil, fmt.Errorf("discord webhook: invalid JSON map: %w", err)
+		return cfg, fmt.Errorf("discord webhook: invalid JSON map: %w", err)
 	}
-	out := make(map[string]string, len(parsed))
+	known := make(map[string]struct{}, len(playTestingDiscordChannelKeys()))
+	for _, key := range playTestingDiscordChannelKeys() {
+		known[key] = struct{}{}
+	}
 	for k, v := range parsed {
 		key := strings.TrimSpace(strings.ToLower(k))
-		url := strings.TrimSpace(v)
-		if key == "" || url == "" {
+		val := strings.TrimSpace(v)
+		if key == "" || val == "" {
 			continue
 		}
-		out[key] = url
+		if key == "lfg_role_id" {
+			cfg.LFGRoleID = val
+			continue
+		}
+		if _, ok := known[key]; ok {
+			cfg.URLs[key] = val
+		}
 	}
-	return out, nil
+	return cfg, nil
 }
 
 // Enabled reports whether any format webhook is configured.
@@ -154,6 +189,23 @@ func (d *PlayTestingDiscord) HasChannel(channel string) bool {
 		return false
 	}
 	return strings.TrimSpace(d.urls[strings.TrimSpace(strings.ToLower(channel))]) != ""
+}
+
+// LFGRoleID returns the configured Discord role id for @LFG pings, if any.
+func (d *PlayTestingDiscord) LFGRoleID() string {
+	if d == nil {
+		return ""
+	}
+	return strings.TrimSpace(d.lfgRoleID)
+}
+
+// LFGMention returns a Discord role mention string, or empty when unset.
+func (d *PlayTestingDiscord) LFGMention() string {
+	id := d.LFGRoleID()
+	if id == "" {
+		return ""
+	}
+	return "<@&" + id + ">"
 }
 
 // ConfiguredChannels returns configured channel keys (stable order).
@@ -180,17 +232,24 @@ func (d *PlayTestingDiscord) SendToChannel(ctx context.Context, channel, content
 		return nil
 	}
 	wh := &DiscordWebhook{url: url, client: d.client}
-	return wh.Send(ctx, content, embeds...)
+	return wh.Send(ctx, content, d.LFGRoleID(), embeds...)
 }
 
 // Send posts content and/or embeds to the webhook. No-op when disabled.
-func (d *DiscordWebhook) Send(ctx context.Context, content string, embeds ...DiscordEmbed) error {
+// roleID, when set, is included in allowed_mentions so role pings fire.
+func (d *DiscordWebhook) Send(ctx context.Context, content, roleID string, embeds ...DiscordEmbed) error {
 	if d == nil || strings.TrimSpace(d.url) == "" {
 		return nil
 	}
 	payload := discordWebhookBody{
 		Content: strings.TrimSpace(content),
 		Embeds:  embeds,
+	}
+	if roleID = strings.TrimSpace(roleID); roleID != "" {
+		payload.AllowedMentions = &discordAllowedMentions{
+			Parse: []string{},
+			Roles: []string{roleID},
+		}
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {

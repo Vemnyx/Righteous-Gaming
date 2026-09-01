@@ -20,7 +20,10 @@ Environment=PUBLIC_APP_URL=https://righteousgaming.team
 
 # Per-format Discord webhooks for Looking for Games (JSON map in Secret Manager).
 # Keys: limited, silver_age, classic_constructed, living_legend_golden_age
+# Optional: lfg_role_id (Discord role snowflake for @LFG pings)
 Environment=DISCORD_PLAY_TESTING_WEBHOOKS_SECRET=projects/project-28f6d1d8-e4cd-4908-9d7/secrets/discord_play_testing_webhooks/versions/latest
+# Optional override if not set in the JSON secret:
+# Environment=DISCORD_LFG_ROLE_ID=
 
 # DataImpulse residential proxy for FabTCG scraping (password in Secret Manager).
 Environment=FABTCG_PROXY_HOST=gw.dataimpulse.com

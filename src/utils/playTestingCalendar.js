@@ -138,7 +138,9 @@ export function sessionCalendarDetails(session) {
   const playing = heroNames(session?.heroes_with);
   const requesting = heroNames(session?.heroes_against);
   lines.push(`Playing: ${playing.length > 0 ? playing.join(", ") : "Any / unspecified"}`);
-  lines.push(`Requesting: ${requesting.length > 0 ? requesting.join(", ") : "Any / unspecified"}`);
+  lines.push(`Requesting: ${requesting.length > 0 ? requesting.join(", ") : "Any"}`);
+  const note = session?.note != null ? String(session.note).trim() : "";
+  if (note) lines.push(`Note: ${note}`);
   lines.push(sessionPageUrl(session));
   return lines.join("\n");
 }
